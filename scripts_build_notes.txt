@@ -1,0 +1,2 @@
+This package is designed to be pushed to GitHub and then deployed on Railway using the root Dockerfile.
+If you choose to split frontend and backend later, the repository can be refactored into separate Railway services.
