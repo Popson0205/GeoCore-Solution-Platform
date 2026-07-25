@@ -38,7 +38,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The backend needs a running PostgreSQL database. Copy `.env.example` to `.env` at the repo root and point `DATABASE_URL` at your database. Tables are created automatically on startup (this is an MVP convenience — replace with Alembic migrations before production use).
+The backend needs a running PostgreSQL database — see `docs/SUPABASE_SETUP.md` for setting one up on Supabase (recommended: includes PostGIS, and works around Railway's lack of IPv6 egress). Copy `.env.example` to `.env` at the repo root and point `DATABASE_URL` at your database. Tables are created automatically on startup (this is an MVP convenience — replace with Alembic migrations before production use).
 
 ### Frontend
 ```bash
@@ -57,7 +57,7 @@ Railway supports deployment from GitHub and can build from a Dockerfile at the r
 2. Create a Railway project.
 3. Connect the GitHub repository.
 4. Let Railway build using the root `Dockerfile`.
-5. Add a PostgreSQL service (Railway's Postgres plugin) and set `DATABASE_URL` from it, plus `SECRET_KEY`, in your app's environment variables.
+5. Create a [Supabase](https://supabase.com) project for the database (it includes PostGIS, needed for later phases) — see `docs/SUPABASE_SETUP.md` for the exact connection string format. Set `DATABASE_URL` and `SECRET_KEY` in your Railway app service's environment variables.
 6. Generate a Railway domain for quick testing or attach your custom domain later.
 7. For a branded live test, buy a domain you control and point it to Railway using Railway's custom domain setup.
 
@@ -92,4 +92,5 @@ Any short, brandable domain is fine. A custom domain gives you a professional li
 - `backend/app/models/`
 - `frontend/src/App.jsx`
 - `docs/DEPLOYMENT_GUIDE.md`
+- `docs/SUPABASE_SETUP.md`
 - `docs/ARCHITECTURE.md`
