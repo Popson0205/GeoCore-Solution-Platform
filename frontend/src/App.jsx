@@ -7,6 +7,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import ProjectDetail from './pages/ProjectDetail'
 import ComingSoon from './pages/ComingSoon'
 import NotFound from './pages/NotFound'
 
@@ -55,6 +56,7 @@ export default function App() {
 
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetail />} />
           {roadmap.map((item) => (
             <Route
               key={item.path}

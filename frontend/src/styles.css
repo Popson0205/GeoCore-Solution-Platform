@@ -303,6 +303,30 @@ a { color: inherit; }
   background: var(--brand-soft);
 }
 
+.home-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: 44px;
+  padding-top: 28px;
+  border-top: 1px solid var(--pub-border);
+  max-width: 760px;
+}
+.home-feature {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.92rem;
+  color: var(--pub-text-muted);
+}
+.home-feature-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+}
+
 /* =================================================================
    Auth pages (Login / Register / NotFound)
 ================================================================= */
@@ -465,6 +489,43 @@ a { color: inherit; }
 
 .ws-content { flex: 1; padding: 32px 28px 48px; }
 .ws-page { max-width: 960px; }
+.ws-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: var(--ws-text-muted);
+  text-decoration: none;
+  margin-bottom: 18px;
+}
+.ws-breadcrumb:hover { color: var(--brand-dark); }
+
+.entity-pick.is-link {
+  text-decoration: none;
+}
+.entity-arrow {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  color: var(--brand-dark);
+}
+.entity-pick.is-link:hover .entity-arrow,
+.entity-pick.is-link:focus-visible .entity-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.module-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+.module-card:hover {
+  border-color: rgba(217, 150, 58, 0.4);
+  transform: translateY(-1px);
+}
+
 .ws-page-head { margin-bottom: 28px; }
 .ws-page-head .card-eyebrow { color: var(--brand-dark); }
 .ws-page-head h1 { font-size: 1.6rem; color: var(--ws-text); margin: 8px 0 8px; }

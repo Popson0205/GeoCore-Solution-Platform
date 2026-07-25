@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Dashboard() {
@@ -153,7 +154,13 @@ export default function Dashboard() {
                 <ul className="entity-list">
                   {projects.map((p) => (
                     <li key={p.id}>
-                      <span className="entity-pick is-static">{p.name}</span>
+                      <Link
+                        to={`/workspace/organisations/${activeOrg.id}/projects/${p.id}`}
+                        className="entity-pick is-link"
+                      >
+                        <span>{p.name}</span>
+                        <span className="entity-arrow">&rarr;</span>
+                      </Link>
                     </li>
                   ))}
                 </ul>
