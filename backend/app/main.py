@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import models  # noqa: F401  (registers models on Base.metadata)
@@ -52,14 +53,31 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api", tags=["api"])
 
 static_dir = Path(__file__).parent / "static"
+assets_dir = static_dir / "assets"
+
 if static_dir.exists():
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+    # Vite's hashed JS/CSS bundle lives under /assets — serve that directly.
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
 
+    # Everything else (/, /login, /workspace, /workspace/maps, a refresh on
+    # any client-side route, ...) resolves to a real file if one exists
+    # (favicon, manifest) or falls back to index.html so React Router can
+    # take over. Without this, only "/" would work and every other page
+    # would 404 on a direct visit or hard refresh.
+    @app.get("/{full_path:path}")
+    async def spa(full_path: str):
+        candidate = static_dir / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(static_dir / "index.html")
 
-@app.get("/")
-async def root():
-    return {
-        "message": "GeoCore API is running",
-        "docs": "/docs",
-        "health": "/api/health",
-    }
+else:
+
+    @app.get("/")
+    async def root():
+        return {
+            "message": "GeoCore API is running",
+            "docs": "/docs",
+            "health": "/api/health",
+        }
