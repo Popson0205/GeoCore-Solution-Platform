@@ -8,6 +8,7 @@ from backend.app.api.routes import (
     health,
     organisations,
     projects,
+    public,
     records,
     reports,
 )
@@ -22,3 +23,6 @@ router.include_router(records.router, tags=["records"])
 router.include_router(attachments.router, tags=["attachments"])
 router.include_router(dashboard.router, tags=["dashboard"])
 router.include_router(reports.router, tags=["reports"])
+# No get_current_user dependency on this router — access is controlled by
+# the share_token/share_enabled check inside each handler instead.
+router.include_router(public.router, prefix="/public", tags=["public"])

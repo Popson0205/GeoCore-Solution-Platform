@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_project_for_member
+from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
+from backend.app.core.roles import DATA_COLLECTOR, PROJECT_MANAGER
 from backend.app.models.asset_type import AssetType
 from backend.app.models.record import Record
 from backend.app.models.user import User
@@ -21,7 +22,9 @@ def create_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    get_project_for_member(db, project_id, current_user.id)
+    # Collecting data is the Data Collector role's whole job — Analyst and
+    # Viewer stay read-only (blueprint section 13).
+    require_project_role(db, project_id, current_user.id, DATA_COLLECTOR)
 
     asset_type = (
         db.query(AssetType)
@@ -66,6 +69,14 @@ def _get_record_for_member(db: Session, record_id: uuid.UUID, user: User) -> Rec
     return record
 
 
+def _get_record_for_role(db: Session, record_id: uuid.UUID, user: User, minimum: str) -> Record:
+    record = db.query(Record).filter(Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    require_project_role(db, record.project_id, user.id, minimum)
+    return record
+
+
 @router.get("/records/{record_id}", response_model=RecordOut)
 def get_record(
     record_id: uuid.UUID,
@@ -82,7 +93,7 @@ def update_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    record = _get_record_for_member(db, record_id, current_user)
+    record = _get_record_for_role(db, record_id, current_user, DATA_COLLECTOR)
     if payload.geometry is not None:
         record.geometry = payload.geometry.model_dump()
     if payload.field_data is not None:
@@ -98,7 +109,10 @@ def delete_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    record = _get_record_for_member(db, record_id, current_user)
+    # Deleting (vs. correcting) a record is reserved for Project Manager+
+    # so a field worker can't accidentally wipe collected data — they can
+    # still fix mistakes via PATCH above.
+    record = _get_record_for_role(db, record_id, current_user, PROJECT_MANAGER)
     db.delete(record)
     db.commit()
     return None

@@ -4,11 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_project_for_member
+from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
+from backend.app.core.roles import PROJECT_MANAGER
 from backend.app.models.asset_type import AssetType, FieldDefinition
 from backend.app.models.user import User
-from backend.app.schemas.asset_type import AssetTypeCreate, AssetTypeOut, slugify_key
+from backend.app.schemas.asset_type import (
+    AssetTypeCreate,
+    AssetTypeOut,
+    AssetTypeUpdate,
+    slugify_key,
+)
 
 router = APIRouter()
 
@@ -20,7 +26,9 @@ def create_asset_type(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    get_project_for_member(db, project_id, current_user.id)
+    # Defining what a project collects is a structural change, reserved for
+    # Project Manager and above (blueprint section 13).
+    require_project_role(db, project_id, current_user.id, PROJECT_MANAGER)
 
     asset_type = AssetType(
         project_id=project_id,
@@ -89,6 +97,21 @@ def _get_asset_type_for_member(
     return asset_type
 
 
+def _get_asset_type_for_role(
+    db: Session, asset_type_id: uuid.UUID, user: User, minimum: str
+) -> AssetType:
+    asset_type = (
+        db.query(AssetType)
+        .options(selectinload(AssetType.field_definitions))
+        .filter(AssetType.id == asset_type_id)
+        .first()
+    )
+    if not asset_type:
+        raise HTTPException(status_code=404, detail="Asset type not found")
+    require_project_role(db, asset_type.project_id, user.id, minimum)
+    return asset_type
+
+
 @router.get("/asset-types/{asset_type_id}", response_model=AssetTypeOut)
 def get_asset_type(
     asset_type_id: uuid.UUID,
@@ -98,13 +121,32 @@ def get_asset_type(
     return _get_asset_type_for_member(db, asset_type_id, current_user)
 
 
+@router.patch("/asset-types/{asset_type_id}", response_model=AssetTypeOut)
+def update_asset_type(
+    asset_type_id: uuid.UUID,
+    payload: AssetTypeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    if payload.name is not None:
+        asset_type.name = payload.name
+    if payload.description is not None:
+        asset_type.description = payload.description
+    if payload.color is not None:
+        asset_type.color = payload.color
+    db.commit()
+    db.refresh(asset_type)
+    return asset_type
+
+
 @router.delete("/asset-types/{asset_type_id}", status_code=204)
 def delete_asset_type(
     asset_type_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    asset_type = _get_asset_type_for_member(db, asset_type_id, current_user)
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
     db.delete(asset_type)
     db.commit()
     return None

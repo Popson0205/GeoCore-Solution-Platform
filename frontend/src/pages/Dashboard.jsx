@@ -114,14 +114,18 @@ export default function Dashboard() {
           ) : (
             <ul className="entity-list">
               {orgs.map((org) => (
-                <li key={org.id}>
+                <li key={org.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button
                     className={`entity-pick${activeOrg?.id === org.id ? ' is-active' : ''}`}
                     onClick={() => setActiveOrg(org)}
+                    style={{ flex: 1 }}
                   >
                     <span>{org.name}</span>
                     {activeOrg?.id === org.id && <span className="entity-tag">active</span>}
                   </button>
+                  <Link to={`/workspace/organisations/${org.id}/settings`} className="btn-ghost">
+                    Settings
+                  </Link>
                 </li>
               ))}
             </ul>

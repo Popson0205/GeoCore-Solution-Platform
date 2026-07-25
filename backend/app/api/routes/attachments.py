@@ -5,8 +5,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_project_for_member
+from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
+from backend.app.core.roles import DATA_COLLECTOR, PROJECT_MANAGER
 from backend.app.core.storage import resolve_upload, save_upload
 from backend.app.models.attachment import Attachment
 from backend.app.models.record import Record
@@ -38,6 +39,14 @@ def _get_record_for_member(db: Session, record_id: uuid.UUID, user: User) -> Rec
     return record
 
 
+def _get_record_for_role(db: Session, record_id: uuid.UUID, user: User, minimum: str) -> Record:
+    record = db.query(Record).filter(Record.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    require_project_role(db, record.project_id, user.id, minimum)
+    return record
+
+
 @router.post(
     "/records/{record_id}/attachments", response_model=AttachmentOut, status_code=201
 )
@@ -47,7 +56,7 @@ async def upload_attachment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    record = _get_record_for_member(db, record_id, current_user)
+    record = _get_record_for_role(db, record_id, current_user, DATA_COLLECTOR)
 
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
@@ -111,7 +120,8 @@ def delete_attachment(
     attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    _get_record_for_member(db, attachment.record_id, current_user)
+    # Deleting evidence (vs. uploading it) is reserved for Project Manager+.
+    _get_record_for_role(db, attachment.record_id, current_user, PROJECT_MANAGER)
     db.delete(attachment)
     db.commit()
     return None

@@ -69,9 +69,22 @@ function DynamicField({ field, value, onChange }) {
   return <input type="text" {...commonProps} />
 }
 
+const RANK = {
+  viewer: 0,
+  analyst: 1,
+  data_collector: 2,
+  project_manager: 3,
+  administrator: 4,
+  owner: 5,
+}
+
 export default function ProjectRecords() {
-  const { projectId, assetTypes } = useOutletContext()
+  const { projectId, assetTypes, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
+  const canWrite = (RANK[myRole] ?? 0) >= RANK.data_collector
+  const canDelete = (RANK[myRole] ?? 0) >= RANK.project_manager
+
+  const [editingRecordId, setEditingRecordId] = useState(null)
 
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
@@ -115,6 +128,33 @@ export default function ProjectRecords() {
     return assetTypes.find((at) => at.id === id)
   }
 
+  function startEdit(record) {
+    const at = assetTypeById(record.asset_type_id)
+    setEditingRecordId(record.id)
+    setSelectedAssetTypeId(record.asset_type_id)
+    setFieldData(record.field_data || {})
+    setError('')
+    if (at?.geometry_type === 'point') {
+      const [lngVal, latVal] = record.geometry.coordinates
+      setLng(String(lngVal))
+      setLat(String(latVal))
+      setCoordinatesRaw('')
+    } else {
+      setCoordinatesRaw(JSON.stringify(record.geometry.coordinates))
+      setLat('')
+      setLng('')
+    }
+  }
+
+  function cancelEdit() {
+    setEditingRecordId(null)
+    setFieldData({})
+    setLat('')
+    setLng('')
+    setCoordinatesRaw('')
+    setError('')
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!selectedAssetType) return
@@ -145,15 +185,24 @@ export default function ProjectRecords() {
 
     setSaving(true)
     try {
-      await authedFetch(`/api/projects/${projectId}/records`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asset_type_id: selectedAssetType.id,
-          geometry,
-          field_data: fieldData,
-        }),
-      })
+      if (editingRecordId) {
+        await authedFetch(`/api/records/${editingRecordId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ geometry, field_data: fieldData }),
+        })
+        setEditingRecordId(null)
+      } else {
+        await authedFetch(`/api/projects/${projectId}/records`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            asset_type_id: selectedAssetType.id,
+            geometry,
+            field_data: fieldData,
+          }),
+        })
+      }
       setFieldData({})
       setLat('')
       setLng('')
@@ -195,69 +244,87 @@ export default function ProjectRecords() {
 
   return (
     <div className="ws-grid ws-grid-2">
-      <section className="panel">
-        <div className="panel-head">
-          <h2>New record</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="stacked-form">
-          <label className="form-label">
-            Asset type
-            <select
-              value={selectedAssetTypeId}
-              onChange={(e) => {
-                setSelectedAssetTypeId(e.target.value)
-                setFieldData({})
-              }}
-            >
-              {assetTypes.map((at) => (
-                <option key={at.id} value={at.id}>
-                  {at.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {selectedAssetType?.geometry_type === 'point' ? (
-            <div className="form-row">
-              <label className="form-label">
-                Latitude
-                <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="9.0765" />
-              </label>
-              <label className="form-label">
-                Longitude
-                <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="7.3986" />
-              </label>
-            </div>
-          ) : (
+      {canWrite ? (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>{editingRecordId ? 'Edit record' : 'New record'}</h2>
+            {editingRecordId && (
+              <button className="btn-ghost" type="button" onClick={cancelEdit}>
+                Cancel edit
+              </button>
+            )}
+          </div>
+          <form onSubmit={handleSubmit} className="stacked-form">
             <label className="form-label">
-              Coordinates (GeoJSON, [lng, lat] pairs)
-              <textarea
-                rows={3}
-                value={coordinatesRaw}
-                onChange={(e) => setCoordinatesRaw(e.target.value)}
-                placeholder="[[7.39,9.07],[7.40,9.08]]"
-              />
+              Asset type
+              <select
+                value={selectedAssetTypeId}
+                disabled={!!editingRecordId}
+                onChange={(e) => {
+                  setSelectedAssetTypeId(e.target.value)
+                  setFieldData({})
+                }}
+              >
+                {assetTypes.map((at) => (
+                  <option key={at.id} value={at.id}>
+                    {at.name}
+                  </option>
+                ))}
+              </select>
             </label>
-          )}
 
-          {selectedAssetType?.field_definitions.map((field) => (
-            <label key={field.id} className="form-label">
-              {field.label}
-              {field.is_required && ' *'}
-              <DynamicField
-                field={field}
-                value={fieldData[field.field_key]}
-                onChange={(val) => setFieldData((prev) => ({ ...prev, [field.field_key]: val }))}
-              />
-            </label>
-          ))}
+            {selectedAssetType?.geometry_type === 'point' ? (
+              <div className="form-row">
+                <label className="form-label">
+                  Latitude
+                  <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="9.0765" />
+                </label>
+                <label className="form-label">
+                  Longitude
+                  <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="7.3986" />
+                </label>
+              </div>
+            ) : (
+              <label className="form-label">
+                Coordinates (GeoJSON, [lng, lat] pairs)
+                <textarea
+                  rows={3}
+                  value={coordinatesRaw}
+                  onChange={(e) => setCoordinatesRaw(e.target.value)}
+                  placeholder="[[7.39,9.07],[7.40,9.08]]"
+                />
+              </label>
+            )}
 
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save record'}
-          </button>
-          {error && <p className="hint">{error}</p>}
-        </form>
-      </section>
+            {selectedAssetType?.field_definitions.map((field) => (
+              <label key={field.id} className="form-label">
+                {field.label}
+                {field.is_required && ' *'}
+                <DynamicField
+                  field={field}
+                  value={fieldData[field.field_key]}
+                  onChange={(val) => setFieldData((prev) => ({ ...prev, [field.field_key]: val }))}
+                />
+              </label>
+            ))}
+
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : editingRecordId ? 'Update record' : 'Save record'}
+            </button>
+            {error && <p className="hint">{error}</p>}
+          </form>
+        </section>
+      ) : (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>New record</h2>
+          </div>
+          <p className="ws-muted">
+            Your role ({myRole}) is read-only here. A Data Collector, Project Manager,
+            Administrator or Owner can add or edit records.
+          </p>
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel-head">
@@ -289,9 +356,16 @@ export default function ProjectRecords() {
                   >
                     Files
                   </Link>
-                  <button className="btn-ghost" onClick={() => handleDelete(record.id)}>
-                    Delete
-                  </button>
+                  {canWrite && (
+                    <button className="btn-ghost" onClick={() => startEdit(record)}>
+                      Edit
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button className="btn-ghost" onClick={() => handleDelete(record.id)}>
+                      Delete
+                    </button>
+                  )}
                 </li>
               )
             })}

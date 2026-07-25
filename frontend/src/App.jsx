@@ -7,6 +7,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import OrganisationSettings from './pages/OrganisationSettings'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectOverview from './pages/ProjectOverview'
 import ProjectAssetTypes from './pages/ProjectAssetTypes'
@@ -14,6 +15,7 @@ import ProjectRecords from './pages/ProjectRecords'
 import ProjectMap from './pages/ProjectMap'
 import ProjectAttachments from './pages/ProjectAttachments'
 import ProjectReports from './pages/ProjectReports'
+import PublicShare from './pages/PublicShare'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -26,8 +28,13 @@ export default function App() {
           <Route path="/register" element={<Register />} />
         </Route>
 
+        {/* Unauthenticated, read-only view of a project's shareable link —
+            deliberately outside WorkspaceLayout's auth gate. */}
+        <Route path="/share/:token" element={<PublicShare />} />
+
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="organisations/:orgId/settings" element={<OrganisationSettings />} />
           <Route
             path="organisations/:orgId/projects/:projectId"
             element={<ProjectDetail />}

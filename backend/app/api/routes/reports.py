@@ -89,14 +89,11 @@ def _get_report_for_member(db: Session, report_id: uuid.UUID, user: User) -> Rep
     return report
 
 
-@router.get("/reports/{report_id}/pdf")
-def download_report_pdf(
-    report_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    report = _get_report_for_member(db, report_id, current_user)
-
+def render_report_pdf(report: Report) -> io.BytesIO:
+    """Render a Report row to a PDF buffer. Shared by the authenticated
+    download endpoint below and the public share endpoint
+    (routes/public.py) so both always produce the same document.
+    """
     # Imported lazily so the reportlab dependency only needs to load when a
     # PDF is actually requested.
     from reportlab.lib.pagesizes import A4
@@ -144,7 +141,17 @@ def download_report_pdf(
     pdf.showPage()
     pdf.save()
     buffer.seek(0)
+    return buffer
 
+
+@router.get("/reports/{report_id}/pdf")
+def download_report_pdf(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    report = _get_report_for_member(db, report_id, current_user)
+    buffer = render_report_pdf(report)
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

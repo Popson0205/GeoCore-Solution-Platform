@@ -69,6 +69,25 @@ class AssetTypeCreate(BaseModel):
         return value
 
 
+class AssetTypeUpdate(BaseModel):
+    """Renaming or restyling an asset type. Field definitions are managed
+    separately (added here later) — changing a field's type/options after
+    records exist against it is a data-migration concern, not a simple
+    PATCH, so it's deliberately out of scope for this endpoint.
+    """
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("name cannot be blank")
+        return value
+
+
 class AssetTypeOut(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID

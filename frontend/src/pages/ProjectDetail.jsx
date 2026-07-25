@@ -127,7 +127,18 @@ export default function ProjectDetail() {
       {error && <p className="hint">{error}</p>}
 
       <Outlet
-        context={{ org, project, orgId, projectId, assetTypes, refreshAssetTypes }}
+        context={{
+          org,
+          project,
+          orgId,
+          projectId,
+          assetTypes,
+          refreshAssetTypes,
+          // The org object returned by GET /api/organisations/ now carries
+          // my_role — used purely to show/hide UI. The backend re-checks
+          // the real role on every write, so this is UX, not security.
+          myRole: org?.my_role || 'viewer',
+        }}
       />
     </div>
   )
