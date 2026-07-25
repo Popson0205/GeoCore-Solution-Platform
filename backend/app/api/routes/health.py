@@ -15,8 +15,10 @@ async def platform():
     return {
         "name": "GeoCore",
         "purpose": "Reusable geospatial platform foundation",
-        "done": ["Authentication", "Organisations", "Projects"],
-        "next_steps": [
+        "done": [
+            "Authentication",
+            "Organisations",
+            "Projects",
             "Asset types",
             "Dynamic fields",
             "Spatial records",
@@ -24,5 +26,11 @@ async def platform():
             "Attachments",
             "Dashboard",
             "Reports",
+        ],
+        "next_steps": [
+            "Alembic migrations",
+            "PostGIS geometry columns",
+            "S3-compatible file storage",
+            "Pilot with a real geospatial use case",
         ],
     }

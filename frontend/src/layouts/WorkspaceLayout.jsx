@@ -4,11 +4,6 @@ import { useAuth } from '../context/AuthContext'
 
 const NAV_ITEMS = [
   { to: '/workspace', label: 'Organisations & projects', icon: 'layers', end: true, ready: true },
-  { to: '/workspace/asset-types', label: 'Asset types & fields', icon: 'grid', ready: false },
-  { to: '/workspace/spatial-records', label: 'Spatial records', icon: 'point', ready: false },
-  { to: '/workspace/maps', label: 'Maps', icon: 'map', ready: false },
-  { to: '/workspace/attachments', label: 'Attachments', icon: 'clip', ready: false },
-  { to: '/workspace/reports', label: 'Reports', icon: 'doc', ready: false },
 ]
 
 function NavIcon({ name }) {
@@ -76,9 +71,9 @@ export default function WorkspaceLayout() {
         <div className="ws-sidebar-foot">
           <p>Build order</p>
           <div className="ws-progress-track">
-            <div className="ws-progress-fill" style={{ width: '37.5%' }} />
+            <div className="ws-progress-fill" style={{ width: '100%' }} />
           </div>
-          <span>3 of 8 modules live</span>
+          <span>Open a project for asset types, records, map, attachments &amp; reports</span>
         </div>
       </aside>
 

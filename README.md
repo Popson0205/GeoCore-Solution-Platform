@@ -73,16 +73,31 @@ Any short, brandable domain is fine. A custom domain gives you a professional li
 - Authentication (register / login / me)
 - Organisations (multi-tenant, with owner membership on creation)
 - Projects (scoped to an organisation, membership-checked)
+- Asset types and dynamic field definitions
+- Spatial records (GeoJSON stored in a JSONB column — see note below)
+- Interactive map (Leaflet), colored and popup-annotated by asset type
+- Attachments (local-disk file storage, 15 MB per file)
+- Dashboard indicators (asset type / record / attachment counts)
+- Reports (generated PDF summary, with history)
+
+## Note on spatial storage
+
+Records currently store their geometry as a GeoJSON object in a JSONB
+column (`backend/app/models/record.py`) rather than a real PostGIS
+`geometry` column. This keeps the starter runnable without adding
+GeoAlchemy2 and enabling the PostGIS extension, and the API shape (`{type,
+coordinates}`) is the same either way, so migrating later is a schema
+change, not an API change. Do this before relying on spatial indexing,
+`ST_*` queries, or large datasets.
 
 ## What to build next
 
-- Asset types and dynamic field definitions
-- Forms and field data collection
-- Spatial records (PostGIS geometry columns)
-- Map view
-- Attachments
-- Dashboard indicators
-- Reports
+- Alembic migrations (tables are currently created with `create_all()` on startup)
+- Migrate `records.geometry` to a real PostGIS geometry column + spatial index
+- S3-compatible object storage for attachments (local disk today)
+- Conditional logic, repeat groups and offline collection for forms
+- Role-based permission enforcement beyond "is a member" (owner / admin / project manager / data collector / analyst / viewer)
+- Pilot with a real geospatial use case
 
 ## Files to pay attention to
 

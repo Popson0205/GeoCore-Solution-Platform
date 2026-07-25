@@ -1,33 +1,14 @@
-import React, { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import React, { useCallback, useEffect, useState } from 'react'
+import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-const MODULES = [
-  {
-    path: 'asset-types',
-    title: 'Asset types & fields',
-    description: 'Define the custom fields this project needs before data collection starts.',
-  },
-  {
-    path: 'spatial-records',
-    title: 'Spatial records',
-    description: 'Capture and manage the geo-tagged records field teams collect here.',
-  },
-  {
-    path: 'maps',
-    title: 'Maps',
-    description: 'Visualise this project\u2019s spatial records on an interactive map.',
-  },
-  {
-    path: 'attachments',
-    title: 'Attachments',
-    description: 'Attach photos, documents and files to any record in this project.',
-  },
-  {
-    path: 'reports',
-    title: 'Reports',
-    description: 'Turn this project\u2019s data into a shareable, professional report.',
-  },
+const TABS = [
+  { to: '', label: 'Overview', end: true },
+  { to: 'asset-types', label: 'Asset types & fields' },
+  { to: 'records', label: 'Records' },
+  { to: 'map', label: 'Map' },
+  { to: 'attachments', label: 'Attachments' },
+  { to: 'reports', label: 'Reports' },
 ]
 
 export default function ProjectDetail() {
@@ -35,8 +16,20 @@ export default function ProjectDetail() {
   const { authedFetch } = useAuth()
   const [org, setOrg] = useState(null)
   const [project, setProject] = useState(null)
+  const [assetTypes, setAssetTypes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+
+  const refreshAssetTypes = useCallback(async () => {
+    try {
+      const data = await authedFetch(`/api/projects/${projectId}/asset-types`)
+      setAssetTypes(data)
+      return data
+    } catch (err) {
+      setError(err.message)
+      return []
+    }
+  }, [authedFetch, projectId])
 
   useEffect(() => {
     let cancelled = false
@@ -53,6 +46,8 @@ export default function ProjectDetail() {
         if (cancelled) return
         const matchedProject = projects.find((p) => p.id === projectId)
         setProject(matchedProject || null)
+
+        await refreshAssetTypes()
       } catch (err) {
         if (!cancelled) setError(err.message)
       } finally {
@@ -63,6 +58,7 @@ export default function ProjectDetail() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, projectId, authedFetch])
 
   if (loading) {
@@ -73,7 +69,7 @@ export default function ProjectDetail() {
     )
   }
 
-  if (error || !project) {
+  if (error && !project) {
     return (
       <div className="ws-page">
         <div className="empty-state">
@@ -87,8 +83,22 @@ export default function ProjectDetail() {
     )
   }
 
+  if (!project) {
+    return (
+      <div className="ws-page">
+        <div className="empty-state">
+          <p>Couldn't find that project.</p>
+          <span>It may have been removed, or the link is out of date.</span>
+        </div>
+        <Link to="/workspace" className="btn-secondary" style={{ marginTop: 16, display: 'inline-flex' }}>
+          Back to organisations &amp; projects
+        </Link>
+      </div>
+    )
+  }
+
   return (
-    <div className="ws-page">
+    <div className="ws-page ws-page-wide">
       <Link to="/workspace" className="ws-breadcrumb">
         &larr; {org ? org.name : 'Organisations & projects'}
       </Link>
@@ -101,19 +111,24 @@ export default function ProjectDetail() {
         </p>
       </div>
 
-      <div className="ws-page-head" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: '1rem', color: 'var(--ws-text)' }}>What's next for this project</h2>
-      </div>
-
-      <div className="ws-grid">
-        {MODULES.map((mod) => (
-          <Link key={mod.path} to={`/workspace/${mod.path}`} className="panel module-card">
-            <div className="coming-soon-badge">Not built yet</div>
-            <h2>{mod.title}</h2>
-            <p className="ws-muted">{mod.description}</p>
-          </Link>
+      <nav className="project-tabs">
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.to || 'overview'}
+            to={tab.to}
+            end={tab.end}
+            className={({ isActive }) => `project-tab${isActive ? ' is-active' : ''}`}
+          >
+            {tab.label}
+          </NavLink>
         ))}
-      </div>
+      </nav>
+
+      {error && <p className="hint">{error}</p>}
+
+      <Outlet
+        context={{ org, project, orgId, projectId, assetTypes, refreshAssetTypes }}
+      />
     </div>
   )
 }

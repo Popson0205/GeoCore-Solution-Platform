@@ -8,41 +8,13 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import ProjectDetail from './pages/ProjectDetail'
-import ComingSoon from './pages/ComingSoon'
+import ProjectOverview from './pages/ProjectOverview'
+import ProjectAssetTypes from './pages/ProjectAssetTypes'
+import ProjectRecords from './pages/ProjectRecords'
+import ProjectMap from './pages/ProjectMap'
+import ProjectAttachments from './pages/ProjectAttachments'
+import ProjectReports from './pages/ProjectReports'
 import NotFound from './pages/NotFound'
-
-const roadmap = [
-  {
-    path: 'asset-types',
-    step: 4,
-    title: 'Asset types & fields',
-    description: 'Define the custom fields each kind of asset needs before data collection starts.',
-  },
-  {
-    path: 'spatial-records',
-    step: 5,
-    title: 'Spatial records',
-    description: 'Capture and manage the geo-tagged records field teams collect against a project.',
-  },
-  {
-    path: 'maps',
-    step: 6,
-    title: 'Maps',
-    description: 'Visualise spatial records on an interactive map, layered by asset type.',
-  },
-  {
-    path: 'attachments',
-    step: 7,
-    title: 'Attachments',
-    description: 'Attach photos, documents and files to any spatial record.',
-  },
-  {
-    path: 'reports',
-    step: 8,
-    title: 'Reports',
-    description: 'Turn project data into shareable, professional reports.',
-  },
-]
 
 export default function App() {
   return (
@@ -56,16 +28,17 @@ export default function App() {
 
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
-          <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetail />} />
-          {roadmap.map((item) => (
-            <Route
-              key={item.path}
-              path={item.path}
-              element={
-                <ComingSoon title={item.title} description={item.description} step={item.step} />
-              }
-            />
-          ))}
+          <Route
+            path="organisations/:orgId/projects/:projectId"
+            element={<ProjectDetail />}
+          >
+            <Route index element={<ProjectOverview />} />
+            <Route path="asset-types" element={<ProjectAssetTypes />} />
+            <Route path="records" element={<ProjectRecords />} />
+            <Route path="map" element={<ProjectMap />} />
+            <Route path="attachments" element={<ProjectAttachments />} />
+            <Route path="reports" element={<ProjectReports />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFound />} />

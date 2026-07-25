@@ -21,8 +21,9 @@ Object Storage
 - Authentication — implemented (JWT register / login / me)
 - Organisations — implemented (multi-tenant, owner membership on creation)
 - Projects — implemented (scoped to an organisation, membership-checked)
-- Asset types — not yet built
-- Fields — not yet built
-- Records — not yet built
-- Attachments — not yet built
-- Reports — not yet built
+- Asset types — implemented (project-scoped, with geometry_type and color)
+- Fields — implemented (dynamic field definitions per asset type: text, number, date, select, boolean, etc.)
+- Records — implemented (geometry stored as GeoJSON in JSONB pending a PostGIS migration — see README)
+- Attachments — implemented (local-disk storage; swap for S3-compatible storage before production)
+- Dashboard — implemented (per-project indicators: asset type / record / attachment counts)
+- Reports — implemented (generated PDF summary with history, via reportlab)
