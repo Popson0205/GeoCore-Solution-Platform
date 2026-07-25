@@ -1,44 +1,361 @@
+/* ---------------------------------------------------------------
+   GeoCore — token system
+   Deep survey-chart navy, a live triangulated node network, and a
+   monospace "coordinate readout" voice for labels & metadata.
+------------------------------------------------------------------ */
 :root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #102030;
-  background: #f5f7fb;
+  --ink: #0a1622;
+  --ink-2: #0e1e2e;
+  --panel: rgba(234, 242, 248, 0.045);
+  --panel-strong: rgba(234, 242, 248, 0.07);
+  --border: rgba(148, 178, 199, 0.16);
+  --border-strong: rgba(148, 178, 199, 0.3);
+
+  --teal: #3ddc97;
+  --teal-soft: rgba(61, 220, 151, 0.16);
+  --amber: #ffb454;
+  --amber-soft: rgba(255, 180, 84, 0.16);
+  --coral: #ff8a70;
+
+  --text: #eaf2f8;
+  --text-muted: #93a8ba;
+  --text-faint: #5f7688;
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: linear-gradient(180deg, #f8fbff, #eef3f9); }
-.page { max-width: 1100px; margin: 0 auto; padding: 48px 20px 64px; }
-.hero { margin-bottom: 28px; }
-.eyebrow { text-transform: uppercase; letter-spacing: .12em; color: #3c6ea8; font-weight: 700; font-size: .8rem; }
-h1 { font-size: clamp(2.2rem, 5vw, 4.2rem); line-height: 1.05; margin: 8px 0 12px; max-width: 12ch; }
-.lead { font-size: 1.05rem; max-width: 60ch; color: #425466; }
-.grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-.card { background: white; border-radius: 22px; padding: 22px; box-shadow: 0 16px 40px rgba(16,32,48,.08); border: 1px solid rgba(16,32,48,.06); }
-.card h2 { margin-top: 0; }
-.card ul, .card ol { margin-bottom: 0; color: #324253; }
-.card form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-.card input {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(16,32,48,.15);
-  font-size: .95rem;
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
-.card button[type="submit"] {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: none;
-  background: #3c6ea8;
-  color: white;
+
+#root { min-height: 100%; }
+
+/* ---------------------------------------------------------------
+   Backdrop + animated network
+------------------------------------------------------------------ */
+.page-backdrop {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 620px at 82% -10%, rgba(61, 220, 151, 0.10), transparent 60%),
+    radial-gradient(900px 560px at -10% 20%, rgba(255, 180, 84, 0.07), transparent 55%),
+    linear-gradient(180deg, var(--ink) 0%, var(--ink-2) 55%, var(--ink) 100%);
+}
+
+.network-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0.9;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+}
+
+/* ---------------------------------------------------------------
+   Layout
+------------------------------------------------------------------ */
+.page {
+  position: relative;
+  z-index: 1;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 64px 24px 80px;
+}
+
+.hero { margin-bottom: 36px; }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--teal);
+  font-weight: 500;
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.eyebrow::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  background: var(--teal);
+  display: inline-block;
+}
+
+h1 {
+  font-family: var(--font-display);
   font-weight: 600;
-  cursor: pointer;
+  font-size: clamp(2.3rem, 5vw, 4rem);
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  margin: 14px 0 14px;
+  max-width: 14ch;
+  color: #f4f9fc;
 }
-.card button[type="submit"]:disabled { opacity: .6; cursor: default; }
+
+.lead {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 56ch;
+  color: var(--text-muted);
+  margin: 0 0 26px;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin: 2px 0 14px;
+  color: #f4f9fc;
+}
+
+/* ---------------------------------------------------------------
+   Status pill
+------------------------------------------------------------------ */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  font-size: 0.88rem;
+}
+.status-pill strong { font-weight: 600; color: var(--text); }
+.status-value { font-family: var(--font-mono); color: var(--text-muted); font-size: 0.82rem; }
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 3px rgba(148, 178, 199, 0.12);
+}
+.status-pill.is-ok .status-dot {
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-soft);
+}
+
+/* ---------------------------------------------------------------
+   Cards / grid
+------------------------------------------------------------------ */
+.grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-bottom: 28px;
+}
+
+.card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 48px rgba(2, 8, 16, 0.35);
+}
+
+.card-eyebrow {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  margin: 0 0 8px;
+}
+
+.plain-list, .card ul, .card ol {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.94rem;
+  line-height: 1.9;
+}
+.plain-list li { padding-left: 18px; position: relative; }
+.plain-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.75em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  opacity: 0.7;
+}
+
+.build-list { counter-reset: step; }
+.build-list li {
+  padding-left: 34px;
+  position: relative;
+  color: var(--text-muted);
+}
+.build-list li::before {
+  counter-increment: step;
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.build-list li.is-done {
+  color: var(--text);
+}
+.build-list li.is-done::before {
+  content: "✓";
+  color: var(--teal);
+  border-color: rgba(61, 220, 151, 0.4);
+  background: var(--teal-soft);
+}
+
+/* ---------------------------------------------------------------
+   Forms
+------------------------------------------------------------------ */
+.card form, .inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.field-stack { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field span {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.card input, .inline-form input {
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(6, 14, 22, 0.55);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.card input::placeholder { color: var(--text-faint); }
+.card input:focus, .inline-form input:focus {
+  outline: none;
+  border-color: var(--teal);
+  background: rgba(6, 14, 22, 0.8);
+}
+
+.btn-primary, .card button[type="submit"] {
+  padding: 11px 16px;
+  border-radius: 9px;
+  border: none;
+  background: var(--teal);
+  color: #06231a;
+  font-weight: 600;
+  font-size: 0.94rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.btn-primary:hover, .card button[type="submit"]:hover {
+  box-shadow: 0 8px 22px rgba(61, 220, 151, 0.25);
+}
+.btn-primary:disabled, .card button[type="submit"]:disabled {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.btn-secondary:hover { border-color: var(--teal); color: var(--teal); }
+
 .link {
   background: none;
   border: none;
-  color: #3c6ea8;
+  color: var(--teal);
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
-  font-size: .9rem;
+  text-underline-offset: 3px;
+  font-size: 0.88rem;
 }
-.hint { color: #b3441e; font-size: .9rem; margin: 6px 0 0; }
+
+.hint { color: var(--coral); font-size: 0.88rem; margin: 8px 0 0; }
+
+/* ---------------------------------------------------------------
+   Entity lists (orgs / projects)
+------------------------------------------------------------------ */
+.entity-list { display: flex; flex-direction: column; gap: 6px; }
+.entity-pick {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(234, 242, 248, 0.03);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+button.entity-pick:hover { border-color: var(--border-strong); color: var(--text); }
+.entity-pick.is-active {
+  border-color: rgba(61, 220, 151, 0.4);
+  background: var(--teal-soft);
+  color: var(--text);
+}
+.entity-pick.is-static { cursor: default; }
+
+/* ---------------------------------------------------------------
+   Auth card
+------------------------------------------------------------------ */
+.auth-card { max-width: 420px; }
+
+/* ---------------------------------------------------------------
+   Accessibility
+------------------------------------------------------------------ */
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .network-bg { opacity: 0.5; }
+}
+
+@media (max-width: 620px) {
+  .page { padding: 44px 18px 64px; }
+}

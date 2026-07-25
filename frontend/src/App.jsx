@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import NetworkBackground from './NetworkBackground'
 
 const steps = [
   'Build the platform once.',
@@ -74,30 +75,42 @@ function AuthPanel({ token, setToken, setUser }) {
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit}>
+    <form className="card auth-card" onSubmit={handleSubmit}>
+      <p className="card-eyebrow">Access</p>
       <h2>{mode === 'login' ? 'Sign in' : 'Create an account'}</h2>
-      {mode === 'register' && (
-        <input
-          placeholder="Full name"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
-      )}
-      <input
-        type="email"
-        placeholder="Email"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <button type="submit" disabled={busy}>
+      <div className="field-stack">
+        {mode === 'register' && (
+          <label className="field">
+            <span>Full name</span>
+            <input
+              placeholder="Jane Okafor"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </label>
+        )}
+        <label className="field">
+          <span>Email</span>
+          <input
+            type="email"
+            placeholder="you@agency.gov"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Password</span>
+          <input
+            type="password"
+            placeholder="••••••••"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+      </div>
+      <button type="submit" className="btn-primary" disabled={busy}>
         {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Register'}
       </button>
       <button
@@ -189,20 +202,24 @@ function WorkspacePanel({ token, user }) {
   return (
     <div className="grid">
       <div className="card">
+        <p className="card-eyebrow">Workspace</p>
         <h2>Signed in as {user?.email}</h2>
-        <form onSubmit={createOrg}>
+        <form onSubmit={createOrg} className="inline-form">
           <input
             placeholder="New organisation name"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
           />
-          <button type="submit">Create organisation</button>
+          <button type="submit" className="btn-secondary">Create organisation</button>
         </form>
-        <ul>
+        <ul className="entity-list">
           {orgs.map((org) => (
             <li key={org.id}>
-              <button className="link" onClick={() => setActiveOrg(org)}>
-                {org.name} {activeOrg?.id === org.id ? '(active)' : ''}
+              <button
+                className={`entity-pick${activeOrg?.id === org.id ? ' is-active' : ''}`}
+                onClick={() => setActiveOrg(org)}
+              >
+                {org.name} {activeOrg?.id === org.id ? '· active' : ''}
               </button>
             </li>
           ))}
@@ -210,20 +227,23 @@ function WorkspacePanel({ token, user }) {
       </div>
 
       <div className="card">
-        <h2>Projects {activeOrg ? `in ${activeOrg.name}` : ''}</h2>
+        <p className="card-eyebrow">Projects</p>
+        <h2>{activeOrg ? activeOrg.name : 'No organisation selected'}</h2>
         {activeOrg ? (
           <>
-            <form onSubmit={createProject}>
+            <form onSubmit={createProject} className="inline-form">
               <input
                 placeholder="New project name"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
               />
-              <button type="submit">Create project</button>
+              <button type="submit" className="btn-secondary">Create project</button>
             </form>
-            <ul>
+            <ul className="entity-list">
               {projects.map((p) => (
-                <li key={p.id}>{p.name}</li>
+                <li key={p.id}>
+                  <span className="entity-pick is-static">{p.name}</span>
+                </li>
               ))}
             </ul>
           </>
@@ -265,56 +285,65 @@ export default function App() {
     setUser(null)
   }
 
+  const isHealthy = health.startsWith('ok')
+
   return (
-    <main className="page">
-      <section className="hero">
-        <p className="eyebrow">GeoCore Starter</p>
-        <h1>Scalable local geospatial solutions</h1>
-        <p className="lead">
-          A reusable platform foundation for government, organisations and field teams.
-        </p>
-        <div className="card">
-          <strong>API health:</strong> {health}
-        </div>
-      </section>
+    <div className="page-backdrop">
+      <NetworkBackground />
+      <main className="page">
+        <section className="hero">
+          <p className="eyebrow">GeoCore Starter</p>
+          <h1>Scalable local geospatial solutions</h1>
+          <p className="lead">
+            A reusable platform foundation for government, organisations and field teams.
+          </p>
+          <div className={`status-pill${isHealthy ? ' is-ok' : ''}`}>
+            <span className="status-dot" />
+            <strong>API health</strong>
+            <span className="status-value">{health}</span>
+          </div>
+        </section>
 
-      <section className="grid">
-        <div className="card">
-          <h2>Platform direction</h2>
-          <ul>
-            {steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ul>
-        </div>
+        <section className="grid">
+          <div className="card">
+            <p className="card-eyebrow">Direction</p>
+            <h2>Platform direction</h2>
+            <ul className="plain-list">
+              {steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+          </div>
 
-        <div className="card">
-          <h2>Build order</h2>
-          <ol>
-            <li>Authentication ✅</li>
-            <li>Organisations ✅</li>
-            <li>Projects ✅</li>
-            <li>Asset types &amp; fields</li>
-            <li>Spatial records</li>
-            <li>Maps</li>
-            <li>Attachments</li>
-            <li>Reports</li>
-          </ol>
-        </div>
-      </section>
+          <div className="card">
+            <p className="card-eyebrow">Roadmap</p>
+            <h2>Build order</h2>
+            <ol className="build-list">
+              <li className="is-done">Authentication</li>
+              <li className="is-done">Organisations</li>
+              <li className="is-done">Projects</li>
+              <li>Asset types &amp; fields</li>
+              <li>Spatial records</li>
+              <li>Maps</li>
+              <li>Attachments</li>
+              <li>Reports</li>
+            </ol>
+          </div>
+        </section>
 
-      <section>
-        {user ? (
-          <>
-            <WorkspacePanel token={token} user={user} />
-            <button className="link" onClick={logout}>
-              Sign out
-            </button>
-          </>
-        ) : (
-          <AuthPanel token={token} setToken={setToken} setUser={setUser} />
-        )}
-      </section>
-    </main>
+        <section>
+          {user ? (
+            <>
+              <WorkspacePanel token={token} user={user} />
+              <button className="link" onClick={logout}>
+                Sign out
+              </button>
+            </>
+          ) : (
+            <AuthPanel token={token} setToken={setToken} setUser={setUser} />
+          )}
+        </section>
+      </main>
+    </div>
   )
 }
