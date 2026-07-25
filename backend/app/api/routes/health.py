@@ -1,0 +1,28 @@
+from fastapi import APIRouter
+
+from backend.app.core.config import settings
+
+router = APIRouter()
+
+
+@router.get("/health")
+async def health():
+    return {"status": "ok", "app_name": settings.app_name, "version": settings.app_version}
+
+
+@router.get("/platform")
+async def platform():
+    return {
+        "name": "GeoCore",
+        "purpose": "Reusable geospatial platform foundation",
+        "done": ["Authentication", "Organisations", "Projects"],
+        "next_steps": [
+            "Asset types",
+            "Dynamic fields",
+            "Spatial records",
+            "Maps",
+            "Attachments",
+            "Dashboard",
+            "Reports",
+        ],
+    }

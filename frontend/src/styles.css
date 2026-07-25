@@ -15,3 +15,30 @@ h1 { font-size: clamp(2.2rem, 5vw, 4.2rem); line-height: 1.05; margin: 8px 0 12p
 .card { background: white; border-radius: 22px; padding: 22px; box-shadow: 0 16px 40px rgba(16,32,48,.08); border: 1px solid rgba(16,32,48,.06); }
 .card h2 { margin-top: 0; }
 .card ul, .card ol { margin-bottom: 0; color: #324253; }
+.card form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.card input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(16,32,48,.15);
+  font-size: .95rem;
+}
+.card button[type="submit"] {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #3c6ea8;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+.card button[type="submit"]:disabled { opacity: .6; cursor: default; }
+.link {
+  background: none;
+  border: none;
+  color: #3c6ea8;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-size: .9rem;
+}
+.hint { color: #b3441e; font-size: .9rem; margin: 6px 0 0; }

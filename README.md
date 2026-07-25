@@ -4,10 +4,12 @@ This package is the first deployable starter for the GeoCore platform: a multi-t
 
 ## What is included
 
-- FastAPI backend
-- React + Vite frontend
+- FastAPI backend with a working PostgreSQL database layer (SQLAlchemy)
+- JWT-based authentication (register / login / me)
+- Multi-tenant organisations with membership + role enforcement
+- Projects scoped to an organisation, access-controlled by membership
+- React + Vite frontend with a working sign-up/sign-in/organisation/project demo
 - Single Dockerfile for Railway deployment
-- PostGIS-ready architecture notes
 - Environment variable template
 - Live testing and Railway deployment guide
 
@@ -20,7 +22,7 @@ React Frontend
   ↓
 FastAPI Backend
   ↓
-PostgreSQL + PostGIS
+PostgreSQL (+ PostGIS once spatial records are added)
   ↓
 File Storage (later)
 ```
@@ -36,6 +38,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+The backend needs a running PostgreSQL database. Copy `.env.example` to `.env` at the repo root and point `DATABASE_URL` at your database. Tables are created automatically on startup (this is an MVP convenience — replace with Alembic migrations before production use).
+
 ### Frontend
 ```bash
 cd frontend
@@ -45,7 +49,7 @@ npm run dev
 
 ## Railway deployment
 
-Railway supports deployment from GitHub and can use a Dockerfile at the root of the repo. It also supports public networking with Railway-provided domains or custom domains with automatic SSL. Environment variables are available during build and runtime. citeturn587133search3turn587133search4turn587133search6turn587133search1
+Railway supports deployment from GitHub and can build from a Dockerfile at the root of the repository. It also supports public networking with Railway-provided domains or custom domains with automatic SSL, and environment variables are available at both build and runtime.
 
 ### Suggested Railway workflow
 
@@ -53,7 +57,7 @@ Railway supports deployment from GitHub and can use a Dockerfile at the root of 
 2. Create a Railway project.
 3. Connect the GitHub repository.
 4. Let Railway build using the root `Dockerfile`.
-5. Add environment variables in Railway.
+5. Add a PostgreSQL service (Railway's Postgres plugin) and set `DATABASE_URL` from it, plus `SECRET_KEY`, in your app's environment variables.
 6. Generate a Railway domain for quick testing or attach your custom domain later.
 7. For a branded live test, buy a domain you control and point it to Railway using Railway's custom domain setup.
 
@@ -62,26 +66,30 @@ Railway supports deployment from GitHub and can use a Dockerfile at the root of 
 - `geocore.ng`
 - `geocore.com.ng`
 
-Any short, brandable domain is fine. A custom domain gives you a professional live testing URL and can be connected to Railway with automatic SSL. citeturn587133search0turn587133search4
+Any short, brandable domain is fine. A custom domain gives you a professional live testing URL and can be connected to Railway with automatic SSL.
+
+## What's implemented so far
+
+- Authentication (register / login / me)
+- Organisations (multi-tenant, with owner membership on creation)
+- Projects (scoped to an organisation, membership-checked)
 
 ## What to build next
 
-After deployment, the next step is to implement:
-
-- authentication
-- organisations
-- projects
-- asset types
-- dynamic fields
-- spatial records
-- map view
-- attachments
-- reports
+- Asset types and dynamic field definitions
+- Forms and field data collection
+- Spatial records (PostGIS geometry columns)
+- Map view
+- Attachments
+- Dashboard indicators
+- Reports
 
 ## Files to pay attention to
 
 - `Dockerfile`
 - `backend/app/main.py`
+- `backend/app/api/routes/`
+- `backend/app/models/`
 - `frontend/src/App.jsx`
 - `docs/DEPLOYMENT_GUIDE.md`
 - `docs/ARCHITECTURE.md`

@@ -18,11 +18,11 @@ Object Storage
 ```
 
 ## Core modules
-- Authentication
-- Organisations
-- Projects
-- Asset types
-- Fields
-- Records
-- Attachments
-- Reports
+- Authentication — implemented (JWT register / login / me)
+- Organisations — implemented (multi-tenant, owner membership on creation)
+- Projects — implemented (scoped to an organisation, membership-checked)
+- Asset types — not yet built
+- Fields — not yet built
+- Records — not yet built
+- Attachments — not yet built
+- Reports — not yet built
