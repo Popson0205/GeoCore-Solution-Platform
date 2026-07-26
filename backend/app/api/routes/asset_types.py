@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,17 +8,21 @@ from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
 from backend.app.core.roles import PROJECT_MANAGER
-from backend.app.models.asset_type import AssetType, FieldDefinition, FormSection
+from backend.app.models.asset_type import AssetType, FieldDefinition, FormSection, SubmissionAssignee
 from backend.app.models.user import User
 from backend.app.schemas.asset_type import (
     AssetTypeCreate,
     AssetTypeOut,
     AssetTypeUpdate,
+    AssigneeCreate,
+    AssigneeOut,
     FieldDefinitionCreate,
     FieldDefinitionOut,
     FormDefinition,
     FormSectionCreate,
     FormSectionOut,
+    SubmissionEnableRequest,
+    SubmissionStatusOut,
     slugify_key,
 )
 
@@ -285,3 +290,115 @@ def delete_asset_type(
     db.delete(asset_type)
     db.commit()
     return None
+
+
+# ---------------------------------------------------------------------------
+# Submission links — "field officer only needs the link" (blueprint §7)
+# ---------------------------------------------------------------------------
+
+
+def _submission_status(asset_type: AssetType) -> SubmissionStatusOut:
+    return SubmissionStatusOut(
+        enabled=asset_type.submission_enabled,
+        access=asset_type.submission_access,
+        token=asset_type.submission_token if asset_type.submission_enabled else None,
+        public_path=f"/submit/{asset_type.submission_token}"
+        if (asset_type.submission_enabled and asset_type.submission_token)
+        else None,
+        assignees=[AssigneeOut.model_validate(a) for a in asset_type.assignees],
+    )
+
+
+@router.get("/asset-types/{asset_type_id}/submission", response_model=SubmissionStatusOut)
+def get_submission_status(
+    asset_type_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    return _submission_status(asset_type)
+
+
+@router.post("/asset-types/{asset_type_id}/submission", response_model=SubmissionStatusOut)
+def enable_submission(
+    asset_type_id: uuid.UUID,
+    payload: SubmissionEnableRequest,
+    rotate: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Turn on this asset type's submission link. `access="public"` means
+    anyone with the link can submit with no login; `access="assigned"`
+    restricts submissions to emails added via the assignees endpoints
+    below. Either way, submissions still go through the exact same
+    validation/calculation engine as an internal record (see
+    routes/public.py -> core/form_engine.py) — the link only changes *who*
+    can submit, never what's accepted.
+    """
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    if not asset_type.submission_token or rotate:
+        asset_type.submission_token = secrets.token_urlsafe(24)
+    asset_type.submission_enabled = True
+    asset_type.submission_access = payload.access
+    db.commit()
+    db.refresh(asset_type)
+    return _submission_status(asset_type)
+
+
+@router.delete("/asset-types/{asset_type_id}/submission", response_model=SubmissionStatusOut)
+def disable_submission(
+    asset_type_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    asset_type.submission_enabled = False
+    db.commit()
+    db.refresh(asset_type)
+    return _submission_status(asset_type)
+
+
+@router.post(
+    "/asset-types/{asset_type_id}/submission/assignees",
+    response_model=SubmissionStatusOut,
+    status_code=201,
+)
+def add_assignee(
+    asset_type_id: uuid.UUID,
+    payload: AssigneeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    email = payload.email.strip().lower()
+    already = any(a.email.lower() == email for a in asset_type.assignees)
+    if not already:
+        db.add(SubmissionAssignee(asset_type_id=asset_type.id, email=email, name=payload.name))
+        db.commit()
+        db.refresh(asset_type)
+    return _submission_status(asset_type)
+
+
+@router.delete(
+    "/asset-types/{asset_type_id}/submission/assignees/{assignee_id}",
+    response_model=SubmissionStatusOut,
+)
+def remove_assignee(
+    asset_type_id: uuid.UUID,
+    assignee_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    assignee = (
+        db.query(SubmissionAssignee)
+        .filter(
+            SubmissionAssignee.id == assignee_id, SubmissionAssignee.asset_type_id == asset_type.id
+        )
+        .first()
+    )
+    if assignee:
+        db.delete(assignee)
+        db.commit()
+        db.refresh(asset_type)
+    return _submission_status(asset_type)

@@ -791,6 +791,33 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .builder-subhead { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ws-text-muted); margin: 4px 0 2px; }
 .repeat-instance { border: 1px dashed var(--ws-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
 
+.kpi-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.kpi-value { font-size: 2.1rem; font-weight: 700; color: var(--ws-text); line-height: 1; }
+.kpi-label { font-size: 0.78rem; color: var(--ws-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+
+.widget-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.widget-table th, .widget-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--ws-border); }
+.widget-table th { color: var(--ws-text-muted); font-weight: 600; }
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px;
+}
+.widget-card {
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  padding: 14px;
+  background: var(--ws-surface);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.widget-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.widget-card-head h3 { margin: 0; font-size: 0.9rem; flex: 1; }
+.widget-body { flex: 1; overflow: auto; }
+.dashboard-list-item { display: flex; align-items: center; gap: 10px; }
+
 .upload-drop {
   display: block;
   text-align: center;

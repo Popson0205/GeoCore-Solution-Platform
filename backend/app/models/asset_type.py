@@ -28,6 +28,17 @@ class AssetType(Base):
     color = Column(String, default="#2563eb", nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+    # Shareable *submission* link (distinct from a Project's read-only
+    # share link) — this is the "field officer only needs the link, not
+    # the form builder" workflow. See routes/public.py's /public/submit/*
+    # endpoints and blueprint section 7 ("explicit, secure sharing
+    # mechanism"). submission_access is "public" (anyone with the link,
+    # no login), "assigned" (only emails in `assignees` below), or "org"
+    # (the default — internal members only, this link is unused).
+    submission_token = Column(String, unique=True, nullable=True, index=True)
+    submission_enabled = Column(Boolean, default=False, nullable=False)
+    submission_access = Column(String, default="org", nullable=False)
+
     project = relationship("Project", backref="asset_types")
     sections = relationship(
         "FormSection",
@@ -43,6 +54,9 @@ class AssetType(Base):
         "FieldDefinition",
         back_populates="asset_type",
         cascade="all, delete-orphan",
+    )
+    assignees = relationship(
+        "SubmissionAssignee", back_populates="asset_type", cascade="all, delete-orphan"
     )
 
 
@@ -117,3 +131,22 @@ class FieldDefinition(Base):
 
     asset_type = relationship("AssetType", back_populates="field_definitions")
     section = relationship("FormSection", back_populates="fields")
+
+
+class SubmissionAssignee(Base):
+    """One person allowed to submit via an asset type's "assigned" access
+    submission link (blueprint section 7 — the "assigned" half of
+    public/assigned sharing). Not a GeoCore User — no password, no org
+    membership, just an email checked against on submit. See
+    routes/public.py's public_submit_record.
+    """
+
+    __tablename__ = "submission_assignees"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    asset_type_id = Column(UUID(as_uuid=True), ForeignKey("asset_types.id"), nullable=False)
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    asset_type = relationship("AssetType", back_populates="assignees")

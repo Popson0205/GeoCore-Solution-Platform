@@ -30,6 +30,11 @@ class Record(Base):
     # field_key -> value, keyed against that asset type's field_definitions
     field_data = Column(JSONB, default=dict, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    # Set instead of created_by when a record comes in through a public or
+    # assigned submission link (routes/public.py) rather than from a
+    # logged-in org member — there's no User row to point to for those.
+    submitted_by_name = Column(String, nullable=True)
+    submitted_by_email = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),

@@ -24,7 +24,7 @@ def _is_blank(value: Any) -> bool:
     return value is None or value == "" or value == []
 
 
-def _compare(operator_name: str, actual: Any, expected: Any) -> bool:
+def compare_value(operator_name: str, actual: Any, expected: Any) -> bool:
     if operator_name == "is_empty":
         return _is_blank(actual)
     if operator_name == "is_not_empty":
@@ -61,6 +61,17 @@ def _compare(operator_name: str, actual: Any, expected: Any) -> bool:
     return False
 
 
+def matches_conditions(conditions: list[dict] | None, values: dict, combinator: str = "all") -> bool:
+    """Same evaluation as is_visible, but for a bare conditions list rather
+    than a {"combinator", "conditions"} rule — this is the shape dashboard
+    widget filters use (backend/app/core/dashboard_engine.py).
+    """
+    if not conditions:
+        return True
+    results = [compare_value(c["operator"], values.get(c["field_key"]), c.get("value")) for c in conditions]
+    return all(results) if combinator == "all" else any(results)
+
+
 def is_visible(rule: dict | None, values: dict) -> bool:
     """`rule` shape: {"combinator": "all"|"any", "conditions": [{"field_key",
     "operator", "value"}, ...]}. A field/section with no rule (or an empty
@@ -68,9 +79,4 @@ def is_visible(rule: dict | None, values: dict) -> bool:
     """
     if not rule or not rule.get("conditions"):
         return True
-    combinator = rule.get("combinator", "all")
-    results = [
-        _compare(cond["operator"], values.get(cond["field_key"]), cond.get("value"))
-        for cond in rule["conditions"]
-    ]
-    return all(results) if combinator == "all" else any(results)
+    return matches_conditions(rule["conditions"], values, rule.get("combinator", "all"))

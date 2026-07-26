@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FormBuilder, { emptySection, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
@@ -170,6 +170,181 @@ function NewAssetTypeForm({ onCreated }) {
   )
 }
 
+function SubmissionLinkPanel({ assetType }) {
+  const { authedFetch } = useAuth()
+  const [status, setStatus] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [access, setAccess] = useState('public')
+  const [newEmail, setNewEmail] = useState('')
+  const [newName, setNewName] = useState('')
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await authedFetch(`/api/asset-types/${assetType.id}/submission`)
+      setStatus(data)
+      setAccess(data.access === 'org' ? 'public' : data.access)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetType.id])
+
+  async function handleEnable(rotate) {
+    setError('')
+    try {
+      const data = await authedFetch(
+        `/api/asset-types/${assetType.id}/submission?rotate=${rotate}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access }),
+        }
+      )
+      setStatus(data)
+      setCopied(false)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleDisable() {
+    setError('')
+    try {
+      const data = await authedFetch(`/api/asset-types/${assetType.id}/submission`, {
+        method: 'DELETE',
+      })
+      setStatus(data)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleAddAssignee(e) {
+    e.preventDefault()
+    if (!newEmail.trim()) return
+    setError('')
+    try {
+      const data = await authedFetch(`/api/asset-types/${assetType.id}/submission/assignees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail.trim(), name: newName.trim() || null }),
+      })
+      setStatus(data)
+      setNewEmail('')
+      setNewName('')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function handleRemoveAssignee(id) {
+    setError('')
+    try {
+      const data = await authedFetch(
+        `/api/asset-types/${assetType.id}/submission/assignees/${id}`,
+        { method: 'DELETE' }
+      )
+      setStatus(data)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function copyLink() {
+    if (!status?.public_path) return
+    navigator.clipboard?.writeText(`${window.location.origin}${status.public_path}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (loading) return null
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <p className="builder-subhead">Submission link</p>
+      <p className="builder-hint">
+        Anyone with this link can fill and submit this form directly — they never see the rest of
+        GeoCore. "Public" needs no login at all; "Assigned" checks the submitter's email against
+        the list below.
+      </p>
+      {error && <p className="hint">{error}</p>}
+
+      {status?.enabled ? (
+        <>
+          <div className="form-row">
+            <input readOnly value={`${window.location.origin}${status.public_path}`} style={{ flex: 1 }} />
+            <button type="button" className="btn-secondary" onClick={copyLink}>
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => handleEnable(true)}>
+              Rotate
+            </button>
+            <button type="button" className="btn-ghost" onClick={handleDisable}>
+              Disable
+            </button>
+          </div>
+          <p className="builder-hint">Access: {status.access}</p>
+
+          {status.access === 'assigned' && (
+            <div style={{ marginTop: 8 }}>
+              <form onSubmit={handleAddAssignee} className="form-row">
+                <input
+                  placeholder="email@example.com"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  placeholder="Name (optional)"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+                <button type="submit" className="btn-secondary">
+                  Add
+                </button>
+              </form>
+              {status.assignees.length > 0 && (
+                <ul className="entity-list" style={{ marginTop: 8 }}>
+                  {status.assignees.map((a) => (
+                    <li key={a.id} className="record-row">
+                      <div style={{ flex: 1 }}>
+                        {a.name ? `${a.name} — ` : ''}
+                        {a.email}
+                      </div>
+                      <button className="btn-ghost" onClick={() => handleRemoveAssignee(a.id)}>
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="form-row">
+          <select value={access} onChange={(e) => setAccess(e.target.value)}>
+            <option value="public">Public (no login)</option>
+            <option value="assigned">Assigned (specific emails)</option>
+          </select>
+          <button type="button" className="btn-primary" onClick={() => handleEnable(false)}>
+            Enable link
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ProjectAssetTypes() {
   const { assetTypes, refreshAssetTypes, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
@@ -177,6 +352,7 @@ export default function ProjectAssetTypes() {
 
   const [editingDetailsId, setEditingDetailsId] = useState(null)
   const [editingFormId, setEditingFormId] = useState(null)
+  const [editingLinkId, setEditingLinkId] = useState(null)
   const [error, setError] = useState('')
 
   async function handleDelete(assetTypeId) {
@@ -255,6 +431,7 @@ export default function ProjectAssetTypes() {
                         className="btn-ghost"
                         onClick={() => {
                           setEditingFormId(null)
+                          setEditingLinkId(null)
                           setEditingDetailsId(editingDetailsId === at.id ? null : at.id)
                         }}
                       >
@@ -264,10 +441,21 @@ export default function ProjectAssetTypes() {
                         className="btn-ghost"
                         onClick={() => {
                           setEditingDetailsId(null)
+                          setEditingLinkId(null)
                           setEditingFormId(editingFormId === at.id ? null : at.id)
                         }}
                       >
                         {editingFormId === at.id ? 'Close' : 'Form'}
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        onClick={() => {
+                          setEditingDetailsId(null)
+                          setEditingFormId(null)
+                          setEditingLinkId(editingLinkId === at.id ? null : at.id)
+                        }}
+                      >
+                        {editingLinkId === at.id ? 'Close' : 'Link'}
                       </button>
                       <button className="btn-ghost" onClick={() => handleDelete(at.id)}>
                         Delete
@@ -292,7 +480,9 @@ export default function ProjectAssetTypes() {
                   />
                 )}
 
-                {editingDetailsId !== at.id && editingFormId !== at.id && (
+                {editingLinkId === at.id && <SubmissionLinkPanel assetType={at} />}
+
+                {editingDetailsId !== at.id && editingFormId !== at.id && editingLinkId !== at.id && (
                   <>
                     {at.description && <p className="ws-muted">{at.description}</p>}
                     {(at.sections || []).map((section) => (

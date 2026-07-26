@@ -245,3 +245,64 @@ class AssetTypeOut(BaseModel):
     field_definitions: list[FieldDefinitionOut] = []
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Submission links (public / assigned data collection — blueprint section 7)
+# ---------------------------------------------------------------------------
+
+SUBMISSION_ACCESS_MODES = {"org", "public", "assigned"}
+
+
+class AssigneeCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+
+
+class AssigneeOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    name: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class SubmissionEnableRequest(BaseModel):
+    access: str = "public"
+
+    @field_validator("access")
+    @classmethod
+    def validate_access(cls, value: str) -> str:
+        if value not in ("public", "assigned"):
+            raise ValueError("access must be 'public' or 'assigned'")
+        return value
+
+
+class SubmissionStatusOut(BaseModel):
+    enabled: bool
+    access: str
+    token: Optional[str] = None
+    public_path: Optional[str] = None
+    assignees: list[AssigneeOut] = []
+
+
+class PublicSubmitSchema(BaseModel):
+    """What the public submission page needs to render the form — no
+    project/organisation internals beyond the asset type's own name/color.
+    """
+
+    project_name: str
+    access: str
+    asset_type: AssetTypeOut
+
+
+class PublicSubmitRequest(BaseModel):
+    submitter_name: Optional[str] = None
+    submitter_email: Optional[str] = None
+    geometry: dict
+    field_data: dict[str, Any] = {}
+
+
+class PublicSubmitReceipt(BaseModel):
+    id: uuid.UUID
+    submitted_at: Any

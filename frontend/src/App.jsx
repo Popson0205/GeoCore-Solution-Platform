@@ -14,8 +14,11 @@ import ProjectAssetTypes from './pages/ProjectAssetTypes'
 import ProjectRecords from './pages/ProjectRecords'
 import ProjectMap from './pages/ProjectMap'
 import ProjectAttachments from './pages/ProjectAttachments'
+import ProjectDashboards from './pages/ProjectDashboards'
+import DashboardDetail from './pages/DashboardDetail'
 import ProjectReports from './pages/ProjectReports'
 import PublicShare from './pages/PublicShare'
+import PublicSubmit from './pages/PublicSubmit'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -31,6 +34,9 @@ export default function App() {
         {/* Unauthenticated, read-only view of a project's shareable link —
             deliberately outside WorkspaceLayout's auth gate. */}
         <Route path="/share/:token" element={<PublicShare />} />
+        {/* Unauthenticated data-collection form for an asset type's
+            submission link — a field officer's entire world. */}
+        <Route path="/submit/:token" element={<PublicSubmit />} />
 
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
@@ -44,6 +50,8 @@ export default function App() {
             <Route path="records" element={<ProjectRecords />} />
             <Route path="map" element={<ProjectMap />} />
             <Route path="attachments" element={<ProjectAttachments />} />
+            <Route path="dashboards" element={<ProjectDashboards />} />
+            <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />
             <Route path="reports" element={<ProjectReports />} />
           </Route>
         </Route>
