@@ -186,7 +186,22 @@ function ConditionEditor({ rule, onChange, fieldOptions }) {
   )
 }
 
-function FieldCard({ field, onChange, onRemove, scopeFieldOptions }) {
+function reorder(list, from, to) {
+  const copy = [...list]
+  const [item] = copy.splice(from, 1)
+  copy.splice(to, 0, item)
+  return copy
+}
+
+function DragHandle(props) {
+  return (
+    <span className="drag-handle" title="Drag to reorder" {...props}>
+      ⠿
+    </span>
+  )
+}
+
+function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) {
   const [expanded, setExpanded] = React.useState(false)
   const key = slugifyKey(field.label)
   const hasOptions = ['single_select', 'multi_select'].includes(field.field_type)
@@ -202,8 +217,9 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions }) {
   }
 
   return (
-    <div className="field-card">
+    <div className={`field-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
       <div className="field-card-head">
+        <DragHandle {...(dragProps?.handleProps || {})} />
         <input
           value={field.label}
           onChange={(e) => set({ label: e.target.value })}
@@ -347,7 +363,9 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions }) {
   )
 }
 
-function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sections }) {
+function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sections, dragProps }) {
+  const [dragFieldIndex, setDragFieldIndex] = React.useState(null)
+
   function set(patch) {
     onChange({ ...section, ...patch })
   }
@@ -360,14 +378,18 @@ function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sectio
   function removeField(index) {
     set({ fields: section.fields.filter((_, i) => i !== index) })
   }
+  function reorderFields(from, to) {
+    set({ fields: reorder(section.fields, from, to) })
+  }
 
   const scopeFieldOptions = section.repeatable
     ? fieldOptionsFor(sections, section._uid, true)
     : topLevelFieldOptions
 
   return (
-    <div className="section-card">
+    <div className={`section-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
       <div className="section-card-head">
+        <DragHandle {...(dragProps?.handleProps || {})} />
         <input value={section.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" />
         <label className="checkbox-label">
           <input
@@ -423,6 +445,27 @@ function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sectio
           onChange={(next) => updateField(index, next)}
           onRemove={() => removeField(index)}
           scopeFieldOptions={scopeFieldOptions}
+          dragProps={{
+            isDragging: dragFieldIndex === index,
+            handleProps: {
+              draggable: true,
+              onDragStart: (e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDragFieldIndex(index)
+              },
+              onDragEnd: () => setDragFieldIndex(null),
+            },
+            rootProps: {
+              onDragOver: (e) => e.preventDefault(),
+              onDrop: (e) => {
+                e.preventDefault()
+                if (dragFieldIndex !== null && dragFieldIndex !== index) {
+                  reorderFields(dragFieldIndex, index)
+                }
+                setDragFieldIndex(null)
+              },
+            },
+          }}
         />
       ))}
       <button type="button" className="btn-secondary" onClick={addField}>
@@ -433,6 +476,7 @@ function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sectio
 }
 
 export default function FormBuilder({ sections, onChange }) {
+  const [dragSectionIndex, setDragSectionIndex] = React.useState(null)
   const topLevelFieldOptions = fieldOptionsFor(sections, null, false)
 
   function addSection() {
@@ -443,6 +487,9 @@ export default function FormBuilder({ sections, onChange }) {
   }
   function removeSection(index) {
     onChange(sections.filter((_, i) => i !== index))
+  }
+  function reorderSections(from, to) {
+    onChange(reorder(sections, from, to))
   }
 
   return (
@@ -457,6 +504,27 @@ export default function FormBuilder({ sections, onChange }) {
           )}
           onChange={(next) => updateSection(index, next)}
           onRemove={() => removeSection(index)}
+          dragProps={{
+            isDragging: dragSectionIndex === index,
+            handleProps: {
+              draggable: true,
+              onDragStart: (e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDragSectionIndex(index)
+              },
+              onDragEnd: () => setDragSectionIndex(null),
+            },
+            rootProps: {
+              onDragOver: (e) => e.preventDefault(),
+              onDrop: (e) => {
+                e.preventDefault()
+                if (dragSectionIndex !== null && dragSectionIndex !== index) {
+                  reorderSections(dragSectionIndex, index)
+                }
+                setDragSectionIndex(null)
+              },
+            },
+          }}
         />
       ))}
       <button type="button" className="btn-secondary" onClick={addSection}>

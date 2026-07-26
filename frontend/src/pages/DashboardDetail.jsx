@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { VISIBILITY_OPERATORS } from '../lib/formEngine'
@@ -292,6 +292,9 @@ export default function DashboardDetail() {
   const [error, setError] = useState('')
   const [showAddWidget, setShowAddWidget] = useState(false)
   const [editingWidgetId, setEditingWidgetId] = useState(null)
+  const [dragWidgetId, setDragWidgetId] = useState(null)
+  const [resizing, setResizing] = useState(null) // { id, w } — live width during a drag-resize
+  const gridRef = useRef(null)
 
   async function load() {
     setLoading(true)
@@ -347,6 +350,78 @@ export default function DashboardDetail() {
     await load()
   }
 
+  async function handleReorderWidget(draggedId, targetId) {
+    const widgets = dashboard.widgets
+    const fromIndex = widgets.findIndex((w) => w.id === draggedId)
+    const toIndex = widgets.findIndex((w) => w.id === targetId)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const reordered = [...widgets]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+
+    // Optimistic local update so the grid reflows immediately...
+    setDashboard({ ...dashboard, widgets: reordered })
+    // ...then persist every widget whose position actually changed.
+    try {
+      await Promise.all(
+        reordered.map((w, index) =>
+          w.sort_order === index
+            ? null
+            : authedFetch(`/api/widgets/${w.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sort_order: index }),
+              })
+        )
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+    await load()
+  }
+
+  function startResize(e, widget) {
+    e.preventDefault()
+    e.stopPropagation()
+    const grid = gridRef.current
+    if (!grid) return
+    const colWidth = grid.getBoundingClientRect().width / 12
+    const startX = e.clientX
+    const startW = widget.layout?.w || 4
+
+    setResizing({ id: widget.id, w: startW })
+
+    function onMove(moveEvent) {
+      const deltaCols = Math.round((moveEvent.clientX - startX) / colWidth)
+      const nextW = Math.min(12, Math.max(2, startW + deltaCols))
+      setResizing({ id: widget.id, w: nextW })
+    }
+
+    async function onUp(upEvent) {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const deltaCols = Math.round((upEvent.clientX - startX) / colWidth)
+      const nextW = Math.min(12, Math.max(2, startW + deltaCols))
+      setResizing(null)
+      if (nextW !== startW) {
+        try {
+          await authedFetch(`/api/widgets/${widget.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layout: { ...(widget.layout || {}), w: nextW } }),
+          })
+          await load()
+        } catch (err) {
+          setError(err.message)
+        }
+      }
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   if (loading) {
     return (
       <div className="ws-page">
@@ -399,43 +474,70 @@ export default function DashboardDetail() {
           </span>
         </div>
       ) : (
-        <div className="dashboard-grid">
-          {dashboard.widgets.map((widget) => (
-            <div
-              key={widget.id}
-              className="widget-card"
-              style={{ gridColumn: `span ${Math.min(widget.layout?.w || 4, 12)}` }}
-            >
-              <div className="widget-card-head">
-                <h3>{widget.title}</h3>
-                {canEdit && (
-                  <>
-                    <button
-                      className="btn-ghost"
-                      onClick={() => setEditingWidgetId(editingWidgetId === widget.id ? null : widget.id)}
-                    >
-                      {editingWidgetId === widget.id ? 'Close' : 'Edit'}
-                    </button>
-                    <button className="btn-ghost" onClick={() => handleDeleteWidget(widget.id)}>
-                      Delete
-                    </button>
-                  </>
+        <div className="dashboard-grid" ref={gridRef}>
+          {dashboard.widgets.map((widget) => {
+            const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
+            return (
+              <div
+                key={widget.id}
+                className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
+                style={{ gridColumn: `span ${Math.min(liveWidth, 12)}`, position: 'relative' }}
+                draggable={canEdit}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  setDragWidgetId(widget.id)
+                }}
+                onDragEnd={() => setDragWidgetId(null)}
+                onDragOver={(e) => canEdit && e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (canEdit && dragWidgetId && dragWidgetId !== widget.id) {
+                    handleReorderWidget(dragWidgetId, widget.id)
+                  }
+                  setDragWidgetId(null)
+                }}
+              >
+                <div className="widget-card-head">
+                  {canEdit && <span className="drag-handle" title="Drag to reorder">⠿</span>}
+                  <h3>{widget.title}</h3>
+                  {canEdit && (
+                    <>
+                      <button
+                        className="btn-ghost"
+                        onClick={() => setEditingWidgetId(editingWidgetId === widget.id ? null : widget.id)}
+                      >
+                        {editingWidgetId === widget.id ? 'Close' : 'Edit'}
+                      </button>
+                      <button className="btn-ghost" onClick={() => handleDeleteWidget(widget.id)}>
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+                {editingWidgetId === widget.id ? (
+                  <WidgetForm
+                    assetTypes={assetTypes}
+                    initial={widget}
+                    onSave={(payload) => handleUpdateWidget(widget.id, payload)}
+                    onCancel={() => setEditingWidgetId(null)}
+                  />
+                ) : (
+                  <div className="widget-body">
+                    <WidgetBody widget={widget} data={widgetData[widget.id]} />
+                  </div>
+                )}
+                {canEdit && editingWidgetId !== widget.id && (
+                  <span
+                    className="widget-resize-handle"
+                    title="Drag to resize"
+                    onMouseDown={(e) => startResize(e, widget)}
+                  >
+                    ◢
+                  </span>
                 )}
               </div>
-              {editingWidgetId === widget.id ? (
-                <WidgetForm
-                  assetTypes={assetTypes}
-                  initial={widget}
-                  onSave={(payload) => handleUpdateWidget(widget.id, payload)}
-                  onCancel={() => setEditingWidgetId(null)}
-                />
-              ) : (
-                <div className="widget-body">
-                  <WidgetBody widget={widget} data={widgetData[widget.id]} />
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

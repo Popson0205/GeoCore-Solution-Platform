@@ -926,6 +926,19 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .gallery-card-body { display: flex; flex-direction: column; min-width: 0; }
 .gallery-card-body strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.location-picker-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.location-picker-map { height: 320px; border-radius: 8px; overflow: hidden; border: 1px solid var(--ws-border); }
+
+.drag-handle { cursor: grab; color: var(--ws-text-faint); font-size: 1.1rem; padding: 0 4px; user-select: none; flex-shrink: 0; }
+.drag-handle:active { cursor: grabbing; }
+.section-card.is-dragging, .field-card.is-dragging { opacity: 0.4; }
+.widget-card.is-dragging { opacity: 0.4; }
+.widget-card[draggable="true"] { cursor: grab; }
+.widget-resize-handle {
+  position: absolute; right: 4px; bottom: 4px; width: 14px; height: 14px; cursor: nwse-resize;
+  color: var(--ws-text-faint);
+}
+
 .upload-drop {
   display: block;
   text-align: center;

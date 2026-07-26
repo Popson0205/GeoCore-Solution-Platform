@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FormSections from '../components/RecordForm'
+import LocationPicker from '../components/LocationPicker'
 
 const RANK = {
   viewer: 0,
@@ -25,9 +26,7 @@ export default function ProjectRecords() {
   const [error, setError] = useState('')
   const [errorList, setErrorList] = useState([])
   const [selectedAssetTypeId, setSelectedAssetTypeId] = useState('')
-  const [lat, setLat] = useState('')
-  const [lng, setLng] = useState('')
-  const [coordinatesRaw, setCoordinatesRaw] = useState('')
+  const [geometry, setGeometry] = useState(null)
   const [fieldData, setFieldData] = useState({})
   const [saving, setSaving] = useState(false)
 
@@ -64,30 +63,18 @@ export default function ProjectRecords() {
   }
 
   function startEdit(record) {
-    const at = assetTypeById(record.asset_type_id)
     setEditingRecordId(record.id)
     setSelectedAssetTypeId(record.asset_type_id)
     setFieldData(record.field_data || {})
+    setGeometry(record.geometry)
     setError('')
     setErrorList([])
-    if (at?.geometry_type === 'point') {
-      const [lngVal, latVal] = record.geometry.coordinates
-      setLng(String(lngVal))
-      setLat(String(latVal))
-      setCoordinatesRaw('')
-    } else {
-      setCoordinatesRaw(JSON.stringify(record.geometry.coordinates))
-      setLat('')
-      setLng('')
-    }
   }
 
   function cancelEdit() {
     setEditingRecordId(null)
     setFieldData({})
-    setLat('')
-    setLng('')
-    setCoordinatesRaw('')
+    setGeometry(null)
     setError('')
     setErrorList([])
   }
@@ -98,25 +85,11 @@ export default function ProjectRecords() {
     setError('')
     setErrorList([])
 
-    let geometry
-    try {
-      if (selectedAssetType.geometry_type === 'point') {
-        geometry = { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] }
-        if (Number.isNaN(geometry.coordinates[0]) || Number.isNaN(geometry.coordinates[1])) {
-          throw new Error('Enter a valid latitude and longitude')
-        }
-      } else {
-        const coords = JSON.parse(coordinatesRaw)
-        geometry = {
-          type: selectedAssetType.geometry_type === 'line' ? 'LineString' : 'Polygon',
-          coordinates: coords,
-        }
-      }
-    } catch (err) {
+    if (!geometry) {
       setError(
         selectedAssetType.geometry_type === 'point'
-          ? err.message
-          : 'Coordinates must be valid GeoJSON coordinate JSON, e.g. [[lng,lat],[lng,lat]]'
+          ? 'Click the map (or use "Use my location") to set a location.'
+          : 'Click the map to add points for this shape.'
       )
       return
     }
@@ -142,9 +115,7 @@ export default function ProjectRecords() {
         })
       }
       setFieldData({})
-      setLat('')
-      setLng('')
-      setCoordinatesRaw('')
+      setGeometry(null)
       await loadRecords()
     } catch (err) {
       // The backend sends a list of every validation error at once (see
@@ -217,27 +188,13 @@ export default function ProjectRecords() {
               </select>
             </label>
 
-            {selectedAssetType?.geometry_type === 'point' ? (
-              <div className="form-row">
-                <label className="form-label">
-                  Latitude
-                  <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="9.0765" />
-                </label>
-                <label className="form-label">
-                  Longitude
-                  <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="7.3986" />
-                </label>
-              </div>
-            ) : (
-              <label className="form-label">
-                Coordinates (GeoJSON, [lng, lat] pairs)
-                <textarea
-                  rows={3}
-                  value={coordinatesRaw}
-                  onChange={(e) => setCoordinatesRaw(e.target.value)}
-                  placeholder="[[7.39,9.07],[7.40,9.08]]"
-                />
-              </label>
+            {selectedAssetType && (
+              <LocationPicker
+                geometryType={selectedAssetType.geometry_type}
+                initialGeometry={geometry}
+                onChange={setGeometry}
+                resetKey={editingRecordId || `new-${selectedAssetTypeId}`}
+              />
             )}
 
             {selectedAssetType && (

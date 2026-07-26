@@ -180,6 +180,8 @@ def update_widget(
         widget.config = payload.config
     if payload.layout is not None:
         widget.layout = payload.layout.model_dump()
+    if payload.sort_order is not None:
+        widget.sort_order = payload.sort_order
     db.commit()
     db.refresh(widget)
     return widget

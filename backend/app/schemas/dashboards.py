@@ -48,6 +48,9 @@ class WidgetUpdate(BaseModel):
     title: Optional[str] = None
     config: Optional[dict[str, Any]] = None
     layout: Optional[WidgetLayout] = None
+    # Set when the widget is dragged to a new position on the dashboard
+    # (frontend/src/pages/DashboardDetail.jsx) — persists the new order.
+    sort_order: Optional[int] = None
 
 
 class WidgetOut(BaseModel):

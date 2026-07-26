@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import FormSections from '../components/RecordForm'
+import LocationPicker from '../components/LocationPicker'
 
 async function publicFetch(path, options) {
   const res = await fetch(path, options)
@@ -23,11 +24,8 @@ export default function PublicSubmit() {
 
   const [submitterName, setSubmitterName] = useState('')
   const [submitterEmail, setSubmitterEmail] = useState('')
-  const [lat, setLat] = useState('')
-  const [lng, setLng] = useState('')
-  const [coordinatesRaw, setCoordinatesRaw] = useState('')
+  const [geometry, setGeometry] = useState(null)
   const [fieldData, setFieldData] = useState({})
-  const [locating, setLocating] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [errorList, setErrorList] = useState([])
@@ -52,26 +50,6 @@ export default function PublicSubmit() {
     }
   }, [token])
 
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setSubmitError("This browser can't access your location — enter coordinates manually.")
-      return
-    }
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLat(String(pos.coords.latitude))
-        setLng(String(pos.coords.longitude))
-        setLocating(false)
-      },
-      () => {
-        setSubmitError('Could not get your location — check location permissions, or enter coordinates manually.')
-        setLocating(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
-  }
-
   async function handleSubmit(e) {
     e.preventDefault()
     setSubmitError('')
@@ -82,25 +60,11 @@ export default function PublicSubmit() {
       return
     }
 
-    let geometry
-    try {
-      if (schema.asset_type.geometry_type === 'point') {
-        geometry = { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] }
-        if (Number.isNaN(geometry.coordinates[0]) || Number.isNaN(geometry.coordinates[1])) {
-          throw new Error('Enter a valid latitude and longitude, or use "Use my location".')
-        }
-      } else {
-        const coords = JSON.parse(coordinatesRaw)
-        geometry = {
-          type: schema.asset_type.geometry_type === 'line' ? 'LineString' : 'Polygon',
-          coordinates: coords,
-        }
-      }
-    } catch (err) {
+    if (!geometry) {
       setSubmitError(
         schema.asset_type.geometry_type === 'point'
-          ? err.message
-          : 'Coordinates must be valid GeoJSON coordinate JSON, e.g. [[lng,lat],[lng,lat]]'
+          ? 'Click the map (or use "Use my location") to set a location.'
+          : 'Click the map to add points for this shape.'
       )
       return
     }
@@ -132,9 +96,7 @@ export default function PublicSubmit() {
   function submitAnother() {
     setSuccess(false)
     setFieldData({})
-    setLat('')
-    setLng('')
-    setCoordinatesRaw('')
+    setGeometry(null)
   }
 
   if (loading) {
@@ -200,33 +162,12 @@ export default function PublicSubmit() {
             </label>
           )}
 
-          {assetType.geometry_type === 'point' ? (
-            <div>
-              <div className="form-row">
-                <label className="form-label">
-                  Latitude
-                  <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="9.0765" />
-                </label>
-                <label className="form-label">
-                  Longitude
-                  <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="7.3986" />
-                </label>
-              </div>
-              <button type="button" className="btn-secondary" onClick={useMyLocation} disabled={locating}>
-                {locating ? 'Locating…' : '📍 Use my location'}
-              </button>
-            </div>
-          ) : (
-            <label className="form-label">
-              Coordinates (GeoJSON, [lng, lat] pairs)
-              <textarea
-                rows={3}
-                value={coordinatesRaw}
-                onChange={(e) => setCoordinatesRaw(e.target.value)}
-                placeholder="[[7.39,9.07],[7.40,9.08]]"
-              />
-            </label>
-          )}
+          <LocationPicker
+            geometryType={assetType.geometry_type}
+            initialGeometry={geometry}
+            onChange={setGeometry}
+            resetKey="form"
+          />
 
           <FormSections sections={assetType.sections} fieldData={fieldData} setFieldData={setFieldData} />
 
