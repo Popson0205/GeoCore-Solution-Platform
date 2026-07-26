@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { evaluateExpression, isVisible } from '../lib/formEngine'
 
 function DynamicField({ field, value, onChange }) {
   const commonProps = {
@@ -69,6 +70,121 @@ function DynamicField({ field, value, onChange }) {
   return <input type="text" {...commonProps} />
 }
 
+/** Renders one flat scope of fields (top-level, or a single repeat
+ * instance), honoring live visibility and showing calculated fields as a
+ * read-only preview. The server is authoritative for both — see
+ * backend/app/core/form_engine.py — this is just live UX.
+ */
+function FieldsRenderer({ fields, values, onFieldChange }) {
+  return (
+    <>
+      {fields.map((field) => {
+        if (!isVisible(field.visibility, values)) return null
+
+        if (field.calculation) {
+          const computed = evaluateExpression(field.calculation, values)
+          return (
+            <div key={field.id} className="form-label">
+              <span>
+                {field.label} <span className="ws-muted">(calculated)</span>
+              </span>
+              <input value={computed ?? ''} readOnly disabled />
+            </div>
+          )
+        }
+
+        return (
+          <label key={field.id} className="form-label">
+            {field.label}
+            {field.is_required && ' *'}
+            <DynamicField
+              field={field}
+              value={values[field.field_key]}
+              onChange={(val) => onFieldChange(field.field_key, val)}
+            />
+          </label>
+        )
+      })}
+    </>
+  )
+}
+
+function FormSections({ sections, fieldData, setFieldData }) {
+  function updateTopLevel(key, val) {
+    setFieldData((prev) => ({ ...prev, [key]: val }))
+  }
+  function updateRepeatValue(sectionKey, index, fieldKey, val) {
+    setFieldData((prev) => {
+      const list = prev[sectionKey] ? [...prev[sectionKey]] : []
+      list[index] = { ...(list[index] || {}), [fieldKey]: val }
+      return { ...prev, [sectionKey]: list }
+    })
+  }
+  function addRepeatInstance(sectionKey) {
+    setFieldData((prev) => ({ ...prev, [sectionKey]: [...(prev[sectionKey] || []), {}] }))
+  }
+  function removeRepeatInstance(sectionKey, index) {
+    setFieldData((prev) => ({
+      ...prev,
+      [sectionKey]: (prev[sectionKey] || []).filter((_, i) => i !== index),
+    }))
+  }
+
+  return (
+    <>
+      {(sections || []).map((section) => {
+        if (!isVisible(section.visibility, fieldData)) return null
+
+        if (section.repeatable) {
+          const instances = fieldData[section.section_key] || []
+          return (
+            <div key={section.id}>
+              <p className="builder-subhead">{section.title}</p>
+              {section.description && <p className="ws-muted">{section.description}</p>}
+              {instances.map((instance, index) => (
+                <div key={index} className="repeat-instance">
+                  <div className="form-row" style={{ marginBottom: 6 }}>
+                    <strong style={{ flex: 1 }}>
+                      {section.repeat_label || 'Entry'} {index + 1}
+                    </strong>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => removeRepeatInstance(section.section_key, index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <FieldsRenderer
+                    fields={section.fields}
+                    values={instance}
+                    onFieldChange={(key, val) => updateRepeatValue(section.section_key, index, key, val)}
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => addRepeatInstance(section.section_key)}
+              >
+                + Add {section.repeat_label || 'entry'}
+              </button>
+            </div>
+          )
+        }
+
+        return (
+          <div key={section.id}>
+            <p className="builder-subhead">{section.title}</p>
+            {section.description && <p className="ws-muted">{section.description}</p>}
+            <FieldsRenderer fields={section.fields} values={fieldData} onFieldChange={updateTopLevel} />
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 const RANK = {
   viewer: 0,
   analyst: 1,
@@ -89,6 +205,7 @@ export default function ProjectRecords() {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [errorList, setErrorList] = useState([])
   const [selectedAssetTypeId, setSelectedAssetTypeId] = useState('')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
@@ -134,6 +251,7 @@ export default function ProjectRecords() {
     setSelectedAssetTypeId(record.asset_type_id)
     setFieldData(record.field_data || {})
     setError('')
+    setErrorList([])
     if (at?.geometry_type === 'point') {
       const [lngVal, latVal] = record.geometry.coordinates
       setLng(String(lngVal))
@@ -153,12 +271,14 @@ export default function ProjectRecords() {
     setLng('')
     setCoordinatesRaw('')
     setError('')
+    setErrorList([])
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!selectedAssetType) return
     setError('')
+    setErrorList([])
 
     let geometry
     try {
@@ -209,7 +329,13 @@ export default function ProjectRecords() {
       setCoordinatesRaw('')
       await loadRecords()
     } catch (err) {
-      setError(err.message)
+      // The backend sends a list of every validation error at once (see
+      // FormValidationError) — show all of them, not just the first.
+      if (Array.isArray(err.detail)) {
+        setErrorList(err.detail)
+      } else {
+        setError(err.message)
+      }
     } finally {
       setSaving(false)
     }
@@ -296,22 +422,25 @@ export default function ProjectRecords() {
               </label>
             )}
 
-            {selectedAssetType?.field_definitions.map((field) => (
-              <label key={field.id} className="form-label">
-                {field.label}
-                {field.is_required && ' *'}
-                <DynamicField
-                  field={field}
-                  value={fieldData[field.field_key]}
-                  onChange={(val) => setFieldData((prev) => ({ ...prev, [field.field_key]: val }))}
-                />
-              </label>
-            ))}
+            {selectedAssetType && (
+              <FormSections
+                sections={selectedAssetType.sections}
+                fieldData={fieldData}
+                setFieldData={setFieldData}
+              />
+            )}
 
             <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : editingRecordId ? 'Update record' : 'Save record'}
             </button>
             {error && <p className="hint">{error}</p>}
+            {errorList.length > 0 && (
+              <ul className="hint" style={{ paddingLeft: 18, margin: 0 }}>
+                {errorList.map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
+              </ul>
+            )}
           </form>
         </section>
       ) : (

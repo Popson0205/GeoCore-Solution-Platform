@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import FormBuilder, { emptySection, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
 
 const RANK = {
   viewer: 0,
@@ -11,28 +12,9 @@ const RANK = {
   owner: 5,
 }
 
-const FIELD_TYPES = [
-  { value: 'text', label: 'Short text' },
-  { value: 'long_text', label: 'Long text' },
-  { value: 'number', label: 'Number' },
-  { value: 'date', label: 'Date' },
-  { value: 'datetime', label: 'Date and time' },
-  { value: 'single_select', label: 'Single select' },
-  { value: 'multi_select', label: 'Multiple select' },
-  { value: 'boolean', label: 'Boolean' },
-  { value: 'photo', label: 'Photo (via Attachments)' },
-  { value: 'video', label: 'Video (via Attachments)' },
-  { value: 'file', label: 'File (via Attachments)' },
-  { value: 'signature', label: 'Signature (via Attachments)' },
-]
-
 const GEOMETRY_TYPES = ['point', 'line', 'polygon']
 
-function emptyField() {
-  return { label: '', field_type: 'text', is_required: false, options: '' }
-}
-
-function EditAssetTypeForm({ assetType, onSave, onCancel }) {
+function EditDetailsForm({ assetType, onSave, onCancel }) {
   const [name, setName] = useState(assetType.name)
   const [description, setDescription] = useState(assetType.description || '')
   const [color, setColor] = useState(assetType.color)
@@ -66,67 +48,74 @@ function EditAssetTypeForm({ assetType, onSave, onCancel }) {
       />
       <div className="form-row">
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : 'Save details'}
         </button>
         <button type="button" className="btn-ghost" onClick={onCancel}>
           Cancel
         </button>
       </div>
       {error && <p className="hint">{error}</p>}
-      <p className="ws-muted">
-        Fields (labels, types, options) can't be changed here yet — delete and recreate the
-        asset type if you need to restructure its fields.
-      </p>
     </form>
   )
 }
 
-export default function ProjectAssetTypes() {
-  const { projectId, assetTypes, refreshAssetTypes, myRole } = useOutletContext()
+function EditFormPanel({ assetType, onSave, onCancel }) {
+  const [sections, setSections] = useState(() => {
+    const initial = sectionsFromApi(assetType.sections)
+    return initial.length ? initial : [emptySection('General')]
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(sectionsToApi(sections))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <p className="builder-hint">
+        Editing the form doesn't change field_data already stored on existing records — removed or
+        renamed fields just stop appearing on new entries.
+      </p>
+      <FormBuilder sections={sections} onChange={setSections} />
+      <div className="form-row" style={{ marginTop: 10 }}>
+        <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving form…' : 'Save form'}
+        </button>
+        <button type="button" className="btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+      {error && <p className="hint">{error}</p>}
+    </div>
+  )
+}
+
+function NewAssetTypeForm({ onCreated }) {
   const { authedFetch } = useAuth()
-  const canManage = (RANK[myRole] ?? 0) >= RANK.project_manager
-
-  const [editingId, setEditingId] = useState(null)
-
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [geometryType, setGeometryType] = useState('point')
   const [color, setColor] = useState('#2563eb')
-  const [fields, setFields] = useState([emptyField()])
-  const [error, setError] = useState('')
+  const [sections, setSections] = useState(() => [emptySection('General')])
   const [saving, setSaving] = useState(false)
-
-  function updateField(index, patch) {
-    setFields((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)))
-  }
-
-  function addField() {
-    setFields((prev) => [...prev, emptyField()])
-  }
-
-  function removeField(index) {
-    setFields((prev) => prev.filter((_, i) => i !== index))
-  }
+  const [error, setError] = useState('')
+  const { projectId } = useOutletContext()
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!name.trim()) return
-    setError('')
     setSaving(true)
+    setError('')
     try {
-      const payloadFields = fields
-        .filter((f) => f.label.trim())
-        .map((f, index) => ({
-          label: f.label.trim(),
-          field_type: f.field_type,
-          is_required: f.is_required,
-          sort_order: index,
-          options:
-            f.field_type === 'single_select' || f.field_type === 'multi_select'
-              ? f.options.split(',').map((o) => o.trim()).filter(Boolean)
-              : null,
-        }))
-
       await authedFetch(`/api/projects/${projectId}/asset-types`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,22 +124,60 @@ export default function ProjectAssetTypes() {
           description: description || null,
           geometry_type: geometryType,
           color,
-          fields: payloadFields,
+          sections: sectionsToApi(sections),
         }),
       })
-
       setName('')
       setDescription('')
-      setGeometryType('point')
-      setColor('#2563eb')
-      setFields([emptyField()])
-      await refreshAssetTypes()
+      setSections([emptySection('General')])
+      await onCreated()
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
     }
   }
+
+  return (
+    <form onSubmit={handleSubmit} className="stacked-form">
+      <div className="form-row">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Asset type name" style={{ flex: 1 }} />
+        <select value={geometryType} onChange={(e) => setGeometryType(e.target.value)}>
+          {GEOMETRY_TYPES.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+        <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+      </div>
+      <input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description (optional)"
+      />
+
+      <div className="field-builder">
+        <p className="builder-subhead">Form</p>
+        <FormBuilder sections={sections} onChange={setSections} />
+      </div>
+
+      <button type="submit" className="btn-primary" disabled={saving}>
+        {saving ? 'Creating…' : 'Create asset type'}
+      </button>
+      {error && <p className="hint">{error}</p>}
+    </form>
+  )
+}
+
+export default function ProjectAssetTypes() {
+  const { assetTypes, refreshAssetTypes, myRole } = useOutletContext()
+  const { authedFetch } = useAuth()
+  const canManage = (RANK[myRole] ?? 0) >= RANK.project_manager
+
+  const [editingDetailsId, setEditingDetailsId] = useState(null)
+  const [editingFormId, setEditingFormId] = useState(null)
+  const [error, setError] = useState('')
 
   async function handleDelete(assetTypeId) {
     setError('')
@@ -162,13 +189,23 @@ export default function ProjectAssetTypes() {
     }
   }
 
-  async function handleUpdate(assetTypeId, patch) {
+  async function handleSaveDetails(assetTypeId, patch) {
     await authedFetch(`/api/asset-types/${assetTypeId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     })
-    setEditingId(null)
+    setEditingDetailsId(null)
+    await refreshAssetTypes()
+  }
+
+  async function handleSaveForm(assetTypeId, sectionsPayload) {
+    await authedFetch(`/api/asset-types/${assetTypeId}/form`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sections: sectionsPayload, fields: [] }),
+    })
+    setEditingFormId(null)
     await refreshAssetTypes()
   }
 
@@ -179,90 +216,8 @@ export default function ProjectAssetTypes() {
           <div className="panel-head">
             <h2>New asset type</h2>
           </div>
-        <form onSubmit={handleSubmit} className="stacked-form">
-          <label className="form-label">
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Drainage" />
-          </label>
-          <label className="form-label">
-            Description
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional"
-            />
-          </label>
-          <div className="form-row">
-            <label className="form-label">
-              Geometry type
-              <select value={geometryType} onChange={(e) => setGeometryType(e.target.value)}>
-                {GEOMETRY_TYPES.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-label">
-              Map color
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
-          </div>
-
-          <div className="field-builder">
-            <div className="panel-head">
-              <h3 style={{ fontSize: '0.9rem' }}>Fields</h3>
-              <button type="button" className="btn-secondary" onClick={addField}>
-                + Add field
-              </button>
-            </div>
-            {fields.map((field, index) => (
-              <div key={index} className="field-builder-row">
-                <input
-                  placeholder="Field label"
-                  value={field.label}
-                  onChange={(e) => updateField(index, { label: e.target.value })}
-                />
-                <select
-                  value={field.field_type}
-                  onChange={(e) => updateField(index, { field_type: e.target.value })}
-                >
-                  {FIELD_TYPES.map((ft) => (
-                    <option key={ft.value} value={ft.value}>
-                      {ft.label}
-                    </option>
-                  ))}
-                </select>
-                {(field.field_type === 'single_select' || field.field_type === 'multi_select') && (
-                  <input
-                    placeholder="Options, comma separated"
-                    value={field.options}
-                    onChange={(e) => updateField(index, { options: e.target.value })}
-                  />
-                )}
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={field.is_required}
-                    onChange={(e) => updateField(index, { is_required: e.target.checked })}
-                  />
-                  Required
-                </label>
-                {fields.length > 1 && (
-                  <button type="button" className="btn-ghost" onClick={() => removeField(index)}>
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Creating…' : 'Create asset type'}
-          </button>
-          {error && <p className="hint">{error}</p>}
-        </form>
-      </section>
+          <NewAssetTypeForm onCreated={refreshAssetTypes} />
+        </section>
       ) : (
         <section className="panel">
           <div className="panel-head">
@@ -280,6 +235,7 @@ export default function ProjectAssetTypes() {
           <h2>Existing asset types</h2>
           <span className="panel-count">{assetTypes.length}</span>
         </div>
+        {error && <p className="hint">{error}</p>}
         {assetTypes.length === 0 ? (
           <div className="empty-state">
             <p>No asset types yet.</p>
@@ -297,9 +253,21 @@ export default function ProjectAssetTypes() {
                     <>
                       <button
                         className="btn-ghost"
-                        onClick={() => setEditingId(editingId === at.id ? null : at.id)}
+                        onClick={() => {
+                          setEditingFormId(null)
+                          setEditingDetailsId(editingDetailsId === at.id ? null : at.id)
+                        }}
                       >
-                        {editingId === at.id ? 'Close' : 'Edit'}
+                        {editingDetailsId === at.id ? 'Close' : 'Details'}
+                      </button>
+                      <button
+                        className="btn-ghost"
+                        onClick={() => {
+                          setEditingDetailsId(null)
+                          setEditingFormId(editingFormId === at.id ? null : at.id)
+                        }}
+                      >
+                        {editingFormId === at.id ? 'Close' : 'Form'}
                       </button>
                       <button className="btn-ghost" onClick={() => handleDelete(at.id)}>
                         Delete
@@ -307,28 +275,49 @@ export default function ProjectAssetTypes() {
                     </>
                   )}
                 </div>
-                {editingId === at.id ? (
-                  <EditAssetTypeForm
+
+                {editingDetailsId === at.id && (
+                  <EditDetailsForm
                     assetType={at}
-                    onSave={(patch) => handleUpdate(at.id, patch)}
-                    onCancel={() => setEditingId(null)}
+                    onSave={(patch) => handleSaveDetails(at.id, patch)}
+                    onCancel={() => setEditingDetailsId(null)}
                   />
-                ) : (
+                )}
+
+                {editingFormId === at.id && (
+                  <EditFormPanel
+                    assetType={at}
+                    onSave={(sectionsPayload) => handleSaveForm(at.id, sectionsPayload)}
+                    onCancel={() => setEditingFormId(null)}
+                  />
+                )}
+
+                {editingDetailsId !== at.id && editingFormId !== at.id && (
                   <>
                     {at.description && <p className="ws-muted">{at.description}</p>}
-                    {at.field_definitions.length > 0 && (
-                      <ul className="field-list">
-                        {at.field_definitions.map((f) => (
-                          <li key={f.id}>
-                            {f.label}{' '}
-                            <span className="ws-muted">
-                              ({f.field_type}
-                              {f.is_required ? ', required' : ''})
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    {(at.sections || []).map((section) => (
+                      <div key={section.id} style={{ marginTop: 6 }}>
+                        <p className="builder-subhead">
+                          {section.title}
+                          {section.repeatable ? ` (repeatable — ${section.repeat_label || 'entry'})` : ''}
+                        </p>
+                        {section.fields.length > 0 && (
+                          <ul className="field-list">
+                            {section.fields.map((f) => (
+                              <li key={f.id}>
+                                {f.label}{' '}
+                                <span className="ws-muted">
+                                  ({f.field_type}
+                                  {f.is_required ? ', required' : ''}
+                                  {f.calculation ? ', calculated' : ''}
+                                  {f.visibility ? ', conditional' : ''})
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
                   </>
                 )}
               </li>

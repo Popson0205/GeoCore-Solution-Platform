@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
+from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.core.roles import DATA_COLLECTOR, PROJECT_MANAGER
 from backend.app.models.asset_type import AssetType
 from backend.app.models.record import Record
@@ -34,11 +35,20 @@ def create_record(
     if not asset_type:
         raise HTTPException(status_code=404, detail="Asset type not found in this project")
 
+    # Authoritative pass: evaluates skip logic, recomputes calculated
+    # fields server-side, and validates — never persist raw client
+    # field_data directly (blueprint section 12 & 19: validation can't
+    # live only in the frontend).
+    try:
+        processed_field_data = process_submission(asset_type, payload.field_data)
+    except FormValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors)
+
     record = Record(
         project_id=project_id,
         asset_type_id=payload.asset_type_id,
         geometry=payload.geometry.model_dump(),
-        field_data=payload.field_data,
+        field_data=processed_field_data,
         created_by=current_user.id,
     )
     db.add(record)
@@ -97,7 +107,10 @@ def update_record(
     if payload.geometry is not None:
         record.geometry = payload.geometry.model_dump()
     if payload.field_data is not None:
-        record.field_data = payload.field_data
+        try:
+            record.field_data = process_submission(record.asset_type, payload.field_data)
+        except FormValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors)
     db.commit()
     db.refresh(record)
     return record

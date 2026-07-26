@@ -7,16 +7,152 @@ from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
 from backend.app.core.roles import PROJECT_MANAGER
-from backend.app.models.asset_type import AssetType, FieldDefinition
+from backend.app.models.asset_type import AssetType, FieldDefinition, FormSection
 from backend.app.models.user import User
 from backend.app.schemas.asset_type import (
     AssetTypeCreate,
     AssetTypeOut,
     AssetTypeUpdate,
+    FieldDefinitionCreate,
+    FieldDefinitionOut,
+    FormDefinition,
+    FormSectionCreate,
+    FormSectionOut,
     slugify_key,
 )
 
 router = APIRouter()
+
+_LOAD_OPTIONS = (
+    selectinload(AssetType.sections).selectinload(FormSection.fields),
+    selectinload(AssetType.field_definitions),
+)
+
+
+def _unique_key(base: str, used: set[str]) -> str:
+    key = base
+    suffix = 1
+    while key in used:
+        suffix += 1
+        key = f"{base}_{suffix}"
+    used.add(key)
+    return key
+
+
+def _add_field(
+    db: Session,
+    asset_type_id: uuid.UUID,
+    section_id: uuid.UUID | None,
+    payload: FieldDefinitionCreate,
+    sort_order: int,
+    used_field_keys: set[str],
+) -> None:
+    db.add(
+        FieldDefinition(
+            asset_type_id=asset_type_id,
+            section_id=section_id,
+            label=payload.label,
+            field_key=_unique_key(slugify_key(payload.label), used_field_keys),
+            field_type=payload.field_type,
+            options=payload.options,
+            is_required=payload.is_required,
+            sort_order=sort_order,
+            visibility=payload.visibility.model_dump() if payload.visibility else None,
+            calculation=payload.calculation,
+            validation=payload.validation.model_dump(exclude_none=True)
+            if payload.validation
+            else None,
+        )
+    )
+
+
+def _replace_form(
+    db: Session,
+    asset_type: AssetType,
+    sections_payload: list[FormSectionCreate],
+    legacy_fields_payload: list[FieldDefinitionCreate],
+) -> None:
+    """Delete this asset type's existing sections/fields and recreate them
+    from the given payload. Existing records keep whatever field_data they
+    already have — renamed/removed fields just become inert extra keys on
+    old records rather than being migrated, which is a deliberate MVP
+    trade-off (see docs/CHANGES_FORM_BUILDER.md).
+    """
+    db.query(FormSection).filter(FormSection.asset_type_id == asset_type.id).delete()
+    db.query(FieldDefinition).filter(
+        FieldDefinition.asset_type_id == asset_type.id, FieldDefinition.section_id.is_(None)
+    ).delete()
+    db.flush()
+
+    sections = list(sections_payload)
+    if not sections and legacy_fields_payload:
+        sections = [FormSectionCreate(title="General", fields=legacy_fields_payload)]
+
+    used_section_keys: set[str] = set()
+    used_field_keys: set[str] = set()
+
+    for section_index, section_payload in enumerate(sections):
+        section = FormSection(
+            asset_type_id=asset_type.id,
+            title=section_payload.title,
+            description=section_payload.description,
+            section_key=_unique_key(slugify_key(section_payload.title), used_section_keys),
+            sort_order=section_index,
+            repeatable=section_payload.repeatable,
+            repeat_label=section_payload.repeat_label,
+            visibility=section_payload.visibility.model_dump() if section_payload.visibility else None,
+        )
+        db.add(section)
+        db.flush()
+        for field_index, field_payload in enumerate(section_payload.fields):
+            _add_field(db, asset_type.id, section.id, field_payload, field_index, used_field_keys)
+
+
+def _flatten_fields(asset_type: AssetType) -> list[FieldDefinition]:
+    section_order = {s.id: s.sort_order for s in asset_type.sections}
+
+    def sort_key(field: FieldDefinition):
+        return (section_order.get(field.section_id, -1), field.sort_order)
+
+    return sorted(asset_type.field_definitions, key=sort_key)
+
+
+def _to_out(asset_type: AssetType) -> AssetTypeOut:
+    section_outs = [
+        FormSectionOut.model_validate(s)
+        for s in sorted(asset_type.sections, key=lambda s: s.sort_order)
+    ]
+    if not section_outs and asset_type.field_definitions:
+        # Data from before the form-builder migration: no FormSection rows
+        # exist yet, but flat fields do (section_id is NULL on all of
+        # them). Present them as a single synthetic "General" section so
+        # these older asset types still render in the sectioned UI.
+        # Nothing is persisted here — saving the form once via the builder
+        # makes this permanent.
+        legacy_fields = sorted(asset_type.field_definitions, key=lambda f: f.sort_order)
+        section_outs = [
+            FormSectionOut(
+                id=asset_type.id,  # stable placeholder — not a real FormSection row
+                title="General",
+                description=None,
+                section_key="general",
+                sort_order=0,
+                repeatable=False,
+                repeat_label=None,
+                visibility=None,
+                fields=[FieldDefinitionOut.model_validate(f) for f in legacy_fields],
+            )
+        ]
+    return AssetTypeOut(
+        id=asset_type.id,
+        project_id=asset_type.project_id,
+        name=asset_type.name,
+        description=asset_type.description,
+        geometry_type=asset_type.geometry_type,
+        color=asset_type.color,
+        sections=section_outs,
+        field_definitions=[FieldDefinitionOut.model_validate(f) for f in _flatten_fields(asset_type)],
+    )
 
 
 @router.post("/projects/{project_id}/asset-types", response_model=AssetTypeOut, status_code=201)
@@ -40,31 +176,13 @@ def create_asset_type(
     db.add(asset_type)
     db.flush()
 
-    used_keys: set[str] = set()
-    for index, field in enumerate(payload.fields):
-        base_key = slugify_key(field.label)
-        key = base_key
-        suffix = 1
-        while key in used_keys:
-            suffix += 1
-            key = f"{base_key}_{suffix}"
-        used_keys.add(key)
-
-        db.add(
-            FieldDefinition(
-                asset_type_id=asset_type.id,
-                label=field.label,
-                field_key=key,
-                field_type=field.field_type,
-                options=field.options,
-                is_required=field.is_required,
-                sort_order=field.sort_order or index,
-            )
-        )
+    _replace_form(db, asset_type, payload.sections, payload.fields)
 
     db.commit()
-    db.refresh(asset_type)
-    return asset_type
+    asset_type = (
+        db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type.id).first()
+    )
+    return _to_out(asset_type)
 
 
 @router.get("/projects/{project_id}/asset-types", response_model=list[AssetTypeOut])
@@ -74,22 +192,18 @@ def list_asset_types(
     current_user: User = Depends(get_current_user),
 ):
     get_project_for_member(db, project_id, current_user.id)
-    return (
+    asset_types = (
         db.query(AssetType)
-        .options(selectinload(AssetType.field_definitions))
+        .options(*_LOAD_OPTIONS)
         .filter(AssetType.project_id == project_id)
         .all()
     )
+    return [_to_out(a) for a in asset_types]
 
 
-def _get_asset_type_for_member(
-    db: Session, asset_type_id: uuid.UUID, user: User
-) -> AssetType:
+def _get_asset_type_for_member(db: Session, asset_type_id: uuid.UUID, user: User) -> AssetType:
     asset_type = (
-        db.query(AssetType)
-        .options(selectinload(AssetType.field_definitions))
-        .filter(AssetType.id == asset_type_id)
-        .first()
+        db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type_id).first()
     )
     if not asset_type:
         raise HTTPException(status_code=404, detail="Asset type not found")
@@ -101,10 +215,7 @@ def _get_asset_type_for_role(
     db: Session, asset_type_id: uuid.UUID, user: User, minimum: str
 ) -> AssetType:
     asset_type = (
-        db.query(AssetType)
-        .options(selectinload(AssetType.field_definitions))
-        .filter(AssetType.id == asset_type_id)
-        .first()
+        db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type_id).first()
     )
     if not asset_type:
         raise HTTPException(status_code=404, detail="Asset type not found")
@@ -118,7 +229,7 @@ def get_asset_type(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return _get_asset_type_for_member(db, asset_type_id, current_user)
+    return _to_out(_get_asset_type_for_member(db, asset_type_id, current_user))
 
 
 @router.patch("/asset-types/{asset_type_id}", response_model=AssetTypeOut)
@@ -128,6 +239,9 @@ def update_asset_type(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Cosmetic changes only — name, description, color. Use PUT
+    /asset-types/{id}/form to change the form's sections/fields.
+    """
     asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
     if payload.name is not None:
         asset_type.name = payload.name
@@ -137,7 +251,28 @@ def update_asset_type(
         asset_type.color = payload.color
     db.commit()
     db.refresh(asset_type)
-    return asset_type
+    return _to_out(asset_type)
+
+
+@router.put("/asset-types/{asset_type_id}/form", response_model=AssetTypeOut)
+def replace_form(
+    asset_type_id: uuid.UUID,
+    payload: FormDefinition,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Replace this asset type's entire form — sections, fields, skip
+    logic, calculations and validation rules — in one shot, the way a form
+    builder's "Save form" action works. Existing records aren't migrated
+    (see _replace_form's docstring).
+    """
+    asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    _replace_form(db, asset_type, payload.sections, payload.fields)
+    db.commit()
+    asset_type = (
+        db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type_id).first()
+    )
+    return _to_out(asset_type)
 
 
 @router.delete("/asset-types/{asset_type_id}", status_code=204)
