@@ -488,7 +488,7 @@ a { color: inherit; }
 .ws-user .btn-secondary:hover { border-color: var(--coral); color: var(--coral); }
 
 .ws-content { flex: 1; padding: 32px 28px 48px; }
-.ws-page { max-width: 960px; }
+.ws-page { max-width: 960px; margin: 0 auto; }
 .ws-breadcrumb {
   display: inline-flex;
   align-items: center;
@@ -630,7 +630,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 /* =================================================================
    Project tabs + module UI (asset types, records, map, attachments, reports)
 ================================================================= */
-.ws-page-wide { max-width: 1120px; }
+.ws-page-wide { max-width: 1120px; margin: 0 auto; }
 
 .project-tabs {
   display: flex;
@@ -817,6 +817,114 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .widget-card-head h3 { margin: 0; font-size: 0.9rem; flex: 1; }
 .widget-body { flex: 1; overflow: auto; }
 .dashboard-list-item { display: flex; align-items: center; gap: 10px; }
+
+/* --- ArcGIS-Online-style portal chrome --- */
+.portal-shell { min-height: 100vh; background: var(--ws-bg); }
+.portal-content { max-width: 1180px; margin: 0 auto; padding: 24px 24px 60px; }
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--ws-surface);
+  border-bottom: 1px solid var(--ws-border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.app-header-left { display: flex; align-items: center; gap: 24px; min-width: 0; }
+.app-header-brand { display: flex; align-items: center; gap: 10px; color: var(--ws-text); text-decoration: none; flex-shrink: 0; }
+.app-header-brand-mark {
+  width: 30px; height: 30px; border-radius: 7px; color: #fff; font-weight: 700; font-size: 0.72rem;
+  display: flex; align-items: center; justify-content: center; letter-spacing: 0.02em;
+}
+.app-header-brand-name { font-weight: 700; font-size: 0.98rem; white-space: nowrap; }
+.app-header-nav { display: flex; align-items: center; gap: 4px; }
+.app-header-nav-link {
+  padding: 7px 12px; border-radius: 6px; font-size: 0.86rem; color: var(--ws-text-muted); text-decoration: none;
+  white-space: nowrap;
+}
+.app-header-nav-link:hover { background: var(--ws-bg); color: var(--ws-text); }
+.app-header-nav-link.is-active { color: var(--ws-text); font-weight: 600; background: var(--ws-bg); }
+.app-header-right { display: flex; align-items: center; gap: 6px; }
+.app-header-icon-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: none; background: transparent; color: var(--ws-text-muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.app-header-icon-btn:hover:not(:disabled) { background: var(--ws-bg); color: var(--ws-text); }
+.app-header-icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+.app-launcher { position: relative; }
+.app-launcher-menu {
+  position: absolute; right: 0; top: 42px; width: 260px; background: var(--ws-surface);
+  border: 1px solid var(--ws-border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  padding: 10px; z-index: 40;
+}
+.app-launcher-heading { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ws-text-faint); padding: 4px 8px 8px; }
+.app-launcher-tile { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; text-decoration: none; color: var(--ws-text); }
+.app-launcher-tile:hover { background: var(--ws-bg); }
+.app-launcher-tile-icon { width: 36px; height: 36px; border-radius: 8px; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.app-launcher-tile strong { display: block; font-size: 0.86rem; }
+.app-launcher-tile-tagline { display: block; font-size: 0.74rem; color: var(--ws-text-muted); }
+
+.user-menu { position: relative; }
+.user-menu-trigger { display: flex; align-items: center; gap: 8px; background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.user-menu-trigger:hover { background: var(--ws-bg); }
+.user-menu-name { display: flex; align-items: center; gap: 4px; font-size: 0.84rem; color: var(--ws-text); }
+.user-menu-dropdown {
+  position: absolute; right: 0; top: 46px; width: 220px; background: var(--ws-surface);
+  border: 1px solid var(--ws-border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  padding: 8px; z-index: 40;
+}
+.user-menu-header { padding: 8px; border-bottom: 1px solid var(--ws-border); margin-bottom: 6px; display: flex; flex-direction: column; }
+.user-menu-header strong { font-size: 0.86rem; }
+.user-menu-header span { font-size: 0.76rem; color: var(--ws-text-muted); }
+.user-menu-item { width: 100%; text-align: left; padding: 8px; border-radius: 6px; border: none; background: none; cursor: pointer; font-size: 0.86rem; color: var(--ws-text); }
+.user-menu-item:hover { background: var(--ws-bg); }
+
+/* --- Org/app hero banner --- */
+.org-hero {
+  background: linear-gradient(120deg, #1d4ed8, #1e293b);
+  color: #fff;
+  padding: 40px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.org-hero-inner { display: flex; align-items: center; gap: 18px; max-width: 1180px; margin: 0 auto; }
+.org-hero-logo {
+  width: 64px; height: 64px; border-radius: 14px; background: #2563eb; color: #fff; font-weight: 800;
+  font-size: 1.2rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.org-hero-eyebrow { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; margin: 0 0 2px; }
+.org-hero h1 { margin: 0; font-size: 1.7rem; }
+.org-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.hero-btn {
+  border: 1px solid rgba(255,255,255,0.6); color: #fff; background: transparent; padding: 9px 16px;
+  border-radius: 6px; font-size: 0.84rem; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.hero-btn:hover { background: rgba(255,255,255,0.12); }
+
+/* --- Gallery grid (org/project cards) --- */
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.gallery-card {
+  display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--ws-border); background: var(--ws-surface); text-align: left; cursor: pointer;
+  text-decoration: none; color: var(--ws-text);
+}
+.gallery-card:hover { border-color: #94a3b8; }
+.gallery-card.is-active { border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb inset; }
+.gallery-card-thumb {
+  width: 40px; height: 40px; border-radius: 8px; color: #fff; font-weight: 700; font-size: 0.76rem;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.gallery-card-body { display: flex; flex-direction: column; min-width: 0; }
+.gallery-card-body strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .upload-drop {
   display: block;

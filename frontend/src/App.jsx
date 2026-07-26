@@ -19,6 +19,8 @@ import DashboardDetail from './pages/DashboardDetail'
 import ProjectReports from './pages/ProjectReports'
 import PublicShare from './pages/PublicShare'
 import PublicSubmit from './pages/PublicSubmit'
+import SurveyApp from './pages/SurveyApp'
+import DashboardApp from './pages/DashboardApp'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -37,6 +39,12 @@ export default function App() {
         {/* Unauthenticated data-collection form for an asset type's
             submission link — a field officer's entire world. */}
         <Route path="/submit/:token" element={<PublicSubmit />} />
+
+        {/* App Launcher destinations — branded entry points into the same
+            underlying project data, the way Survey123/Dashboards feel like
+            distinct apps on top of one ArcGIS Online organisation. */}
+        <Route path="/apps/survey" element={<SurveyApp />} />
+        <Route path="/apps/dashboard" element={<DashboardApp />} />
 
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
