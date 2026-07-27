@@ -1,8 +1,137 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 const COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d']
 
-export function KpiCard({ value, label }) {
+export function GaugeChart({ value, maxValue, percent }) {
+  if (percent === null || percent === undefined) {
+    return <p className="ws-muted">Set a target value to show a gauge.</p>
+  }
+  const radius = 60
+  const cx = 80
+  const cy = 78
+  const startAngle = Math.PI // 180deg (left)
+  const sweep = Math.PI // half circle, 0-100%
+  const endAngle = startAngle + sweep * (percent / 100)
+
+  function arcPoint(angle) {
+    return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)]
+  }
+  const [x1, y1] = arcPoint(startAngle)
+  const [x2, y2] = arcPoint(Math.PI * 2) // right side, 180 -> 360 is the full track
+  const [vx, vy] = arcPoint(endAngle)
+  const largeArcTrack = 1
+  const largeArcValue = percent > 50 ? 1 : 0
+
+  const color = percent >= 90 ? '#dc2626' : percent >= 70 ? '#f59e0b' : '#16a34a'
+
+  return (
+    <div className="gauge-widget">
+      <svg viewBox="0 0 160 100" width="220" height="140" role="img">
+        <path
+          d={`M${x1},${y1} A${radius},${radius} 0 ${largeArcTrack} 1 ${x2},${y2}`}
+          fill="none"
+          stroke="var(--gauge-track, #2a2f3a)"
+          strokeWidth="14"
+          strokeLinecap="round"
+        />
+        <path
+          d={`M${x1},${y1} A${radius},${radius} 0 ${largeArcValue} 1 ${vx},${vy}`}
+          fill="none"
+          stroke={color}
+          strokeWidth="14"
+          strokeLinecap="round"
+        />
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="26" fontWeight="700" fill="var(--gauge-text, currentColor)">
+          {percent}%
+        </text>
+      </svg>
+      <p className="gauge-caption">
+        {value} / {maxValue}
+      </p>
+    </div>
+  )
+}
+
+export function ListWidget({ rows }) {
+  if (!rows || rows.length === 0) return <p className="ws-muted">No records yet.</p>
+  return (
+    <ul className="widget-list">
+      {rows.map((row) => (
+        <li key={row.id} className="widget-list-row">
+          <span className="widget-list-icon">📍</span>
+          <span className="widget-list-text">
+            <strong>{row.title}</strong>
+            {row.subtitle && <span className="ws-muted">{row.subtitle}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function MapWidget({ features, colorByAssetType = {} }) {
+  const mapEl = useRef(null)
+  const mapRef = useRef(null)
+  const layerRef = useRef(null)
+
+  useEffect(() => {
+    if (!mapEl.current || mapRef.current) return
+    const map = L.map(mapEl.current, { zoomControl: true }).setView([9.0765, 7.3986], 6)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map)
+    layerRef.current = L.layerGroup().addTo(map)
+    mapRef.current = map
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!layerRef.current || !mapRef.current) return
+    layerRef.current.clearLayers()
+    const bounds = []
+    ;(features || []).forEach((f) => {
+      const geometry = f.geometry
+      if (!geometry) return
+      const color = colorByAssetType[f.asset_type_id] || '#2563eb'
+      if (geometry.type === 'Point') {
+        const [lng, lat] = geometry.coordinates
+        L.circleMarker([lat, lng], { radius: 6, color, fillColor: color, fillOpacity: 0.85, weight: 2 }).addTo(
+          layerRef.current
+        )
+        bounds.push([lat, lng])
+      } else if (geometry.type === 'LineString') {
+        const latlngs = geometry.coordinates.map(([lng, lat]) => [lat, lng])
+        L.polyline(latlngs, { color, weight: 3 }).addTo(layerRef.current)
+        bounds.push(...latlngs)
+      } else if (geometry.type === 'Polygon') {
+        const latlngs = (geometry.coordinates[0] || []).map(([lng, lat]) => [lat, lng])
+        L.polygon(latlngs, { color, fillColor: color, fillOpacity: 0.25 }).addTo(layerRef.current)
+        bounds.push(...latlngs)
+      }
+    })
+    if (bounds.length) {
+      mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 })
+    }
+  }, [features, colorByAssetType])
+
+  return <div ref={mapEl} className="widget-map" />
+}
+
+const KPI_ICONS = {
+  count: '☰',
+  sum: '∑',
+  avg: '≈',
+  min: '↓',
+  max: '↑',
+}
+
+export function KpiCard({ value, label, accent = '#2563eb' }) {
   const display =
     value === null || value === undefined
       ? '—'
@@ -11,8 +140,13 @@ export function KpiCard({ value, label }) {
       : String(value)
   return (
     <div className="kpi-card">
-      <span className="kpi-value">{display}</span>
-      {label && <span className="kpi-label">{label}</span>}
+      <span className="kpi-badge" style={{ borderColor: accent, color: accent }}>
+        {KPI_ICONS[label] || '#'}
+      </span>
+      <span>
+        <span className="kpi-value">{display}</span>
+        {label && <span className="kpi-label">{label}</span>}
+      </span>
     </div>
   )
 }

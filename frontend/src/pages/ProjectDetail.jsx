@@ -1,6 +1,26 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { PORTAL_URL, portalPath } from '../config'
+
+// A plain <a> when the portal lives on a different origin (a genuinely
+// standalone Survey/Dashboard deployment), a normal client-side <Link>
+// when it's the same bundle (PORTAL_URL unset) — react-router's <Link>
+// isn't meant for cross-origin hrefs.
+function PortalLink({ to, children, ...props }) {
+  if (PORTAL_URL) {
+    return (
+      <a href={portalPath(to)} {...props}>
+        {children}
+      </a>
+    )
+  }
+  return (
+    <Link to={to} {...props}>
+      {children}
+    </Link>
+  )
+}
 
 const TABS = [
   { to: '', label: 'Overview', end: true },
@@ -77,9 +97,9 @@ export default function ProjectDetail() {
           <p>Couldn't find that project.</p>
           <span>{error || 'It may have been removed, or the link is out of date.'}</span>
         </div>
-        <Link to="/workspace" className="btn-secondary" style={{ marginTop: 16, display: 'inline-flex' }}>
+        <PortalLink to="/workspace" className="btn-secondary" style={{ marginTop: 16, display: 'inline-flex' }}>
           Back to organisations &amp; projects
-        </Link>
+        </PortalLink>
       </div>
     )
   }
@@ -91,18 +111,18 @@ export default function ProjectDetail() {
           <p>Couldn't find that project.</p>
           <span>It may have been removed, or the link is out of date.</span>
         </div>
-        <Link to="/workspace" className="btn-secondary" style={{ marginTop: 16, display: 'inline-flex' }}>
+        <PortalLink to="/workspace" className="btn-secondary" style={{ marginTop: 16, display: 'inline-flex' }}>
           Back to organisations &amp; projects
-        </Link>
+        </PortalLink>
       </div>
     )
   }
 
   return (
     <div className="ws-page ws-page-wide">
-      <Link to="/workspace" className="ws-breadcrumb">
+      <PortalLink to="/workspace" className="ws-breadcrumb">
         &larr; {org ? org.name : 'Organisations & projects'}
-      </Link>
+      </PortalLink>
 
       <div className="ws-page-head">
         <p className="card-eyebrow">Project</p>

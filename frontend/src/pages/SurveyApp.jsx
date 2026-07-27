@@ -3,8 +3,6 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 
-const NAV_ITEMS = [{ to: '/apps/survey', label: 'Home', end: true }]
-
 function AssetTypeLinkRow({ assetType, orgId, canManageShare }) {
   const { authedFetch } = useAuth()
   const navigate = useNavigate()
@@ -84,7 +82,7 @@ function AssetTypeLinkRow({ assetType, orgId, canManageShare }) {
  * with a one-click "Copy link" — getting a shareable submission link
  * shouldn't require opening the full form builder first.
  */
-export default function SurveyApp() {
+export default function SurveyApp({ homePath = '/apps/survey' }) {
   const { status, authedFetch } = useAuth()
   const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
@@ -142,7 +140,12 @@ export default function SurveyApp() {
 
   return (
     <div className="portal-shell">
-      <AppHeader appName="GeoCore Survey" accent="#0d9488" navItems={NAV_ITEMS} homeTo="/apps/survey" />
+      <AppHeader
+        appName="GeoCore Survey"
+        accent="#0d9488"
+        navItems={[{ to: homePath, label: 'Home', end: true }]}
+        homeTo={homePath}
+      />
       <main className="portal-content">
         <section className="org-hero" style={{ background: 'linear-gradient(120deg, #0d9488, #134e4a)' }}>
           <div className="org-hero-inner">

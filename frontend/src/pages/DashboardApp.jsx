@@ -3,14 +3,12 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 
-const NAV_ITEMS = [{ to: '/apps/dashboard', label: 'Home', end: true }]
-
 /**
  * GeoCore Dashboard — the "app" identity for analysis, the way ArcGIS
  * Dashboards is its own branded product. Picking a project here drops you
  * straight into that project's Dashboards tab.
  */
-export default function DashboardApp() {
+export default function DashboardApp({ homePath = '/apps/dashboard' }) {
   const { status, authedFetch } = useAuth()
   const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
@@ -50,8 +48,13 @@ export default function DashboardApp() {
   if (status === 'guest') return <Navigate to="/login" replace />
 
   return (
-    <div className="portal-shell">
-      <AppHeader appName="GeoCore Dashboard" accent="#7c3aed" navItems={NAV_ITEMS} homeTo="/apps/dashboard" />
+    <div className="portal-shell dashboard-dark">
+      <AppHeader
+        appName="GeoCore Dashboard"
+        accent="#7c3aed"
+        navItems={[{ to: homePath, label: 'Home', end: true }]}
+        homeTo={homePath}
+      />
       <main className="portal-content">
         <section className="org-hero" style={{ background: 'linear-gradient(120deg, #7c3aed, #4c1d95)' }}>
           <div className="org-hero-inner">

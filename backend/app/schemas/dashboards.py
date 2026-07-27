@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, field_validator
 
-WIDGET_TYPES = {"kpi", "bar_chart", "pie_chart", "line_chart", "table", "map"}
+WIDGET_TYPES = {"kpi", "bar_chart", "pie_chart", "line_chart", "table", "map", "gauge", "list"}
 
 
 class DashboardCreate(BaseModel):
@@ -85,3 +85,18 @@ class DashboardSummaryOut(BaseModel):
     description: Optional[str] = None
     updated_at: datetime
     widget_count: int
+
+
+class FeatureLayerOut(BaseModel):
+    """One asset type, discoverable as a dashboard data source from
+    anywhere in the organisation — not just the dashboard's own project.
+    See GET /organisations/{id}/feature-layers.
+    """
+
+    asset_type_id: uuid.UUID
+    name: str
+    color: str
+    geometry_type: str
+    project_id: uuid.UUID
+    project_name: str
+    record_count: int

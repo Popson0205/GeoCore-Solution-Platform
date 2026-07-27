@@ -767,23 +767,45 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 
 .section-card {
   border: 1px solid var(--ws-border);
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 12px;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
   background: var(--ws-bg);
 }
-.section-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.section-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .section-card-head input[type="text"],
-.section-card-head input:not([type]) { flex: 1; font-weight: 600; }
+.section-card-head input:not([type]) { flex: 1; font-weight: 700; font-size: 1rem; border: none; background: transparent; padding: 4px 2px; }
+.section-card-head input:focus { outline: none; border-bottom: 2px solid var(--brand); }
+.section-page-badge {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 0.76rem;
+  font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
 .field-card {
   border: 1px solid var(--ws-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
+  border-left: 3px solid var(--ws-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
   background: var(--ws-surface);
+  transition: border-color 0.15s;
 }
-.field-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.field-card-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.field-card:focus-within { border-left-color: var(--brand); }
+.field-card-head { display: flex; align-items: center; gap: 10px; }
+.field-type-badge {
+  width: 28px; height: 28px; border-radius: 7px; color: #fff; font-size: 0.82rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.field-label-input {
+  flex: 1; min-width: 140px; border: none; background: transparent; font-size: 0.96rem; font-weight: 600;
+  padding: 4px 2px; color: var(--ws-text);
+}
+.field-label-input:focus { outline: none; border-bottom: 2px solid var(--brand); }
+.field-label-input::placeholder { font-weight: 400; color: var(--ws-text-faint); }
+.required-dot { color: var(--coral); font-size: 1.1rem; font-weight: 700; }
+.field-card-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.field-type-select { font-size: 0.78rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--ws-border); background: var(--ws-bg); color: var(--ws-text-muted); }
+.field-key-tag { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ws-text-faint); background: var(--ws-bg); padding: 2px 6px; border-radius: 4px; }
+.field-card-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--ws-border); }
 .condition-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .condition-row select,
 .condition-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--ws-border); background: var(--ws-bg); color: var(--ws-text); font-size: 0.82rem; }
@@ -938,6 +960,48 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   position: absolute; right: 4px; bottom: 4px; width: 14px; height: 14px; cursor: nwse-resize;
   color: var(--ws-text-faint);
 }
+
+/* --- GeoCore Dashboard app: dark theme scope, matching ArcGIS Dashboards'
+   own dark canvas rather than the light GeoCore Portal chrome. --- */
+.dashboard-dark {
+  --ws-bg: #14161a;
+  --ws-surface: #1c1f26;
+  --ws-border: #2c313c;
+  --ws-text: #f1f3f6;
+  --ws-text-muted: #9aa4b2;
+  --ws-text-faint: #6b7684;
+  --gauge-track: #2c313c;
+  --gauge-text: #f1f3f6;
+}
+.dashboard-dark .widget-card { border-color: #313846; }
+.dashboard-dark .panel { border-color: #313846; }
+/* When the Dashboard app owns the whole viewport (GeoCore Dashboard app
+   shell), let the dark theme fill the screen. */
+.portal-shell.dashboard-dark { min-height: 100vh; background: var(--ws-bg); }
+/* When embedded inside a light page (a project's Dashboards tab), render
+   as a self-contained dark canvas card instead of fighting the page's
+   own background. */
+.dashboard-canvas { background: var(--ws-bg); border-radius: 12px; padding: 20px; color: var(--ws-text); }
+
+.kpi-card { display: flex; align-items: center; gap: 14px; }
+.kpi-badge {
+  width: 52px; height: 52px; border-radius: 50%; border: 3px solid; display: flex; align-items: center;
+  justify-content: center; font-size: 1.3rem; flex-shrink: 0;
+}
+.kpi-value { display: block; font-size: 2.1rem; font-weight: 700; color: var(--ws-text); line-height: 1; }
+.kpi-label { display: block; font-size: 0.78rem; color: var(--ws-text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 4px; }
+
+.gauge-widget { display: flex; flex-direction: column; align-items: center; }
+.gauge-caption { margin: 4px 0 0; font-size: 0.82rem; color: var(--ws-text-muted); }
+
+.widget-list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
+.widget-list-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--ws-border); }
+.widget-list-row:last-child { border-bottom: none; }
+.widget-list-icon { font-size: 1.1rem; flex-shrink: 0; }
+.widget-list-text { display: flex; flex-direction: column; font-size: 0.84rem; }
+.widget-list-text .ws-muted { font-size: 0.76rem; }
+
+.widget-map { height: 280px; border-radius: 8px; overflow: hidden; }
 
 .upload-drop {
   display: block;

@@ -143,6 +143,62 @@ def compute_map(records: list[Any], config: dict) -> list[dict]:
     ]
 
 
+def compute_gauge(records: list[Any], config: dict) -> dict:
+    """A KPI expressed as a percentage of a target — e.g. current
+    population vs. total capacity, matching an occupancy-rate gauge.
+    `max_value` is a fixed number in config; if absent, it's computed the
+    same way as the value (aggregation over `max_field_key`) — useful when
+    the target itself is a sum of another field rather than a constant.
+    """
+    kpi = compute_kpi(records, {**config, "field_key": config.get("field_key")})
+    value = kpi["value"] or 0
+
+    max_value = config.get("max_value")
+    if max_value is None and config.get("max_field_key"):
+        max_kpi = compute_kpi(
+            records,
+            {
+                "filters": config.get("filters"),
+                "aggregation": config.get("max_aggregation", "sum"),
+                "field_key": config.get("max_field_key"),
+            },
+        )
+        max_value = max_kpi["value"]
+
+    if not max_value:
+        return {"value": value, "max_value": None, "percent": None}
+
+    percent = round((value / max_value) * 100, 1)
+    return {"value": value, "max_value": max_value, "percent": max(0, min(percent, 100))}
+
+
+def compute_list(records: list[Any], config: dict) -> dict:
+    """Records rendered as a scrollable list — e.g. a facility roster —
+    rather than aggregated into a number or chart.
+    """
+    records = apply_filters(records, config.get("filters"))
+    limit = config.get("limit") or 50
+    title_key = config.get("title_field_key")
+    subtitle_keys = config.get("subtitle_field_keys") or []
+    icon_key = config.get("icon_field_key")
+
+    records = sorted(records, key=lambda r: r.created_at or datetime.min, reverse=True)[:limit]
+
+    rows = []
+    for r in records:
+        data = r.field_data or {}
+        subtitle = " · ".join(str(data[k]) for k in subtitle_keys if data.get(k) not in (None, ""))
+        rows.append(
+            {
+                "id": str(r.id),
+                "title": str(data.get(title_key)) if title_key and data.get(title_key) else "(untitled)",
+                "subtitle": subtitle,
+                "icon_value": data.get(icon_key) if icon_key else None,
+            }
+        )
+    return {"rows": rows}
+
+
 def compute_widget(widget: Any, records_by_asset_type: dict[str, list[Any]]) -> dict:
     """`records_by_asset_type` maps str(asset_type_id) -> that asset type's
     records for the project. Map widgets with no asset_type_id in their
@@ -158,12 +214,16 @@ def compute_widget(widget: Any, records_by_asset_type: dict[str, list[Any]]) -> 
 
     if widget.widget_type == "kpi":
         return compute_kpi(records, config)
+    if widget.widget_type == "gauge":
+        return compute_gauge(records, config)
     if widget.widget_type in ("bar_chart", "pie_chart"):
         return {"rows": compute_group_chart(records, config)}
     if widget.widget_type == "line_chart":
         return {"rows": compute_time_series(records, config)}
     if widget.widget_type == "table":
         return compute_table(records, config)
+    if widget.widget_type == "list":
+        return compute_list(records, config)
     if widget.widget_type == "map":
         return {"features": compute_map(records, config)}
     return {"error": f"Unknown widget type: {widget.widget_type}"}

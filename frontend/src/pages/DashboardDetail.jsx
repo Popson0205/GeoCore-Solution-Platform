@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { VISIBILITY_OPERATORS } from '../lib/formEngine'
-import { BarChart, KpiCard, LineChart, PieChart, TableWidget } from '../components/charts/Charts'
+import { BarChart, GaugeChart, KpiCard, LineChart, ListWidget, MapWidget, PieChart, TableWidget } from '../components/charts/Charts'
 
 const RANK = {
   viewer: 0,
@@ -15,10 +15,12 @@ const RANK = {
 
 const WIDGET_TYPES = [
   { value: 'kpi', label: 'KPI number' },
+  { value: 'gauge', label: 'Gauge (% of target)' },
   { value: 'bar_chart', label: 'Bar chart' },
   { value: 'pie_chart', label: 'Pie chart' },
   { value: 'line_chart', label: 'Line chart (over time)' },
   { value: 'table', label: 'Table' },
+  { value: 'list', label: 'List' },
   { value: 'map', label: 'Map' },
 ]
 
@@ -30,10 +32,34 @@ const AGGREGATIONS = [
   { value: 'max', label: 'Maximum' },
 ]
 
-function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
+/** Data-source picker backed by GET /organisations/{id}/feature-layers —
+ * every asset type across every project in the org, not just the
+ * dashboard's own project. Grouped by project so it's still easy to find
+ * "this project's layers" first.
+ */
+function useFeatureLayers(orgId) {
+  const { authedFetch } = useAuth()
+  const [layers, setLayers] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!orgId) return
+    authedFetch(`/api/organisations/${orgId}/feature-layers`)
+      .then(setLayers)
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId])
+
+  return { layers, loading }
+}
+
+function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
+  const { authedFetch } = useAuth()
+  const { layers } = useFeatureLayers(orgId)
   const [title, setTitle] = useState(initial?.title || '')
   const [widgetType, setWidgetType] = useState(initial?.widget_type || 'kpi')
-  const [assetTypeId, setAssetTypeId] = useState(initial?.config?.asset_type_id || assetTypes[0]?.id || '')
+  const [assetTypeId, setAssetTypeId] = useState(initial?.config?.asset_type_id || '')
+  const [layerFields, setLayerFields] = useState([])
   const [aggregation, setAggregation] = useState(initial?.config?.aggregation || 'count')
   const [fieldKey, setFieldKey] = useState(initial?.config?.field_key || '')
   const [groupByFieldKey, setGroupByFieldKey] = useState(initial?.config?.group_by_field_key || '')
@@ -41,18 +67,43 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
   const [interval, setInterval_] = useState(initial?.config?.interval || 'month')
   const [selectedFieldKeys, setSelectedFieldKeys] = useState(initial?.config?.field_keys || [])
   const [limit, setLimit] = useState(initial?.config?.limit || 20)
+  const [maxValue, setMaxValue] = useState(initial?.config?.max_value ?? '')
+  const [maxFieldKey, setMaxFieldKey] = useState(initial?.config?.max_field_key || '')
+  const [titleFieldKey, setTitleFieldKey] = useState(initial?.config?.title_field_key || '')
+  const [subtitleFieldKeys, setSubtitleFieldKeys] = useState(initial?.config?.subtitle_field_keys || [])
   const [filterField, setFilterField] = useState(initial?.config?.filters?.[0]?.field_key || '')
   const [filterOperator, setFilterOperator] = useState(initial?.config?.filters?.[0]?.operator || 'equals')
   const [filterValue, setFilterValue] = useState(initial?.config?.filters?.[0]?.value ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const assetType = assetTypes.find((at) => at.id === assetTypeId)
-  const fields = assetType?.field_definitions || []
+  // Default to the current project's own layers on top of the list, then
+  // every other layer in the org below — most widgets are same-project.
+  const orderedLayers = [...layers].sort((a, b) => {
+    if (a.project_id === projectId && b.project_id !== projectId) return -1
+    if (b.project_id === projectId && a.project_id !== projectId) return 1
+    return a.project_name.localeCompare(b.project_name)
+  })
+
+  useEffect(() => {
+    if (!assetTypeId) {
+      setLayerFields([])
+      return
+    }
+    authedFetch(`/api/asset-types/${assetTypeId}`)
+      .then((at) => setLayerFields(at.field_definitions || []))
+      .catch(() => setLayerFields([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetTypeId])
+
+  const fields = layerFields
   const numberFields = fields.filter((f) => f.field_type === 'number')
 
   function toggleFieldKey(key) {
     setSelectedFieldKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+  function toggleSubtitleKey(key) {
+    setSubtitleFieldKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
   }
 
   async function handleSubmit(e) {
@@ -66,11 +117,19 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
       : []
 
     let config = { filters }
-    if (widgetType !== 'map') config.asset_type_id = assetTypeId
-    else if (assetTypeId) config.asset_type_id = assetTypeId
+    if (assetTypeId) config.asset_type_id = assetTypeId
 
     if (widgetType === 'kpi') {
       config = { ...config, aggregation, field_key: aggregation === 'count' ? null : fieldKey }
+    } else if (widgetType === 'gauge') {
+      config = {
+        ...config,
+        aggregation,
+        field_key: aggregation === 'count' ? null : fieldKey,
+        max_value: maxValue !== '' ? parseFloat(maxValue) : null,
+        max_field_key: maxValue !== '' ? null : maxFieldKey || null,
+        max_aggregation: 'sum',
+      }
     } else if (widgetType === 'bar_chart' || widgetType === 'pie_chart') {
       config = {
         ...config,
@@ -87,6 +146,13 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
       }
     } else if (widgetType === 'table') {
       config = { ...config, field_keys: selectedFieldKeys, limit: parseInt(limit, 10) || 20 }
+    } else if (widgetType === 'list') {
+      config = {
+        ...config,
+        title_field_key: titleFieldKey || null,
+        subtitle_field_keys: subtitleFieldKeys,
+        limit: parseInt(limit, 10) || 20,
+      }
     }
 
     try {
@@ -112,12 +178,13 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
       </div>
 
       <label className="form-label">
-        Asset type {widgetType === 'map' && '(optional — blank shows every type)'}
+        Layer (feature layer — any project in this org) {widgetType === 'map' && '· optional, blank shows every layer'}
         <select value={assetTypeId} onChange={(e) => setAssetTypeId(e.target.value)}>
-          {widgetType === 'map' && <option value="">All asset types</option>}
-          {assetTypes.map((at) => (
-            <option key={at.id} value={at.id}>
-              {at.name}
+          {widgetType === 'map' && <option value="">All layers</option>}
+          {widgetType !== 'map' && <option value="">Select a layer…</option>}
+          {orderedLayers.map((layer) => (
+            <option key={layer.asset_type_id} value={layer.asset_type_id}>
+              {layer.project_name} — {layer.name} ({layer.record_count})
             </option>
           ))}
         </select>
@@ -143,6 +210,55 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
             </select>
           )}
         </div>
+      )}
+
+      {widgetType === 'gauge' && (
+        <>
+          <div className="form-row">
+            <select value={aggregation} onChange={(e) => setAggregation(e.target.value)}>
+              {AGGREGATIONS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            {aggregation !== 'count' && (
+              <select value={fieldKey} onChange={(e) => setFieldKey(e.target.value)}>
+                <option value="">value field…</option>
+                {numberFields.map((f) => (
+                  <option key={f.field_key} value={f.field_key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="form-row">
+            <label className="form-label" style={{ flex: 1 }}>
+              Target (fixed number)
+              <input
+                type="number"
+                value={maxValue}
+                onChange={(e) => setMaxValue(e.target.value)}
+                placeholder="e.g. 15000"
+              />
+            </label>
+            <span className="builder-hint" style={{ alignSelf: 'flex-end', paddingBottom: 8 }}>
+              or
+            </span>
+            <label className="form-label" style={{ flex: 1 }}>
+              Target = sum of a field
+              <select value={maxFieldKey} onChange={(e) => setMaxFieldKey(e.target.value)} disabled={maxValue !== ''}>
+                <option value="">field…</option>
+                {numberFields.map((f) => (
+                  <option key={f.field_key} value={f.field_key}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </>
       )}
 
       {(widgetType === 'bar_chart' || widgetType === 'pie_chart') && (
@@ -220,6 +336,39 @@ function WidgetForm({ assetTypes, initial, onSave, onCancel }) {
         </div>
       )}
 
+      {widgetType === 'list' && (
+        <div>
+          <label className="form-label">
+            Title field
+            <select value={titleFieldKey} onChange={(e) => setTitleFieldKey(e.target.value)}>
+              <option value="">field…</option>
+              {fields.map((f) => (
+                <option key={f.field_key} value={f.field_key}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="builder-hint">Subtitle fields (shown together):</p>
+          <div className="checkbox-group">
+            {fields.map((f) => (
+              <label key={f.field_key} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={subtitleFieldKeys.includes(f.field_key)}
+                  onChange={() => toggleSubtitleKey(f.field_key)}
+                />
+                {f.label}
+              </label>
+            ))}
+          </div>
+          <label className="form-label" style={{ maxWidth: 120, marginTop: 6 }}>
+            Row limit
+            <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
+          </label>
+        </div>
+      )}
+
       {widgetType !== 'map' && (
         <div>
           <p className="builder-subhead">Filter (optional)</p>
@@ -268,21 +417,23 @@ function WidgetBody({ widget, data }) {
   if (data.error) return <p className="hint">{data.error}</p>
 
   if (widget.widget_type === 'kpi') {
-    return <KpiCard value={data.value} label={data.aggregation === 'count' ? 'records' : data.aggregation} />
+    return <KpiCard value={data.value} label={data.aggregation === 'count' ? 'count' : data.aggregation} />
+  }
+  if (widget.widget_type === 'gauge') {
+    return <GaugeChart value={data.value} maxValue={data.max_value} percent={data.percent} />
   }
   if (widget.widget_type === 'bar_chart') return <BarChart rows={data.rows} />
   if (widget.widget_type === 'pie_chart') return <PieChart rows={data.rows} />
   if (widget.widget_type === 'line_chart') return <LineChart rows={data.rows} />
   if (widget.widget_type === 'table') return <TableWidget columns={data.columns} rows={data.rows} />
-  if (widget.widget_type === 'map') {
-    return <p className="ws-muted">{data.features?.length ?? 0} features — open the Map tab to view them spatially.</p>
-  }
+  if (widget.widget_type === 'list') return <ListWidget rows={data.rows} />
+  if (widget.widget_type === 'map') return <MapWidget features={data.features} />
   return null
 }
 
 export default function DashboardDetail() {
   const { dashboardId } = useParams()
-  const { assetTypes, myRole } = useOutletContext()
+  const { orgId, projectId, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
   const canEdit = (RANK[myRole] ?? 0) >= RANK.analyst
 
@@ -440,7 +591,7 @@ export default function DashboardDetail() {
   }
 
   return (
-    <div>
+    <div className="dashboard-dark dashboard-canvas">
       <div className="panel-head" style={{ marginBottom: 14 }}>
         <div>
           <h2 style={{ margin: 0 }}>{dashboard.name}</h2>
@@ -462,7 +613,7 @@ export default function DashboardDetail() {
 
       {showAddWidget && (
         <section className="panel" style={{ marginBottom: 16 }}>
-          <WidgetForm assetTypes={assetTypes} onSave={handleAddWidget} onCancel={() => setShowAddWidget(false)} />
+          <WidgetForm orgId={orgId} projectId={projectId} onSave={handleAddWidget} onCancel={() => setShowAddWidget(false)} />
         </section>
       )}
 
@@ -516,7 +667,8 @@ export default function DashboardDetail() {
                 </div>
                 {editingWidgetId === widget.id ? (
                   <WidgetForm
-                    assetTypes={assetTypes}
+                    orgId={orgId}
+                    projectId={projectId}
                     initial={widget}
                     onSave={(payload) => handleUpdateWidget(widget.id, payload)}
                     onCancel={() => setEditingWidgetId(null)}

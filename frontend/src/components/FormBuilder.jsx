@@ -16,6 +16,35 @@ const FIELD_TYPES = [
   { value: 'signature', label: 'Signature (via Attachments)' },
 ]
 
+const FIELD_TYPE_ICONS = {
+  text: 'Aa',
+  long_text: '¶',
+  number: '#',
+  date: '📅',
+  datetime: '🕐',
+  single_select: '◉',
+  multi_select: '☑',
+  boolean: '⚑',
+  photo: '📷',
+  video: '🎥',
+  file: '📎',
+  signature: '✎',
+}
+const FIELD_TYPE_COLORS = {
+  text: '#2563eb',
+  long_text: '#2563eb',
+  number: '#7c3aed',
+  date: '#0d9488',
+  datetime: '#0d9488',
+  single_select: '#f59e0b',
+  multi_select: '#f59e0b',
+  boolean: '#16a34a',
+  photo: '#db2777',
+  video: '#db2777',
+  file: '#64748b',
+  signature: '#64748b',
+}
+
 let _uidCounter = 0
 function uid() {
   _uidCounter += 1
@@ -220,13 +249,23 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
     <div className={`field-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
       <div className="field-card-head">
         <DragHandle {...(dragProps?.handleProps || {})} />
+        <span className="field-type-badge" style={{ background: FIELD_TYPE_COLORS[field.field_type] }}>
+          {FIELD_TYPE_ICONS[field.field_type]}
+        </span>
         <input
           value={field.label}
           onChange={(e) => set({ label: e.target.value })}
-          placeholder="Field label"
-          style={{ flex: 1, minWidth: 140 }}
+          placeholder="Question text"
+          className="field-label-input"
         />
-        <select value={field.field_type} onChange={(e) => set({ field_type: e.target.value })}>
+        {field.is_required && <span className="required-dot" title="Required">*</span>}
+      </div>
+      <div className="field-card-toolbar">
+        <select
+          className="field-type-select"
+          value={field.field_type}
+          onChange={(e) => set({ field_type: e.target.value })}
+        >
           {FIELD_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
@@ -237,14 +276,15 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
           <input type="checkbox" checked={field.is_required} onChange={(e) => set({ is_required: e.target.checked })} />
           Required
         </label>
-        <button type="button" className="btn-ghost" onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'Less' : 'Rules'}
+        <span className="field-key-tag">{key}</span>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="btn-ghost" onClick={() => setExpanded(!expanded)} title="Skip logic, calculation, validation">
+          {expanded ? '▲ Less' : '⚙ Rules'}
         </button>
         <button type="button" className="btn-ghost" onClick={onRemove}>
           Remove
         </button>
       </div>
-      <p className="builder-hint">key: {key}</p>
 
       {hasOptions && (
         <input
@@ -363,7 +403,7 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
   )
 }
 
-function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sections, dragProps }) {
+function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldOptions, sections, dragProps }) {
   const [dragFieldIndex, setDragFieldIndex] = React.useState(null)
 
   function set(patch) {
@@ -390,6 +430,7 @@ function SectionCard({ section, onChange, onRemove, topLevelFieldOptions, sectio
     <div className={`section-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
       <div className="section-card-head">
         <DragHandle {...(dragProps?.handleProps || {})} />
+        <span className="section-page-badge">{sectionIndex + 1}</span>
         <input value={section.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" />
         <label className="checkbox-label">
           <input
@@ -498,6 +539,7 @@ export default function FormBuilder({ sections, onChange }) {
         <SectionCard
           key={section._uid}
           section={section}
+          sectionIndex={index}
           sections={sections}
           topLevelFieldOptions={topLevelFieldOptions.filter(
             (o) => !section.fields.some((f) => slugifyKey(f.label) === o.key)
