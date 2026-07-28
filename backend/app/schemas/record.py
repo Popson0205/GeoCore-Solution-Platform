@@ -32,8 +32,12 @@ class RecordUpdate(BaseModel):
 
 class RecordOut(BaseModel):
     id: uuid.UUID
-    project_id: uuid.UUID
+    # Scope now lives on organisation_id/survey_id; project_id is an optional
+    # folder tag (Portal redesign Phase 1).
+    organisation_id: uuid.UUID
+    survey_id: uuid.UUID
     asset_type_id: uuid.UUID
+    project_id: Optional[uuid.UUID] = None
     geometry: dict
     field_data: dict
     created_at: datetime
