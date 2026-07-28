@@ -165,7 +165,7 @@ export default function Dashboard() {
                   className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
                   onClick={() => setActiveOrg(org)}
                 >
-                  <span className="gallery-card-thumb" style={{ background: '#2563eb' }}>
+                  <span className="gallery-card-thumb" style={{ background: '#0079c1' }}>
                     {org.name.slice(0, 2).toUpperCase()}
                   </span>
                   <span className="gallery-card-body">
@@ -225,7 +225,7 @@ export default function Dashboard() {
                       to={`/workspace/organisations/${activeOrg.id}/projects/${p.id}`}
                       className="gallery-card is-link"
                     >
-                      <span className="gallery-card-thumb" style={{ background: '#0f766e' }}>
+                      <span className="gallery-card-thumb" style={{ background: '#046566' }}>
                         {p.name.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="gallery-card-body">

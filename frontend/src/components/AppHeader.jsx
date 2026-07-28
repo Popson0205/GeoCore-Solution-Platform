@@ -13,21 +13,21 @@ const APPS = [
     to: '/workspace',
     name: 'GeoCore Portal',
     tagline: 'Organisations & projects',
-    color: '#2563eb',
+    color: '#0079c1',
     icon: 'grid',
   },
   {
     to: '/apps/survey',
     name: 'GeoCore Survey',
     tagline: 'Build & collect forms',
-    color: '#0d9488',
+    color: '#058b8c',
     icon: 'clip',
   },
   {
     to: '/apps/dashboard',
     name: 'GeoCore Dashboard',
     tagline: 'KPIs, charts & maps',
-    color: '#7c3aed',
+    color: '#7a2e8e',
     icon: 'chart',
   },
 ]
@@ -145,7 +145,7 @@ function UserMenu() {
  * component, different identity, matching how Esri's own apps share a
  * header pattern but each carry their own name and accent color.
  */
-export default function AppHeader({ appName = 'GeoCore', accent = '#2563eb', navItems = [], homeTo = '/workspace' }) {
+export default function AppHeader({ appName = 'GeoCore', accent = '#0079c1', navItems = [], homeTo = '/workspace' }) {
   return (
     <header className="app-header">
       <div className="app-header-left">

@@ -142,14 +142,14 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
     <div className="portal-shell">
       <AppHeader
         appName="GeoCore Survey"
-        accent="#0d9488"
+        accent="#058b8c"
         navItems={[{ to: homePath, label: 'Home', end: true }]}
         homeTo={homePath}
       />
       <main className="portal-content">
-        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #0d9488, #134e4a)' }}>
+        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #058b8c, #046566)' }}>
           <div className="org-hero-inner">
-            <span className="org-hero-logo" style={{ background: '#0d9488' }}>
+            <span className="org-hero-logo" style={{ background: '#058b8c' }}>
               GS
             </span>
             <div>
@@ -188,7 +188,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                     className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
                     onClick={() => setActiveOrg(org)}
                   >
-                    <span className="gallery-card-thumb" style={{ background: '#0d9488' }}>
+                    <span className="gallery-card-thumb" style={{ background: '#058b8c' }}>
                       {org.name.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="gallery-card-body">
@@ -220,7 +220,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                       className={`gallery-card is-link${activeProject?.id === p.id ? ' is-active' : ''}`}
                       onClick={() => setActiveProject(p)}
                     >
-                      <span className="gallery-card-thumb" style={{ background: '#134e4a' }}>
+                      <span className="gallery-card-thumb" style={{ background: '#046566' }}>
                         {p.name.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="gallery-card-body">

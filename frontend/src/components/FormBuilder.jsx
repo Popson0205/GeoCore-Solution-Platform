@@ -31,11 +31,11 @@ const FIELD_TYPE_ICONS = {
   signature: '✎',
 }
 const FIELD_TYPE_COLORS = {
-  text: '#2563eb',
-  long_text: '#2563eb',
-  number: '#7c3aed',
-  date: '#0d9488',
-  datetime: '#0d9488',
+  text: '#0079c1',
+  long_text: '#0079c1',
+  number: '#7a2e8e',
+  date: '#058b8c',
+  datetime: '#058b8c',
   single_select: '#f59e0b',
   multi_select: '#f59e0b',
   boolean: '#16a34a',

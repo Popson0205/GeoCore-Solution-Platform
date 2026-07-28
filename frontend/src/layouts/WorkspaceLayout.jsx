@@ -23,7 +23,7 @@ export default function WorkspaceLayout() {
 
   return (
     <div className="portal-shell">
-      <AppHeader appName="GeoCore" accent="#2563eb" navItems={NAV_ITEMS} homeTo="/workspace" />
+      <AppHeader appName="GeoCore" accent="#0079c1" navItems={NAV_ITEMS} homeTo="/workspace" />
       <main className="portal-content">
         <Outlet />
       </main>

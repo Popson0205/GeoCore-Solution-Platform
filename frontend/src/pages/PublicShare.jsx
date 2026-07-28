@@ -92,7 +92,7 @@ export default function PublicShare() {
     const bounds = []
     records.forEach((record) => {
       const assetType = assetTypes.find((at) => at.id === record.asset_type_id)
-      const color = assetType?.color || '#2563eb'
+      const color = assetType?.color || '#0079c1'
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
 
