@@ -31,7 +31,13 @@ function DashboardStandaloneApp() {
 
         <Route path="/share/:token" element={<PublicShare />} />
 
+        {/* Backend serves this bundle at /dashboard.html (see backend static
+            mount) — that's window.location.pathname on load, so it must
+            match a route or React Router falls through to NotFound even
+            though the server responded 200. "/" stays for local dev
+            (vite dev serving this entry at the root). */}
         <Route path="/" element={<DashboardApp homePath="/" />} />
+        <Route path="/dashboard.html" element={<DashboardApp homePath="/dashboard.html" />} />
 
         <Route path="/workspace/organisations/:orgId/projects/:projectId" element={<ProjectDetail />}>
           <Route path="dashboards" element={<ProjectDashboards />} />

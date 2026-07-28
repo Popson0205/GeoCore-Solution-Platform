@@ -39,7 +39,13 @@ function SurveyStandaloneApp() {
 
         <Route path="/submit/:token" element={<PublicSubmit />} />
 
+        {/* Backend serves this bundle at /survey.html (see backend static
+            mount) — that's window.location.pathname on load, so it must
+            match a route or React Router falls through to NotFound even
+            though the server responded 200. "/" stays for local dev
+            (vite dev serving this entry at the root). */}
         <Route path="/" element={<SurveyApp homePath="/" />} />
+        <Route path="/survey.html" element={<SurveyApp homePath="/survey.html" />} />
 
         <Route path="/workspace/organisations/:orgId/projects/:projectId" element={<ProjectDetail />}>
           <Route index element={<ProjectAssetTypes />} />
