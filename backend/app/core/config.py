@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # characters in the password yourself (e.g. "@" -> "%40").
     database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/geocore"
 
+    # Schema is now owned by Alembic (see alembic.ini / backend/alembic/).
+    # `Base.metadata.create_all()` at startup is a dev/testing convenience
+    # only — leave this False anywhere migrations should be the source of
+    # truth (staging, production) and run `alembic upgrade head` instead.
+    auto_create_tables: bool = False
+
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 

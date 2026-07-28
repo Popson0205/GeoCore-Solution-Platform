@@ -35,8 +35,17 @@ async def lifespan(app: FastAPI):
         == "postgresql+psycopg2://postgres:postgres@localhost:5432/geocore",
     )
 
-    # MVP table creation. Replace with Alembic migrations before production use.
-    Base.metadata.create_all(bind=engine)
+    # Schema is owned by Alembic now (alembic.ini / backend/alembic/) — run
+    # `alembic upgrade head` to apply migrations. create_all() only runs if
+    # explicitly opted into via AUTO_CREATE_TABLES=true, as a local/dev
+    # convenience; it must stay off anywhere migrations are authoritative.
+    if settings.auto_create_tables:
+        logger.warning(
+            "auto_create_tables is enabled - running Base.metadata.create_all(). "
+            "This is a dev/testing convenience only; run 'alembic upgrade head' "
+            "instead in any environment where migrations own the schema."
+        )
+        Base.metadata.create_all(bind=engine)
     yield
 
 
