@@ -24,8 +24,19 @@ class Record(Base):
     __tablename__ = "records"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    # Denormalized tenancy anchor (Portal redesign Phase 1): copied from the
+    # survey's organisation so Portal-wide record queries can filter by
+    # organisation without joining up through survey -> project every time.
+    organisation_id = Column(
+        UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True
+    )
+    survey_id = Column(
+        UUID(as_uuid=True), ForeignKey("surveys.id"), nullable=False, index=True
+    )
     asset_type_id = Column(UUID(as_uuid=True), ForeignKey("asset_types.id"), nullable=False)
+    # Now just an optional folder tag, no longer the scope boundary — records
+    # are scoped by organisation_id/survey_id instead (Portal redesign Phase 1).
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     geometry = Column(JSONB, nullable=False)
     # field_key -> value, keyed against that asset type's field_definitions
     field_data = Column(JSONB, default=dict, nullable=False)
@@ -42,6 +53,8 @@ class Record(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    organisation = relationship("Organisation")
+    survey = relationship("Survey")
     project = relationship("Project", backref="records")
     asset_type = relationship("AssetType", backref="records")
     attachments = relationship(
