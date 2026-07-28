@@ -235,7 +235,9 @@ class AssetTypeUpdate(BaseModel):
 
 class AssetTypeOut(BaseModel):
     id: uuid.UUID
-    project_id: uuid.UUID
+    # Re-pointed from project_id to survey_id (Portal redesign Phase 1) — an
+    # AssetType now belongs to a Survey, which carries the org/project.
+    survey_id: uuid.UUID
     name: str
     description: Optional[str] = None
     geometry_type: str
