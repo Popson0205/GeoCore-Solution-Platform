@@ -3,6 +3,7 @@
 from backend.app.models.user import User  # noqa: F401
 from backend.app.models.organisation import Organisation, OrganisationMember  # noqa: F401
 from backend.app.models.project import Project  # noqa: F401
+from backend.app.models.survey import Survey  # noqa: F401
 from backend.app.models.asset_type import (  # noqa: F401
     AssetType,
     FieldDefinition,
