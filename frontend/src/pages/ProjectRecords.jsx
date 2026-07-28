@@ -13,6 +13,82 @@ const RANK = {
   owner: 5,
 }
 
+function ImportDataPanel({ projectId, assetType, onImported }) {
+  const { authedFetch } = useAuth()
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [summary, setSummary] = useState(null)
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file || !assetType) return
+    setError('')
+    setSummary(null)
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('asset_type_id', assetType.id)
+      const result = await authedFetch(`/api/projects/${projectId}/records/import`, {
+        method: 'POST',
+        body: form,
+      })
+      setSummary(result)
+      await onImported()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  if (!assetType) return null
+
+  return (
+    <section className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h2>Import data</h2>
+      </div>
+      <p className="builder-hint">
+        Bring in existing data for <strong>{assetType.name}</strong> from a .csv, .json, or
+        .geojson file. CSV/flat JSON needs latitude/longitude columns (or a "geometry" column for
+        lines/polygons); GeoJSON's geometry is used directly. Every row runs through the same
+        validation and calculations a normal entry does — bad rows are skipped and listed, not
+        silently dropped, and the good ones still get imported.
+      </p>
+      <label className="btn-secondary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+        {uploading ? 'Importing…' : '📁 Choose file'}
+        <input
+          type="file"
+          accept=".csv,.json,.geojson"
+          onChange={handleFile}
+          disabled={uploading}
+          style={{ display: 'none' }}
+        />
+      </label>
+      {error && <p className="hint">{error}</p>}
+      {summary && (
+        <div style={{ marginTop: 10 }}>
+          <p className="ws-muted">
+            {summary.created} of {summary.total_rows} row{summary.total_rows === 1 ? '' : 's'} imported.
+            {summary.skipped > 0 && ` ${summary.skipped} skipped.`}
+          </p>
+          {summary.errors.length > 0 && (
+            <ul className="hint" style={{ paddingLeft: 18, margin: 0, maxHeight: 180, overflowY: 'auto' }}>
+              {summary.errors.map((err, i) => (
+                <li key={i}>
+                  Row {err.line}: {err.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function ProjectRecords() {
   const { projectId, assetTypes, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
@@ -158,7 +234,11 @@ export default function ProjectRecords() {
   }
 
   return (
-    <div className="ws-grid ws-grid-2">
+    <div>
+      {canWrite && (
+        <ImportDataPanel projectId={projectId} assetType={selectedAssetType} onImported={loadRecords} />
+      )}
+      <div className="ws-grid ws-grid-2">
       {canWrite ? (
         <section className="panel">
           <div className="panel-head">
@@ -276,6 +356,7 @@ export default function ProjectRecords() {
           </ul>
         )}
       </section>
+      </div>
     </div>
   )
 }

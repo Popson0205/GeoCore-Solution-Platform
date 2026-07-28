@@ -1,0 +1,219 @@
+"""Bulk record import from CSV, JSON, or GeoJSON (blueprint section 2:
+"data is stored in spreadsheets... organisations cannot easily visualise
+their information on maps" — this is the on-ramp that fixes exactly that).
+
+Every row/feature is converted to a (geometry, field_data) pair here, but
+NOT validated here — routes/records.py runs each one through the exact
+same process_submission() engine a normal record submission uses, so a
+bulk import gets no special treatment: calculated fields are still
+recomputed server-side, required/validation rules still apply, and a bad
+row is reported and skipped rather than aborting the whole batch.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+from dataclasses import dataclass, field as dc_field
+from typing import Any
+
+from backend.app.core.slugify import slugify_key
+
+GEOJSON_GEOMETRY_TYPES = {
+    "point": "Point",
+    "line": "LineString",
+    "polygon": "Polygon",
+}
+
+_LAT_KEYS = {"lat", "latitude", "y"}
+_LNG_KEYS = {"lng", "lon", "long", "longitude", "x"}
+_GEOMETRY_KEYS = {"geometry", "geom", "the_geom"}
+
+
+class ImportError_(ValueError):
+    """Renamed to avoid shadowing the builtin ImportError."""
+
+
+@dataclass
+class ImportRow:
+    line_number: int
+    geometry: dict | None = None
+    field_data: dict = dc_field(default_factory=dict)
+    error: str | None = None
+
+
+def _match_field_key(header: str, field_keys: set[str]) -> str:
+    """Map an incoming column/property name to a known field_key when
+    possible (exact match, then case-insensitive, then slugified), else
+    fall back to the slugified header itself — an unrecognized column
+    still gets stored in field_data, it just won't be a "known" field the
+    form builder or dashboards render specially unless one is later
+    defined with that same key.
+    """
+    if header in field_keys:
+        return header
+    lowered = {k.lower(): k for k in field_keys}
+    if header.lower() in lowered:
+        return lowered[header.lower()]
+    slug = slugify_key(header)
+    if slug in field_keys:
+        return slug
+    return slug
+
+
+def _build_point_geometry(row: dict) -> dict | None:
+    lat = lng = None
+    for key, value in row.items():
+        low = key.strip().lower()
+        if low in _LAT_KEYS and value not in (None, ""):
+            lat = value
+        elif low in _LNG_KEYS and value not in (None, ""):
+            lng = value
+    if lat is None or lng is None:
+        return None
+    try:
+        return {"type": "Point", "coordinates": [float(lng), float(lat)]}
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_geometry_column(row: dict) -> dict | None:
+    for key, value in row.items():
+        if key.strip().lower() in _GEOMETRY_KEYS and value not in (None, ""):
+            if isinstance(value, dict):
+                return value
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, dict) and "type" in parsed:
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                return None
+    return None
+
+
+def _flat_row_to_import_row(
+    row: dict, line_number: int, geometry_type: str, field_keys: set[str]
+) -> ImportRow:
+    consumed_keys: set[str] = set()
+
+    geometry = _extract_geometry_column(row)
+    if geometry is not None:
+        for key in row:
+            if key.strip().lower() in _GEOMETRY_KEYS:
+                consumed_keys.add(key)
+    elif geometry_type == "point":
+        geometry = _build_point_geometry(row)
+        if geometry is not None:
+            for key in row:
+                if key.strip().lower() in _LAT_KEYS | _LNG_KEYS:
+                    consumed_keys.add(key)
+
+    if geometry is None:
+        expected = "a 'geometry' column (GeoJSON)" if geometry_type != "point" else "latitude/longitude columns, or a 'geometry' column"
+        return ImportRow(line_number=line_number, error=f"No location found — expected {expected}")
+
+    if geometry.get("type") != GEOJSON_GEOMETRY_TYPES.get(geometry_type):
+        return ImportRow(
+            line_number=line_number,
+            error=f"Geometry type '{geometry.get('type')}' doesn't match this layer's type ({geometry_type})",
+        )
+
+    field_data = {}
+    for key, value in row.items():
+        if key in consumed_keys or value in (None, ""):
+            continue
+        field_data[_match_field_key(key.strip(), field_keys)] = value
+
+    return ImportRow(line_number=line_number, geometry=geometry, field_data=field_data)
+
+
+def parse_csv(text: str, geometry_type: str, field_keys: set[str]) -> list[ImportRow]:
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None:
+        raise ImportError_("This CSV has no header row / is empty.")
+    rows = []
+    for i, raw_row in enumerate(reader, start=2):  # header is line 1
+        rows.append(_flat_row_to_import_row(raw_row, i, geometry_type, field_keys))
+    return rows
+
+
+def parse_geojson(data: dict, geometry_type: str, field_keys: set[str]) -> list[ImportRow]:
+    features = data.get("features")
+    if not isinstance(features, list):
+        raise ImportError_("Not a valid GeoJSON FeatureCollection (missing 'features' array).")
+
+    rows = []
+    for i, feature in enumerate(features, start=1):
+        geometry = feature.get("geometry")
+        properties = feature.get("properties") or {}
+        if not isinstance(geometry, dict):
+            rows.append(ImportRow(line_number=i, error="Feature has no geometry"))
+            continue
+        if geometry.get("type") != GEOJSON_GEOMETRY_TYPES.get(geometry_type):
+            rows.append(
+                ImportRow(
+                    line_number=i,
+                    error=f"Geometry type '{geometry.get('type')}' doesn't match this layer's type ({geometry_type})",
+                )
+            )
+            continue
+        field_data = {
+            _match_field_key(str(k).strip(), field_keys): v for k, v in properties.items() if v not in (None, "")
+        }
+        rows.append(ImportRow(line_number=i, geometry=geometry, field_data=field_data))
+    return rows
+
+
+def parse_json(text: str, geometry_type: str, field_keys: set[str]) -> list[ImportRow]:
+    data = json.loads(text)
+
+    # GeoJSON FeatureCollection
+    if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+        return parse_geojson(data, geometry_type, field_keys)
+
+    if not isinstance(data, list):
+        raise ImportError_(
+            "Expected a JSON array of records, or a GeoJSON FeatureCollection."
+        )
+
+    rows = []
+    for i, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            rows.append(ImportRow(line_number=i, error="Not a JSON object"))
+            continue
+        # Native round-trip shape: {"geometry": {...}, "field_data": {...}}
+        geometry = item.get("geometry")
+        if isinstance(geometry, dict) and "type" in geometry and isinstance(item.get("field_data"), dict):
+            if geometry.get("type") != GEOJSON_GEOMETRY_TYPES.get(geometry_type):
+                rows.append(
+                    ImportRow(
+                        line_number=i,
+                        error=f"Geometry type '{geometry.get('type')}' doesn't match this layer's type ({geometry_type})",
+                    )
+                )
+                continue
+            field_data = {
+                _match_field_key(str(k).strip(), field_keys): v
+                for k, v in item["field_data"].items()
+                if v not in (None, "")
+            }
+            rows.append(ImportRow(line_number=i, geometry=geometry, field_data=field_data))
+            continue
+
+        # Flat shape: {"latitude": .., "longitude": .., "field1": ..., ...}
+        rows.append(_flat_row_to_import_row(item, i, geometry_type, field_keys))
+    return rows
+
+
+def parse_import_file(
+    filename: str, content: bytes, geometry_type: str, field_keys: set[str]
+) -> list[ImportRow]:
+    name = (filename or "").lower()
+    text = content.decode("utf-8-sig")  # tolerate a BOM from Excel-exported CSVs
+
+    if name.endswith(".csv"):
+        return parse_csv(text, geometry_type, field_keys)
+    if name.endswith(".geojson") or name.endswith(".json"):
+        return parse_json(text, geometry_type, field_keys)
+    raise ImportError_("Unsupported file type — upload a .csv, .json, or .geojson file.")

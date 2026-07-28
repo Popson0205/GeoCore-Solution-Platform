@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.app.core.slugify import slugify_key  # noqa: F401 — re-exported for existing importers
 from backend.app.core.visibility import VISIBILITY_OPERATORS
 
 FIELD_TYPES = {
@@ -31,11 +32,6 @@ COMPARE_OPERATORS = {
     "greater_or_equal",
     "less_or_equal",
 }
-
-
-def slugify_key(label: str) -> str:
-    key = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
-    return key or "field"
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +111,12 @@ class FieldDefinitionCreate(BaseModel):
     # When set, this field is server-computed; is_required is ignored for it.
     calculation: Optional[str] = None
     validation: Optional[FieldValidationRule] = None
+    # Only set by the XLSForm importer (core/xlsform.py), which needs the
+    # resulting field_key to match the XLSForm `name` column so converted
+    # relevant/calculation/constraint expressions (which reference that
+    # name) still resolve correctly. The form builder UI never sends
+    # this — it always derives field_key from the label.
+    field_key: Optional[str] = None
 
     @field_validator("field_type")
     @classmethod
@@ -245,6 +247,11 @@ class AssetTypeOut(BaseModel):
     field_definitions: list[FieldDefinitionOut] = []
 
     model_config = {"from_attributes": True}
+
+
+class XLSFormImportResult(BaseModel):
+    asset_type: AssetTypeOut
+    warnings: list[str] = []
 
 
 # ---------------------------------------------------------------------------

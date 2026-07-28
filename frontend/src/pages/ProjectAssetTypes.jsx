@@ -99,6 +99,73 @@ function EditFormPanel({ assetType, onSave, onCancel }) {
   )
 }
 
+function XLSFormImportPanel({ onImported }) {
+  const { authedFetch } = useAuth()
+  const { projectId } = useOutletContext()
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [warnings, setWarnings] = useState(null)
+  const [importedName, setImportedName] = useState('')
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    setWarnings(null)
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const result = await authedFetch(`/api/projects/${projectId}/asset-types/import-xlsform`, {
+        method: 'POST',
+        body: form,
+      })
+      setImportedName(result.asset_type.name)
+      setWarnings(result.warnings || [])
+      await onImported()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <section className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h2>Import an XLSForm</h2>
+      </div>
+      <p className="builder-hint">
+        Built a form the Survey123 / KoBo Collect / ODK way? Upload the .xlsx and GeoCore builds
+        the sections, fields, skip logic, calculations and validation from it — groups become
+        sections, repeats become repeat groups, a geopoint/geotrace/geoshape question sets the
+        layer's geometry type.
+      </p>
+      <label className="btn-secondary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+        {uploading ? 'Importing…' : '📄 Choose .xlsx file'}
+        <input type="file" accept=".xlsx,.xls" onChange={handleFile} disabled={uploading} style={{ display: 'none' }} />
+      </label>
+      {error && <p className="hint">{error}</p>}
+      {warnings !== null && (
+        <div style={{ marginTop: 10 }}>
+          <p className="ws-muted">
+            Imported <strong>{importedName}</strong>
+            {warnings.length > 0 ? ` with ${warnings.length} note${warnings.length === 1 ? '' : 's'}:` : ' cleanly — no issues.'}
+          </p>
+          {warnings.length > 0 && (
+            <ul className="hint" style={{ paddingLeft: 18, margin: 0 }}>
+              {warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function NewAssetTypeForm({ onCreated }) {
   const { authedFetch } = useAuth()
   const [name, setName] = useState('')
@@ -386,29 +453,31 @@ export default function ProjectAssetTypes() {
   }
 
   return (
-    <div className="ws-grid ws-grid-2">
-      {canManage ? (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>New asset type</h2>
-          </div>
-          <NewAssetTypeForm onCreated={refreshAssetTypes} />
-        </section>
-      ) : (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>New asset type</h2>
-          </div>
-          <p className="ws-muted">
-            Your role ({myRole}) can view asset types but not create or change them. Ask a
-            Project Manager, Administrator or Owner if you need a new one.
-          </p>
-        </section>
-      )}
+    <div>
+      {canManage && <XLSFormImportPanel onImported={refreshAssetTypes} />}
+      <div className="ws-grid ws-grid-2">
+        {canManage ? (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>New asset type</h2>
+            </div>
+            <NewAssetTypeForm onCreated={refreshAssetTypes} />
+          </section>
+        ) : (
+          <section className="panel">
+            <div className="panel-head">
+              <h2>New asset type</h2>
+            </div>
+            <p className="ws-muted">
+              Your role ({myRole}) can view asset types but not create or change them. Ask a
+              Project Manager, Administrator or Owner if you need a new one.
+            </p>
+          </section>
+        )}
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Existing asset types</h2>
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Existing asset types</h2>
           <span className="panel-count">{assetTypes.length}</span>
         </div>
         {error && <p className="hint">{error}</p>}
@@ -515,6 +584,7 @@ export default function ProjectAssetTypes() {
           </ul>
         )}
       </section>
+      </div>
     </div>
   )
 }

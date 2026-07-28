@@ -1,13 +1,14 @@
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_project_for_member, require_project_role
 from backend.app.core.database import get_db
 from backend.app.core.roles import PROJECT_MANAGER
+from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
 from backend.app.models.asset_type import AssetType, FieldDefinition, FormSection, SubmissionAssignee
 from backend.app.models.user import User
 from backend.app.schemas.asset_type import (
@@ -23,6 +24,7 @@ from backend.app.schemas.asset_type import (
     FormSectionOut,
     SubmissionEnableRequest,
     SubmissionStatusOut,
+    XLSFormImportResult,
     slugify_key,
 )
 
@@ -52,12 +54,13 @@ def _add_field(
     sort_order: int,
     used_field_keys: set[str],
 ) -> None:
+    base_key = payload.field_key if payload.field_key else slugify_key(payload.label)
     db.add(
         FieldDefinition(
             asset_type_id=asset_type_id,
             section_id=section_id,
             label=payload.label,
-            field_key=_unique_key(slugify_key(payload.label), used_field_keys),
+            field_key=_unique_key(base_key, used_field_keys),
             field_type=payload.field_type,
             options=payload.options,
             is_required=payload.is_required,
@@ -402,3 +405,94 @@ def remove_assignee(
         db.commit()
         db.refresh(asset_type)
     return _submission_status(asset_type)
+
+
+# ---------------------------------------------------------------------------
+# XLSForm import — build a form the way you'd build one in Survey123 or
+# KoBo Collect's XLSForm workflow, then bring it into GeoCore instead of
+# rebuilding it by hand in the form builder.
+# ---------------------------------------------------------------------------
+
+
+def _parsed_form_to_definition(parsed: ParsedForm) -> FormDefinition:
+    sections = []
+    for section in parsed.sections:
+        fields = []
+        for f in section.fields:
+            fields.append(
+                FieldDefinitionCreate(
+                    label=f.label,
+                    field_type=f.field_type,
+                    options=f.options,
+                    is_required=f.is_required,
+                    visibility=f.visibility,
+                    calculation=f.calculation,
+                    validation=f.validation,
+                    field_key=f.field_key,
+                )
+            )
+        sections.append(
+            FormSectionCreate(
+                title=section.title,
+                repeatable=section.repeatable,
+                repeat_label=section.repeat_label,
+                fields=fields,
+            )
+        )
+    return FormDefinition(sections=sections, fields=[])
+
+
+@router.post(
+    "/projects/{project_id}/asset-types/import-xlsform",
+    response_model=XLSFormImportResult,
+    status_code=201,
+)
+async def import_xlsform(
+    project_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload an .xlsx file built the way Survey123 / KoBo Collect /
+    ODK's XLSForm workflow expects (a 'survey' sheet, optionally
+    'choices' and 'settings') and get back a new asset type with its form
+    already built — sections from groups, repeats from begin/end repeat,
+    skip logic from `relevant`, calculated fields from `calculation`,
+    validation from `constraint`, and geometry type from a
+    geopoint/geotrace/geoshape question if present.
+
+    This is a best-effort conversion, not a full XLSForm engine — see
+    core/xlsform.py's module docstring. Anything it couldn't confidently
+    convert comes back in `warnings` rather than being silently dropped
+    or guessed at.
+    """
+    require_project_role(db, project_id, current_user.id, PROJECT_MANAGER)
+
+    if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=422, detail="Upload an .xlsx (or .xls) XLSForm file.")
+
+    content = await file.read()
+    try:
+        parsed = parse_xlsform(content, file.filename)
+    except XLSFormError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    definition = _parsed_form_to_definition(parsed)
+
+    asset_type = AssetType(
+        project_id=project_id,
+        name=parsed.name,
+        description=None,
+        geometry_type=parsed.geometry_type,
+        color="#2563eb",
+    )
+    db.add(asset_type)
+    db.flush()
+
+    _replace_form(db, asset_type, definition.sections, definition.fields)
+
+    db.commit()
+    asset_type = (
+        db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type.id).first()
+    )
+    return XLSFormImportResult(asset_type=_to_out(asset_type), warnings=parsed.warnings)

@@ -40,3 +40,22 @@ class RecordOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ImportRowError(BaseModel):
+    line: int
+    message: str
+
+
+class ImportSummary(BaseModel):
+    """Result of POST /projects/{id}/records/import — a bulk import never
+    aborts on the first bad row (blueprint section 2: this is meant to be
+    the fix for "data is stuck in spreadsheets", so it needs to tolerate
+    the messiness that implies). Every row is attempted independently;
+    `errors` lists exactly which ones didn't make it and why.
+    """
+
+    total_rows: int
+    created: int
+    skipped: int
+    errors: list[ImportRowError] = []
