@@ -3,10 +3,18 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 
+// Backend roles are snake_case identifiers (project_manager, data_collector,
+// ...) — fine for logic, not for display copy.
+function formatRole(role) {
+  return role ? role.replace(/_/g, ' ') : role
+}
+
 /**
  * GeoCore Dashboard — the "app" identity for analysis, the way ArcGIS
  * Dashboards is its own branded product. Picking a project here drops you
- * straight into that project's Dashboards tab.
+ * straight into that project's Dashboards tab. With exactly one
+ * organisation and one project there's nothing to pick, so it routes
+ * straight there.
  */
 export default function DashboardApp({ homePath = '/apps/dashboard' }) {
   const { status, authedFetch } = useAuth()
@@ -32,7 +40,16 @@ export default function DashboardApp({ homePath = '/apps/dashboard' }) {
   useEffect(() => {
     if (!activeOrg) return
     authedFetch(`/api/organisations/${activeOrg.id}/projects`)
-      .then(setProjects)
+      .then((data) => {
+        setProjects(data)
+        // Exactly one organisation and one project: nothing to pick,
+        // skip straight to its dashboards.
+        if (orgs.length === 1 && data.length === 1) {
+          navigate(`/workspace/organisations/${activeOrg.id}/projects/${data[0].id}/dashboards`, {
+            replace: true,
+          })
+        }
+      })
       .catch((err) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrg])
@@ -102,7 +119,7 @@ export default function DashboardApp({ homePath = '/apps/dashboard' }) {
                     </span>
                     <span className="gallery-card-body">
                       <strong>{org.name}</strong>
-                      <span className="ws-muted">{org.my_role}</span>
+                      <span className="ws-muted">{formatRole(org.my_role)}</span>
                     </span>
                   </button>
                 ))}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { portalPath } from '../config'
 
 // The three "apps" GeoCore currently ships. Each is really just a branded
 // entry point into functionality that already exists (asset types / form
@@ -8,6 +9,12 @@ import { useAuth } from '../context/AuthContext'
 // distinct products, the way ArcGIS Online's launcher fans out into
 // Survey123, Dashboards, Field Maps, etc. as separate-feeling apps that
 // all sit on the same underlying platform data.
+//
+// GeoCore Portal stays an in-bundle react-router route. Survey and
+// Dashboard are genuinely separate Vite bundles (survey.html /
+// dashboard.html — see vite.config.js), so they open in a new tab via a
+// real <a> rather than a router <Link>, which would try to client-side
+// navigate into a page this bundle doesn't have.
 const APPS = [
   {
     to: '/workspace',
@@ -17,14 +24,16 @@ const APPS = [
     icon: 'grid',
   },
   {
-    to: '/apps/survey',
+    href: portalPath('/survey.html'),
+    external: true,
     name: 'GeoCore Survey',
     tagline: 'Build & collect forms',
     color: '#058b8c',
     icon: 'clip',
   },
   {
-    to: '/apps/dashboard',
+    href: portalPath('/dashboard.html'),
+    external: true,
     name: 'GeoCore Dashboard',
     tagline: 'KPIs, charts & maps',
     color: '#7a2e8e',
@@ -77,17 +86,38 @@ function AppLauncher() {
       {open && (
         <div className="app-launcher-menu">
           <p className="app-launcher-heading">GeoCore apps</p>
-          {APPS.map((app) => (
-            <Link key={app.to} to={app.to} className="app-launcher-tile" onClick={() => setOpen(false)}>
-              <span className="app-launcher-tile-icon" style={{ background: app.color }}>
-                <Icon name={app.icon} size={20} />
-              </span>
-              <span>
-                <strong>{app.name}</strong>
-                <span className="app-launcher-tile-tagline">{app.tagline}</span>
-              </span>
-            </Link>
-          ))}
+          {APPS.map((app) => {
+            const tileBody = (
+              <>
+                <span className="app-launcher-tile-icon" style={{ background: app.color }}>
+                  <Icon name={app.icon} size={20} />
+                </span>
+                <span>
+                  <strong>{app.name}</strong>
+                  <span className="app-launcher-tile-tagline">{app.tagline}</span>
+                </span>
+              </>
+            )
+            // Survey/Dashboard are separate bundles, so they open in a new
+            // tab through a plain anchor; only the in-bundle Portal tile
+            // uses router Link.
+            return app.external ? (
+              <a
+                key={app.name}
+                href={app.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="app-launcher-tile"
+                onClick={() => setOpen(false)}
+              >
+                {tileBody}
+              </a>
+            ) : (
+              <Link key={app.name} to={app.to} className="app-launcher-tile" onClick={() => setOpen(false)}>
+                {tileBody}
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
