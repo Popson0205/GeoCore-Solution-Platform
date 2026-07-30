@@ -46,6 +46,26 @@ class RecordOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RecordListItem(BaseModel):
+    """A record as returned by the organisation- and survey-wide listing
+    endpoints. `geometry` is omitted by default to keep Portal-wide listings
+    light (a record's GeoJSON can dwarf the rest of the row); it's only
+    populated when the caller passes ?geometry=true — see routes/records.py.
+    """
+
+    id: uuid.UUID
+    organisation_id: uuid.UUID
+    survey_id: uuid.UUID
+    asset_type_id: uuid.UUID
+    project_id: Optional[uuid.UUID] = None
+    geometry: Optional[dict] = None
+    field_data: dict
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class ImportRowError(BaseModel):
     line: int
     message: str
