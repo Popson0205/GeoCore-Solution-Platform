@@ -1,15 +1,21 @@
+import logging
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_project_for_member, require_project_role
+from backend.app.api.deps_project import (
+    get_project_for_member,
+    get_survey_for_member,
+    require_survey_role,
+)
 from backend.app.core.database import get_db
 from backend.app.core.roles import PROJECT_MANAGER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
 from backend.app.models.asset_type import AssetType, FieldDefinition, FormSection, SubmissionAssignee
+from backend.app.models.survey import Survey
 from backend.app.models.user import User
 from backend.app.schemas.asset_type import (
     AssetTypeCreate,
@@ -29,10 +35,15 @@ from backend.app.schemas.asset_type import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _LOAD_OPTIONS = (
     selectinload(AssetType.sections).selectinload(FormSection.fields),
     selectinload(AssetType.field_definitions),
+    # The submission link (token/enabled/access) and its assignees live on
+    # the parent Survey now (Portal redesign Phase 1) — eager-load it so
+    # _submission_status below doesn't trigger a lazy round-trip per call.
+    selectinload(AssetType.survey).selectinload(Survey.assignees),
 )
 
 
@@ -153,7 +164,7 @@ def _to_out(asset_type: AssetType) -> AssetTypeOut:
         ]
     return AssetTypeOut(
         id=asset_type.id,
-        project_id=asset_type.project_id,
+        survey_id=asset_type.survey_id,
         name=asset_type.name,
         description=asset_type.description,
         geometry_type=asset_type.geometry_type,
@@ -163,19 +174,19 @@ def _to_out(asset_type: AssetType) -> AssetTypeOut:
     )
 
 
-@router.post("/projects/{project_id}/asset-types", response_model=AssetTypeOut, status_code=201)
+@router.post("/surveys/{survey_id}/asset-types", response_model=AssetTypeOut, status_code=201)
 def create_asset_type(
-    project_id: uuid.UUID,
+    survey_id: uuid.UUID,
     payload: AssetTypeCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Defining what a project collects is a structural change, reserved for
+    # Defining what a survey collects is a structural change, reserved for
     # Project Manager and above (blueprint section 13).
-    require_project_role(db, project_id, current_user.id, PROJECT_MANAGER)
+    require_survey_role(db, survey_id, current_user.id, PROJECT_MANAGER)
 
     asset_type = AssetType(
-        project_id=project_id,
+        survey_id=survey_id,
         name=payload.name,
         description=payload.description,
         geometry_type=payload.geometry_type,
@@ -193,17 +204,56 @@ def create_asset_type(
     return _to_out(asset_type)
 
 
-@router.get("/projects/{project_id}/asset-types", response_model=list[AssetTypeOut])
+@router.get("/surveys/{survey_id}/asset-types", response_model=list[AssetTypeOut])
 def list_asset_types(
-    project_id: uuid.UUID,
+    survey_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    get_project_for_member(db, project_id, current_user.id)
+    get_survey_for_member(db, survey_id, current_user.id)
     asset_types = (
         db.query(AssetType)
         .options(*_LOAD_OPTIONS)
-        .filter(AssetType.project_id == project_id)
+        .filter(AssetType.survey_id == survey_id)
+        .all()
+    )
+    return [_to_out(a) for a in asset_types]
+
+
+@router.get(
+    "/projects/{project_id}/asset-types",
+    response_model=list[AssetTypeOut],
+    deprecated=True,
+)
+def list_asset_types_by_project(
+    project_id: uuid.UUID,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Deprecated — asset types now live under Surveys, not Projects
+    directly (Portal redesign Phase 2, this Phase 5). Kept only so
+    clients still built against the old shape keep working: resolves
+    every Survey filed under this project and returns the union of their
+    asset types, i.e. what `GET /surveys/{survey_id}/asset-types` would
+    return for each of them combined. New integrations should call the
+    survey-scoped route directly.
+    """
+    get_project_for_member(db, project_id, current_user.id)
+    response.headers["Deprecation"] = "true"
+    logger.warning(
+        "Deprecated route called: GET /projects/%s/asset-types "
+        "(use GET /surveys/{survey_id}/asset-types instead)",
+        project_id,
+    )
+
+    survey_ids = [row[0] for row in db.query(Survey.id).filter(Survey.project_id == project_id).all()]
+    if not survey_ids:
+        return []
+    asset_types = (
+        db.query(AssetType)
+        .options(*_LOAD_OPTIONS)
+        .filter(AssetType.survey_id.in_(survey_ids))
         .all()
     )
     return [_to_out(a) for a in asset_types]
@@ -215,7 +265,7 @@ def _get_asset_type_for_member(db: Session, asset_type_id: uuid.UUID, user: User
     )
     if not asset_type:
         raise HTTPException(status_code=404, detail="Asset type not found")
-    get_project_for_member(db, asset_type.project_id, user.id)
+    get_survey_for_member(db, asset_type.survey_id, user.id)
     return asset_type
 
 
@@ -227,7 +277,7 @@ def _get_asset_type_for_role(
     )
     if not asset_type:
         raise HTTPException(status_code=404, detail="Asset type not found")
-    require_project_role(db, asset_type.project_id, user.id, minimum)
+    require_survey_role(db, asset_type.survey_id, user.id, minimum)
     return asset_type
 
 
@@ -296,19 +346,25 @@ def delete_asset_type(
 
 
 # ---------------------------------------------------------------------------
-# Submission links — "field officer only needs the link" (blueprint §7)
+# Submission links — "field officer only needs the link" (blueprint §7).
+# The link itself (token/enabled/access) and its assignees live on the
+# parent Survey, not the AssetType (Portal redesign Phase 1) — every asset
+# type in a survey shares that survey's one submission link. These
+# endpoints stay keyed by asset_type_id (unchanged URLs) but read/write
+# through `asset_type.survey`.
 # ---------------------------------------------------------------------------
 
 
 def _submission_status(asset_type: AssetType) -> SubmissionStatusOut:
+    survey = asset_type.survey
     return SubmissionStatusOut(
-        enabled=asset_type.submission_enabled,
-        access=asset_type.submission_access,
-        token=asset_type.submission_token if asset_type.submission_enabled else None,
-        public_path=f"/submit/{asset_type.submission_token}"
-        if (asset_type.submission_enabled and asset_type.submission_token)
+        enabled=survey.submission_enabled,
+        access=survey.submission_access,
+        token=survey.submission_token if survey.submission_enabled else None,
+        public_path=f"/submit/{survey.submission_token}"
+        if (survey.submission_enabled and survey.submission_token)
         else None,
-        assignees=[AssigneeOut.model_validate(a) for a in asset_type.assignees],
+        assignees=[AssigneeOut.model_validate(a) for a in survey.assignees],
     )
 
 
@@ -330,8 +386,8 @@ def enable_submission(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Turn on this asset type's submission link. `access="public"` means
-    anyone with the link can submit with no login; `access="assigned"`
+    """Turn on this asset type's survey's submission link. `access="public"`
+    means anyone with the link can submit with no login; `access="assigned"`
     restricts submissions to emails added via the assignees endpoints
     below. Either way, submissions still go through the exact same
     validation/calculation engine as an internal record (see
@@ -339,12 +395,13 @@ def enable_submission(
     can submit, never what's accepted.
     """
     asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
-    if not asset_type.submission_token or rotate:
-        asset_type.submission_token = secrets.token_urlsafe(24)
-    asset_type.submission_enabled = True
-    asset_type.submission_access = payload.access
+    survey = asset_type.survey
+    if not survey.submission_token or rotate:
+        survey.submission_token = secrets.token_urlsafe(24)
+    survey.submission_enabled = True
+    survey.submission_access = payload.access
     db.commit()
-    db.refresh(asset_type)
+    db.refresh(survey)
     return _submission_status(asset_type)
 
 
@@ -355,9 +412,10 @@ def disable_submission(
     current_user: User = Depends(get_current_user),
 ):
     asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
-    asset_type.submission_enabled = False
+    survey = asset_type.survey
+    survey.submission_enabled = False
     db.commit()
-    db.refresh(asset_type)
+    db.refresh(survey)
     return _submission_status(asset_type)
 
 
@@ -373,12 +431,13 @@ def add_assignee(
     current_user: User = Depends(get_current_user),
 ):
     asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    survey = asset_type.survey
     email = payload.email.strip().lower()
-    already = any(a.email.lower() == email for a in asset_type.assignees)
+    already = any(a.email.lower() == email for a in survey.assignees)
     if not already:
-        db.add(SubmissionAssignee(asset_type_id=asset_type.id, email=email, name=payload.name))
+        db.add(SubmissionAssignee(survey_id=survey.id, email=email, name=payload.name))
         db.commit()
-        db.refresh(asset_type)
+        db.refresh(survey)
     return _submission_status(asset_type)
 
 
@@ -393,17 +452,16 @@ def remove_assignee(
     current_user: User = Depends(get_current_user),
 ):
     asset_type = _get_asset_type_for_role(db, asset_type_id, current_user, PROJECT_MANAGER)
+    survey = asset_type.survey
     assignee = (
         db.query(SubmissionAssignee)
-        .filter(
-            SubmissionAssignee.id == assignee_id, SubmissionAssignee.asset_type_id == asset_type.id
-        )
+        .filter(SubmissionAssignee.id == assignee_id, SubmissionAssignee.survey_id == survey.id)
         .first()
     )
     if assignee:
         db.delete(assignee)
         db.commit()
-        db.refresh(asset_type)
+        db.refresh(survey)
     return _submission_status(asset_type)
 
 
@@ -443,12 +501,12 @@ def _parsed_form_to_definition(parsed: ParsedForm) -> FormDefinition:
 
 
 @router.post(
-    "/projects/{project_id}/asset-types/import-xlsform",
+    "/surveys/{survey_id}/asset-types/import-xlsform",
     response_model=XLSFormImportResult,
     status_code=201,
 )
 async def import_xlsform(
-    project_id: uuid.UUID,
+    survey_id: uuid.UUID,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -466,7 +524,7 @@ async def import_xlsform(
     convert comes back in `warnings` rather than being silently dropped
     or guessed at.
     """
-    require_project_role(db, project_id, current_user.id, PROJECT_MANAGER)
+    require_survey_role(db, survey_id, current_user.id, PROJECT_MANAGER)
 
     if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=422, detail="Upload an .xlsx (or .xls) XLSForm file.")
@@ -480,7 +538,7 @@ async def import_xlsform(
     definition = _parsed_form_to_definition(parsed)
 
     asset_type = AssetType(
-        project_id=project_id,
+        survey_id=survey_id,
         name=parsed.name,
         description=None,
         geometry_type=parsed.geometry_type,
@@ -496,3 +554,4 @@ async def import_xlsform(
         db.query(AssetType).options(*_LOAD_OPTIONS).filter(AssetType.id == asset_type.id).first()
     )
     return XLSFormImportResult(asset_type=_to_out(asset_type), warnings=parsed.warnings)
+
