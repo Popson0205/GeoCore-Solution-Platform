@@ -14,6 +14,17 @@ const RANK = {
 
 const GEOMETRY_TYPES = ['point', 'line', 'polygon']
 
+// Phase 8: this page is mounted at two places — the target
+// surveys/:surveyId/asset-types tab (real, survey-scoped, Phase 5 backend)
+// and the legacy projects/:projectId/asset-types tab (kept live via the
+// Phase 5 GET deprecation shim for listing). `surveyId` on outlet context
+// tells us which one we're in; everything that needs to build a
+// create/import URL goes through this so there's one place to change if a
+// third scope is ever added.
+function assetTypesBasePath({ surveyId, projectId }) {
+  return surveyId ? `/api/surveys/${surveyId}/asset-types` : `/api/projects/${projectId}/asset-types`
+}
+
 function EditDetailsForm({ assetType, onSave, onCancel }) {
   const [name, setName] = useState(assetType.name)
   const [description, setDescription] = useState(assetType.description || '')
@@ -101,7 +112,7 @@ function EditFormPanel({ assetType, onSave, onCancel }) {
 
 function XLSFormImportPanel({ onImported }) {
   const { authedFetch } = useAuth()
-  const { projectId } = useOutletContext()
+  const { surveyId, projectId } = useOutletContext()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [warnings, setWarnings] = useState(null)
@@ -116,7 +127,7 @@ function XLSFormImportPanel({ onImported }) {
     try {
       const form = new FormData()
       form.append('file', file)
-      const result = await authedFetch(`/api/projects/${projectId}/asset-types/import-xlsform`, {
+      const result = await authedFetch(`${assetTypesBasePath({ surveyId, projectId })}/import-xlsform`, {
         method: 'POST',
         body: form,
       })
@@ -175,7 +186,7 @@ function NewAssetTypeForm({ onCreated }) {
   const [sections, setSections] = useState(() => [emptySection('General')])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const { projectId } = useOutletContext()
+  const { surveyId, projectId } = useOutletContext()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -183,7 +194,7 @@ function NewAssetTypeForm({ onCreated }) {
     setSaving(true)
     setError('')
     try {
-      await authedFetch(`/api/projects/${projectId}/asset-types`, {
+      await authedFetch(assetTypesBasePath({ surveyId, projectId }), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -413,9 +424,10 @@ function SubmissionLinkPanel({ assetType }) {
 }
 
 export default function ProjectAssetTypes() {
-  const { assetTypes, refreshAssetTypes, myRole } = useOutletContext()
+  const { assetTypes, refreshAssetTypes, myRole, surveyId } = useOutletContext()
   const { authedFetch } = useAuth()
   const canManage = (RANK[myRole] ?? 0) >= RANK.project_manager
+  const scopeNoun = surveyId ? 'survey' : 'project'
 
   const [editingDetailsId, setEditingDetailsId] = useState(null)
   const [editingFormId, setEditingFormId] = useState(null)
@@ -484,7 +496,7 @@ export default function ProjectAssetTypes() {
         {assetTypes.length === 0 ? (
           <div className="empty-state">
             <p>No asset types yet.</p>
-            <span>Create one on the left to start defining what this project collects.</span>
+            <span>Create one on the left to start defining what this {scopeNoun} collects.</span>
           </div>
         ) : (
           <ul className="entity-list">

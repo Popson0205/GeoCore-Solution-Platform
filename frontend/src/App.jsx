@@ -74,26 +74,19 @@ export default function App() {
               the primary container — asset types move under
               surveys/:surveyId, and Records/Map/Attachments/Dashboards/
               Reports move up to the organisation. The org-scoped backend
-              for that second group (Phase 6) hasn't shipped, and the
-              frontend data-fetching cutover for all of it (Phase 8) hasn't
-              either — those five tabs, and the asset-types tab, render the
-              existing pages behind a PhaseNotice rather than real
-              org/survey-scoped data. Survey management itself (list,
-              create, rename, status, archive) IS fully live — it's plain
-              CRUD against the Phase 3 Survey API. */}
+              for that second group (Phase 6) still hasn't shipped, so
+              those five tabs still render the existing project pages
+              behind a PhaseNotice. Asset types (Phase 8) ARE cut over now:
+              this tab reads/writes the Phase 5 survey-scoped endpoint
+              directly, same as Survey management itself (list, create,
+              rename, status, archive), which has been plain CRUD against
+              the Phase 3 Survey API all along. */}
           <Route path="organisations/:orgId" element={<OrganisationDetail />}>
             <Route index element={<OrganisationOverview />} />
             <Route path="surveys" element={<SurveyList />} />
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>
               <Route index element={<SurveyOverview />} />
-              <Route
-                path="asset-types"
-                element={
-                  <Pending note="Asset types here still read the legacy project-scoped endpoint — the survey-scoped cutover for this page is Phase 8.">
-                    <ProjectAssetTypes />
-                  </Pending>
-                }
-              />
+              <Route path="asset-types" element={<ProjectAssetTypes />} />
             </Route>
             <Route
               path="records"
