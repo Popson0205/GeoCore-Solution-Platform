@@ -8,6 +8,11 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import OrganisationSettings from './pages/OrganisationSettings'
+import OrganisationDetail from './pages/OrganisationDetail'
+import OrganisationOverview from './pages/OrganisationOverview'
+import SurveyList from './pages/SurveyList'
+import SurveyDetail from './pages/SurveyDetail'
+import SurveyOverview from './pages/SurveyOverview'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectOverview from './pages/ProjectOverview'
 import ProjectAssetTypes from './pages/ProjectAssetTypes'
@@ -22,6 +27,21 @@ import PublicSubmit from './pages/PublicSubmit'
 import SurveyApp from './pages/SurveyApp'
 import DashboardApp from './pages/DashboardApp'
 import NotFound from './pages/NotFound'
+import PhaseNotice from './components/PhaseNotice'
+
+// Renders an existing page at its Phase 7 target URL, ahead of the backend
+// work (Phase 6, org-scoped records/map/dashboards/attachments/reports) or
+// frontend data-fetching cutover (Phase 8) that would make it actually read
+// organisation/survey-scoped data. The route is real; flag that the data
+// underneath isn't, yet.
+function Pending({ note, children }) {
+  return (
+    <>
+      <PhaseNotice>{note}</PhaseNotice>
+      {children}
+    </>
+  )
+}
 
 export default function App() {
   return (
@@ -49,6 +69,85 @@ export default function App() {
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="organisations/:orgId/settings" element={<OrganisationSettings />} />
+
+          {/* Target Portal hierarchy (Phase 7): Survey replaces Project as
+              the primary container — asset types move under
+              surveys/:surveyId, and Records/Map/Attachments/Dashboards/
+              Reports move up to the organisation. The org-scoped backend
+              for that second group (Phase 6) hasn't shipped, and the
+              frontend data-fetching cutover for all of it (Phase 8) hasn't
+              either — those five tabs, and the asset-types tab, render the
+              existing pages behind a PhaseNotice rather than real
+              org/survey-scoped data. Survey management itself (list,
+              create, rename, status, archive) IS fully live — it's plain
+              CRUD against the Phase 3 Survey API. */}
+          <Route path="organisations/:orgId" element={<OrganisationDetail />}>
+            <Route index element={<OrganisationOverview />} />
+            <Route path="surveys" element={<SurveyList />} />
+            <Route path="surveys/:surveyId" element={<SurveyDetail />}>
+              <Route index element={<SurveyOverview />} />
+              <Route
+                path="asset-types"
+                element={
+                  <Pending note="Asset types here still read the legacy project-scoped endpoint — the survey-scoped cutover for this page is Phase 8.">
+                    <ProjectAssetTypes />
+                  </Pending>
+                }
+              />
+            </Route>
+            <Route
+              path="records"
+              element={
+                <Pending note="Records here still read a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <ProjectRecords />
+                </Pending>
+              }
+            />
+            <Route
+              path="map"
+              element={
+                <Pending note="Map here still reads a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <ProjectMap />
+                </Pending>
+              }
+            />
+            <Route
+              path="attachments"
+              element={
+                <Pending note="Attachments here still read a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <ProjectAttachments />
+                </Pending>
+              }
+            />
+            <Route
+              path="dashboards"
+              element={
+                <Pending note="Dashboards here still read a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <ProjectDashboards />
+                </Pending>
+              }
+            />
+            <Route
+              path="dashboards/:dashboardId"
+              element={
+                <Pending note="Dashboard detail here still reads a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <DashboardDetail />
+                </Pending>
+              }
+            />
+            <Route
+              path="reports"
+              element={
+                <Pending note="Reports here still read a single project's data underneath — the organisation-scoped backend (Phase 6) hasn't shipped.">
+                  <ProjectReports />
+                </Pending>
+              }
+            />
+          </Route>
+
+          {/* Legacy Project-scoped tree — kept live, same spirit as the
+              backend's deprecation-shim pattern (Phase 5), until Phase 8
+              finishes cutting the pages above over to org/survey scoping. */}
           <Route
             path="organisations/:orgId/projects/:projectId"
             element={<ProjectDetail />}
