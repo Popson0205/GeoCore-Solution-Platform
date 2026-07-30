@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.core.roles import has_min_role
-from backend.app.models.organisation import OrganisationMember
+from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.project import Project
 from backend.app.models.survey import Survey
 
@@ -38,6 +38,28 @@ def require_org_role(
             detail=f"This action requires the '{minimum}' role or higher",
         )
     return membership
+
+
+def get_organisation_for_member(
+    db: Session, organisation_id: uuid.UUID, user_id: uuid.UUID
+) -> Organisation:
+    """Fetch an organisation and enforce that the current user is a member
+    of it (no role floor). The organisation-scoped analogue of
+    `get_project_for_member` — every Portal-scoped route (records,
+    attachments, dashboards, reports — Portal redesign Phase 2, this Phase
+    6) should route through this so the organisation boundary is checked
+    consistently in one place, the way project-scoped routes already do
+    via `get_project_for_member`.
+
+    Use `require_org_role` alongside this (or instead of it) where a
+    specific role is required, e.g. for writes.
+    """
+    organisation = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not organisation:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    if not get_membership(db, organisation_id, user_id):
+        raise HTTPException(status_code=403, detail="Not a member of this organisation")
+    return organisation
 
 
 def get_project_for_member(db: Session, project_id: uuid.UUID, user_id: uuid.UUID) -> Project:

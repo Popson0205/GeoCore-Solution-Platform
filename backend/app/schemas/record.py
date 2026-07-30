@@ -46,22 +46,17 @@ class RecordOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class RecordListItem(BaseModel):
-    """A record as returned by the organisation- and survey-wide listing
-    endpoints. `geometry` is omitted by default to keep Portal-wide listings
-    light (a record's GeoJSON can dwarf the rest of the row); it's only
-    populated when the caller passes ?geometry=true — see routes/records.py.
+class RecordGeometryOut(BaseModel):
+    """Slim shape for GET /organisations/{id}/records?geometry=true (Portal
+    redesign Phase 2, this Phase 6) — a Portal-wide map needs geometry +
+    just enough to style/filter a point, not every field_data value on
+    every record, which gets expensive at Portal scale.
     """
 
     id: uuid.UUID
-    organisation_id: uuid.UUID
-    survey_id: uuid.UUID
     asset_type_id: uuid.UUID
-    project_id: Optional[uuid.UUID] = None
-    geometry: Optional[dict] = None
-    field_data: dict
-    created_at: datetime
-    updated_at: datetime
+    survey_id: uuid.UUID
+    geometry: dict
 
     model_config = {"from_attributes": True}
 

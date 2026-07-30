@@ -18,7 +18,16 @@ class Dashboard(Base):
     __tablename__ = "dashboards"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    # The tenancy boundary (Portal redesign Phase 2, this Phase 6) — every
+    # access check resolves through this rather than through the (optional)
+    # project, the same shift Survey/Record made in Phase 1.
+    organisation_id = Column(
+        UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True
+    )
+    # Now just an optional folder tag, no longer the scope boundary —
+    # dashboards are scoped by organisation_id instead (Portal redesign
+    # Phase 2, this Phase 6).
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -28,6 +37,7 @@ class Dashboard(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    organisation = relationship("Organisation")
     project = relationship("Project", backref="dashboards")
     widgets = relationship(
         "DashboardWidget",

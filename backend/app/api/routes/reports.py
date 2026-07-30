@@ -1,40 +1,46 @@
 import io
+import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_project_for_member
+from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member
 from backend.app.core.database import get_db
 from backend.app.models.asset_type import AssetType
 from backend.app.models.attachment import Attachment
 from backend.app.models.record import Record
 from backend.app.models.report import Report
+from backend.app.models.survey import Survey
 from backend.app.models.user import User
 from backend.app.schemas.report import ReportOut
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
-def _build_summary(db: Session, project_id: uuid.UUID) -> dict:
-    asset_types = db.query(AssetType).filter(AssetType.project_id == project_id).all()
-    counts_by_type = dict(
-        db.query(Record.asset_type_id, func.count(Record.id))
-        .filter(Record.project_id == project_id)
-        .group_by(Record.asset_type_id)
-        .all()
-    )
-    attachment_count = (
-        db.query(func.count(Attachment.id))
-        .join(Record, Record.id == Attachment.record_id)
-        .filter(Record.project_id == project_id)
-        .scalar()
-        or 0
-    )
+def _build_summary_for_asset_types(db: Session, asset_types: list[AssetType]) -> dict:
+    asset_type_ids = [a.id for a in asset_types]
+    counts_by_type = {}
+    attachment_count = 0
+    if asset_type_ids:
+        counts_by_type = dict(
+            db.query(Record.asset_type_id, func.count(Record.id))
+            .filter(Record.asset_type_id.in_(asset_type_ids))
+            .group_by(Record.asset_type_id)
+            .all()
+        )
+        attachment_count = (
+            db.query(func.count(Attachment.id))
+            .join(Record, Record.id == Attachment.record_id)
+            .filter(Record.asset_type_id.in_(asset_type_ids))
+            .scalar()
+            or 0
+        )
     return {
         "asset_type_count": len(asset_types),
         "record_count": sum(counts_by_type.values()),
@@ -45,16 +51,103 @@ def _build_summary(db: Session, project_id: uuid.UUID) -> dict:
     }
 
 
-@router.post("/projects/{project_id}/reports", response_model=ReportOut, status_code=201)
-def generate_report(
-    project_id: uuid.UUID,
+def _build_organisation_summary(db: Session, organisation_id: uuid.UUID) -> dict:
+    asset_types = (
+        db.query(AssetType)
+        .join(Survey, Survey.id == AssetType.survey_id)
+        .filter(Survey.organisation_id == organisation_id)
+        .all()
+    )
+    return _build_summary_for_asset_types(db, asset_types)
+
+
+def _build_project_summary(db: Session, project_id: uuid.UUID) -> dict:
+    asset_types = (
+        db.query(AssetType)
+        .join(Survey, Survey.id == AssetType.survey_id)
+        .filter(Survey.project_id == project_id)
+        .all()
+    )
+    return _build_summary_for_asset_types(db, asset_types)
+
+
+# ---------------------------------------------------------------------------
+# Organisation-scoped (Portal-wide) reports (Portal redesign Phase 2, this
+# Phase 6) — Reports centralize to Portal scope alongside Dashboards, per
+# the 10-phase plan's Phase 6 "Open question" recommendation, since a
+# report that can't see cross-survey data would otherwise be the one
+# artifact left behind by the rest of the redesign.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/organisations/{organisation_id}/reports", response_model=ReportOut, status_code=201)
+def generate_report_for_organisation(
+    organisation_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = get_project_for_member(db, project_id, current_user.id)
-    summary = _build_summary(db, project_id)
+    organisation = get_organisation_for_member(db, organisation_id, current_user.id)
+    summary = _build_organisation_summary(db, organisation_id)
 
     report = Report(
+        organisation_id=organisation_id,
+        project_id=None,
+        title=f"{organisation.name} report — {datetime.now(timezone.utc):%Y-%m-%d}",
+        summary=summary,
+        generated_by=current_user.id,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
+@router.get("/organisations/{organisation_id}/reports", response_model=list[ReportOut])
+def list_reports_for_organisation(
+    organisation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    get_organisation_for_member(db, organisation_id, current_user.id)
+    return (
+        db.query(Report)
+        .filter(Report.organisation_id == organisation_id)
+        .order_by(Report.created_at.desc())
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Deprecated project-scoped routes — kept so clients still built against the
+# old shape keep working. New integrations should use the organisation-
+# scoped routes above.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/projects/{project_id}/reports", response_model=ReportOut, status_code=201, deprecated=True
+)
+def generate_report(
+    project_id: uuid.UUID,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Deprecated — use `POST /organisations/{organisation_id}/reports`
+    for a Portal-wide report. Kept for old clients wanting a report scoped
+    to just this project's surveys.
+    """
+    project = get_project_for_member(db, project_id, current_user.id)
+    response.headers["Deprecation"] = "true"
+    logger.warning(
+        "Deprecated route called: POST /projects/%s/reports "
+        "(use POST /organisations/{organisation_id}/reports instead)",
+        project_id,
+    )
+    summary = _build_project_summary(db, project_id)
+
+    report = Report(
+        organisation_id=project.organisation_id,
         project_id=project_id,
         title=f"{project.name} report — {datetime.now(timezone.utc):%Y-%m-%d}",
         summary=summary,
@@ -66,13 +159,26 @@ def generate_report(
     return report
 
 
-@router.get("/projects/{project_id}/reports", response_model=list[ReportOut])
+@router.get(
+    "/projects/{project_id}/reports", response_model=list[ReportOut], deprecated=True
+)
 def list_reports(
     project_id: uuid.UUID,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Deprecated — use `GET /organisations/{organisation_id}/reports`
+    and filter client-side by `project_id` if you still want the folder
+    view.
+    """
     get_project_for_member(db, project_id, current_user.id)
+    response.headers["Deprecation"] = "true"
+    logger.warning(
+        "Deprecated route called: GET /projects/%s/reports "
+        "(use GET /organisations/{organisation_id}/reports instead)",
+        project_id,
+    )
     return (
         db.query(Report)
         .filter(Report.project_id == project_id)
@@ -85,7 +191,7 @@ def _get_report_for_member(db: Session, report_id: uuid.UUID, user: User) -> Rep
     report = db.query(Report).filter(Report.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    get_project_for_member(db, report.project_id, user.id)
+    get_organisation_for_member(db, report.organisation_id, user.id)
     return report
 
 
@@ -106,7 +212,7 @@ def render_report_pdf(report: Report) -> io.BytesIO:
 
     y = height - 25 * mm
     pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(20 * mm, y, "GeoCore Project Report")
+    pdf.drawString(20 * mm, y, "GeoCore Report")
     y -= 10 * mm
     pdf.setFont("Helvetica", 12)
     pdf.drawString(20 * mm, y, report.title)

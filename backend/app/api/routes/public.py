@@ -8,6 +8,12 @@ knowing the project's `share_token`, and only while `share_enabled` is True
 lookup here filters by (share_token AND share_enabled) together and returns
 a generic 404 either way, so a disabled or wrong token can't be used to
 probe for a project's existence.
+
+Asset types/records are resolved through each project's Surveys rather than
+a direct `project_id` column (Portal redesign Phase 1: AssetType no longer
+carries its own project_id, and Record.project_id is now only an optional
+folder tag) — see routes/asset_types.py and routes/records.py for the same
+pattern on the authenticated side.
 """
 
 import uuid
@@ -22,6 +28,7 @@ from backend.app.models.asset_type import AssetType, FormSection, SubmissionAssi
 from backend.app.models.project import Project
 from backend.app.models.record import Record
 from backend.app.models.report import Report
+from backend.app.models.survey import Survey
 from backend.app.schemas.asset_type import AssetTypeOut, PublicSubmitReceipt, PublicSubmitRequest, PublicSubmitSchema
 from backend.app.schemas.project import ProjectOut
 from backend.app.schemas.record import Geometry, RecordOut
@@ -48,6 +55,10 @@ def _get_shared_project(db: Session, token: str) -> Project:
     return project
 
 
+def _survey_ids_for_project(db: Session, project_id: uuid.UUID) -> list[uuid.UUID]:
+    return [row[0] for row in db.query(Survey.id).filter(Survey.project_id == project_id).all()]
+
+
 @router.get("/{token}/project", response_model=ProjectOut)
 def public_project(token: str, db: Session = Depends(get_db)):
     return _get_shared_project(db, token)
@@ -56,20 +67,27 @@ def public_project(token: str, db: Session = Depends(get_db)):
 @router.get("/{token}/asset-types", response_model=list[AssetTypeOut])
 def public_asset_types(token: str, db: Session = Depends(get_db)):
     project = _get_shared_project(db, token)
-    return (
+    survey_ids = _survey_ids_for_project(db, project.id)
+    if not survey_ids:
+        return []
+    asset_types = (
         db.query(AssetType)
         .options(selectinload(AssetType.field_definitions))
-        .filter(AssetType.project_id == project.id)
+        .filter(AssetType.survey_id.in_(survey_ids))
         .all()
     )
+    return [_asset_type_to_out(a) for a in asset_types]
 
 
 @router.get("/{token}/records", response_model=list[RecordOut])
 def public_records(token: str, db: Session = Depends(get_db)):
     project = _get_shared_project(db, token)
+    survey_ids = _survey_ids_for_project(db, project.id)
+    if not survey_ids:
+        return []
     return (
         db.query(Record)
-        .filter(Record.project_id == project.id)
+        .filter(Record.survey_id.in_(survey_ids))
         .order_by(Record.created_at.desc())
         .all()
     )
@@ -108,48 +126,74 @@ def public_report_pdf(token: str, report_id: uuid.UUID, db: Session = Depends(ge
 
 
 # ---------------------------------------------------------------------------
-# Submission links — an asset type's public/assigned data collection form.
-# Distinct from the project-level read-only share link above: this is
-# write-only (a person can submit a record, nothing else) and scoped to
-# one asset type's form. See models/asset_type.py's submission_* columns.
+# Submission links — a Survey's public/assigned data collection form. The
+# link itself (token/enabled/access) and its assignees live on the Survey,
+# not on any one AssetType (Portal redesign Phase 1) — every asset type in
+# the survey shares it. Distinct from the project-level read-only share
+# link above: this is write-only (a person can submit a record, nothing
+# else). See models/survey.py's submission_* columns and
+# routes/asset_types.py's `_submission_status`, which manages the same
+# link from the authenticated side.
+#
+# A submission link covers every asset type in its survey, but a public
+# submitter still needs to pick one to fill in. Where a survey has more
+# than one asset type, this MVP offers only the first (by creation order)
+# — the same simplification the schema forces today, since
+# PublicSubmitSchema returns a single `asset_type`. Surveys with exactly
+# one asset type (the common case) are unaffected.
 # ---------------------------------------------------------------------------
 
 
-def _get_asset_type_for_submission(db: Session, token: str) -> AssetType:
+def _get_survey_for_submission(db: Session, token: str) -> Survey:
+    survey = (
+        db.query(Survey)
+        .filter(Survey.submission_token == token, Survey.submission_enabled.is_(True))
+        .first()
+    )
+    if not survey:
+        raise HTTPException(status_code=404, detail="This submission link is invalid or disabled")
+    return survey
+
+
+def _primary_asset_type_for_submission(db: Session, survey: Survey) -> AssetType:
     asset_type = (
         db.query(AssetType)
         .options(*_ASSET_TYPE_LOAD)
-        .filter(AssetType.submission_token == token, AssetType.submission_enabled.is_(True))
+        .filter(AssetType.survey_id == survey.id)
+        .order_by(AssetType.created_at)
         .first()
     )
     if not asset_type:
-        raise HTTPException(status_code=404, detail="This submission link is invalid or disabled")
+        raise HTTPException(
+            status_code=404, detail="This survey has no form to submit to yet"
+        )
     return asset_type
 
 
 @router.get("/submit/{token}", response_model=PublicSubmitSchema)
 def public_submit_schema(token: str, db: Session = Depends(get_db)):
-    asset_type = _get_asset_type_for_submission(db, token)
-    project = db.query(Project).filter(Project.id == asset_type.project_id).first()
+    survey = _get_survey_for_submission(db, token)
+    asset_type = _primary_asset_type_for_submission(db, survey)
     return PublicSubmitSchema(
-        project_name=project.name if project else "",
-        access=asset_type.submission_access,
+        project_name=survey.title,
+        access=survey.submission_access,
         asset_type=_asset_type_to_out(asset_type),
     )
 
 
 @router.post("/submit/{token}", response_model=PublicSubmitReceipt, status_code=201)
 def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session = Depends(get_db)):
-    asset_type = _get_asset_type_for_submission(db, token)
+    survey = _get_survey_for_submission(db, token)
+    asset_type = _primary_asset_type_for_submission(db, survey)
 
-    if asset_type.submission_access == "assigned":
+    if survey.submission_access == "assigned":
         email = (payload.submitter_email or "").strip().lower()
         if not email:
             raise HTTPException(status_code=422, detail=["An email is required to submit this form"])
         assigned = (
             db.query(SubmissionAssignee)
             .filter(
-                SubmissionAssignee.asset_type_id == asset_type.id,
+                SubmissionAssignee.survey_id == survey.id,
                 SubmissionAssignee.email == email,
             )
             .first()
@@ -173,7 +217,9 @@ def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session =
         raise HTTPException(status_code=422, detail=exc.errors)
 
     record = Record(
-        project_id=asset_type.project_id,
+        organisation_id=survey.organisation_id,
+        survey_id=survey.id,
+        project_id=survey.project_id,
         asset_type_id=asset_type.id,
         geometry=geometry.model_dump(),
         field_data=processed_field_data,

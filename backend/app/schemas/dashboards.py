@@ -16,6 +16,10 @@ WIDGET_TYPES = {"kpi", "bar_chart", "pie_chart", "line_chart", "table", "map", "
 class DashboardCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    # Optional folder tag when creating via the org-wide route (Portal
+    # redesign Phase 2, this Phase 6) — must belong to the same
+    # organisation as the route's organisation_id if given.
+    project_id: Optional[uuid.UUID] = None
 
 
 class DashboardUpdate(BaseModel):
@@ -66,7 +70,10 @@ class WidgetOut(BaseModel):
 
 class DashboardOut(BaseModel):
     id: uuid.UUID
-    project_id: uuid.UUID
+    # Scope now lives on organisation_id; project_id is an optional folder
+    # tag (Portal redesign Phase 2, this Phase 6).
+    organisation_id: uuid.UUID
+    project_id: Optional[uuid.UUID] = None
     name: str
     description: Optional[str] = None
     updated_at: datetime
@@ -91,12 +98,20 @@ class FeatureLayerOut(BaseModel):
     """One asset type, discoverable as a dashboard data source from
     anywhere in the organisation — not just the dashboard's own project.
     See GET /organisations/{id}/feature-layers.
+
+    An asset type's real parent is its Survey (Portal redesign Phase 1),
+    not a Project directly, so this is keyed by survey_id/survey_title.
+    project_id/project_name are only populated when that survey happens to
+    sit under a project folder (a survey may live directly under the
+    organisation with no project at all).
     """
 
     asset_type_id: uuid.UUID
     name: str
     color: str
     geometry_type: str
-    project_id: uuid.UUID
-    project_name: str
+    survey_id: uuid.UUID
+    survey_title: str
+    project_id: Optional[uuid.UUID] = None
+    project_name: Optional[str] = None
     record_count: int
