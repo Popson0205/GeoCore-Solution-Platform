@@ -541,15 +541,6 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .empty-state p { font-weight: 600; color: var(--ws-text); margin-bottom: 4px; }
 .ws-muted { color: var(--ws-text-muted); font-size: 0.9rem; }
 
-.phase-notice {
-  border: 1px solid var(--amber-soft);
-  background: var(--amber-soft);
-  border-radius: 6px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
-}
-.phase-notice p { margin: 6px 0 0; color: var(--ws-text); font-size: 0.88rem; line-height: 1.5; }
-
 .coming-soon-panel { text-align: left; }
 .coming-soon-badge {
   display: inline-block;

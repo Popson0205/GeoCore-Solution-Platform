@@ -12,22 +12,18 @@ function formatRole(role) {
 /**
  * GeoCore Survey — the "app" identity for building forms and collecting
  * data, the way Survey123 is its own branded product sitting on top of
- * the same ArcGIS Online organisation.
- *
- * Portal redesign Phase 7: this now picks a Survey rather than a Project —
- * Survey is the primary container for asset types going forward, and a
- * Project is just an optional folder a Survey may or may not sit inside.
- * With exactly one organisation and one survey there's nothing to pick, so
- * it routes straight into the form builder. Otherwise, picking a survey
- * navigates straight into the builder too — submission-link sharing lives
- * there (the asset-types tab), not duplicated on this landing screen.
+ * the same ArcGIS Online organisation. With exactly one organisation and
+ * one project there's nothing to pick, so it routes straight into the
+ * form builder. Otherwise, picking a project navigates straight into the
+ * builder too — submission-link sharing lives there (ProjectAssetTypes),
+ * not duplicated on this landing screen.
  */
 export default function SurveyApp({ homePath = '/apps/survey' }) {
   const { status, authedFetch } = useAuth()
   const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
   const [activeOrg, setActiveOrg] = useState(null)
-  const [surveys, setSurveys] = useState([])
+  const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -45,13 +41,13 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
 
   useEffect(() => {
     if (!activeOrg) return
-    authedFetch(`/api/organisations/${activeOrg.id}/surveys`)
+    authedFetch(`/api/organisations/${activeOrg.id}/projects`)
       .then((data) => {
-        setSurveys(data)
-        // Exactly one organisation and one survey: nothing to pick, skip
-        // straight to the builder.
+        setProjects(data)
+        // Exactly one organisation and one project: nothing to pick,
+        // skip straight to the builder.
         if (orgs.length === 1 && data.length === 1) {
-          navigate(`/workspace/organisations/${activeOrg.id}/surveys/${data[0].id}/asset-types`, {
+          navigate(`/workspace/organisations/${activeOrg.id}/projects/${data[0].id}/asset-types`, {
             replace: true,
           })
         }
@@ -136,29 +132,29 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
           {activeOrg && (
             <section className="panel">
               <div className="panel-head">
-                <h2>{activeOrg.name} — surveys</h2>
-                <span className="panel-count">{surveys.length}</span>
+                <h2>{activeOrg.name} — projects</h2>
+                <span className="panel-count">{projects.length}</span>
               </div>
-              {surveys.length === 0 ? (
+              {projects.length === 0 ? (
                 <div className="empty-state">
-                  <p>No surveys yet.</p>
-                  <span>Create one in GeoCore Portal's Surveys tab, then come back here to build its form.</span>
+                  <p>No projects yet.</p>
+                  <span>Create one in GeoCore Portal, then come back here to build its form.</span>
                 </div>
               ) : (
                 <div className="gallery-grid">
-                  {surveys.map((s) => (
+                  {projects.map((p) => (
                     <button
-                      key={s.id}
+                      key={p.id}
                       className="gallery-card is-link"
                       onClick={() =>
-                        navigate(`/workspace/organisations/${activeOrg.id}/surveys/${s.id}/asset-types`)
+                        navigate(`/workspace/organisations/${activeOrg.id}/projects/${p.id}/asset-types`)
                       }
                     >
                       <span className="gallery-card-thumb" style={{ background: '#046566' }}>
-                        {s.title.slice(0, 2).toUpperCase()}
+                        {p.name.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="gallery-card-body">
-                        <strong>{s.title}</strong>
+                        <strong>{p.name}</strong>
                         <span className="ws-muted">Open form builder</span>
                       </span>
                     </button>
@@ -172,3 +168,4 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
     </div>
   )
 }
+
