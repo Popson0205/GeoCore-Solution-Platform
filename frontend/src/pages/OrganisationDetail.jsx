@@ -20,8 +20,38 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
   const { orgId } = useParams()
   const { authedFetch } = useAuth()
   const [org, setOrg] = useState(null)
+  const [assetTypes, setAssetTypes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // Records/Map/Attachments/Dashboards/Reports need the full set of asset
+  // types across every survey in the org (e.g. to label a record by its
+  // asset type, or resolve a record's `survey_id` on create). There's no
+  // single org-scoped asset-types endpoint (Phase 5 only added the
+  // survey-scoped one), so this fetches the org's surveys and flattens
+  // each survey's asset types into one list (Portal redesign Phase 8).
+  useEffect(() => {
+    let cancelled = false
+    async function loadAssetTypes() {
+      try {
+        const surveys = await authedFetch(`/api/organisations/${orgId}/surveys`)
+        if (cancelled) return
+        const perSurvey = await Promise.all(
+          surveys.map((s) =>
+            authedFetch(`/api/surveys/${s.id}/asset-types`).catch(() => [])
+          )
+        )
+        if (cancelled) return
+        setAssetTypes(perSurvey.flat())
+      } catch {
+        if (!cancelled) setAssetTypes([])
+      }
+    }
+    loadAssetTypes()
+    return () => {
+      cancelled = true
+    }
+  }, [orgId, authedFetch])
 
   useEffect(() => {
     let cancelled = false
@@ -103,15 +133,15 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
           org,
           orgId,
           myRole: org?.my_role || 'viewer',
-          // Records/Map/Attachments/Dashboards/Reports below are mounted at
-          // their target org-scoped URL ahead of the org-scoped backend
-          // (Phase 6) and the frontend data-fetching cutover (Phase 8) —
-          // they still expect a `projectId`/`assetTypes` shaped context from
-          // their old life under ProjectDetail. Leaving these empty/undefined
-          // here means those pages render but can't resolve real data yet;
-          // each such route is wrapped in a PhaseNotice banner in App.jsx.
+          // Records/Map/Attachments/Dashboards/Reports below read `orgId`
+          // off this context and use it to hit the org-scoped API instead
+          // of a `projectId`-scoped one (Portal redesign Phase 8).
+          // `projectId` is intentionally left undefined here — these pages
+          // treat "orgId present, projectId absent" as "use the org-scoped
+          // routes" (mirroring the surveyId/projectId branch already used
+          // by ProjectAssetTypes.jsx).
           projectId: undefined,
-          assetTypes: [],
+          assetTypes,
         }}
       />
     </div>

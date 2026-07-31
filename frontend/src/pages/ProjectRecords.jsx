@@ -90,7 +90,7 @@ function ImportDataPanel({ projectId, assetType, onImported }) {
 }
 
 export default function ProjectRecords() {
-  const { projectId, assetTypes, myRole } = useOutletContext()
+  const { orgId, projectId, assetTypes, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
   const canWrite = (RANK[myRole] ?? 0) >= RANK.data_collector
   const canDelete = (RANK[myRole] ?? 0) >= RANK.project_manager
@@ -111,10 +111,15 @@ export default function ProjectRecords() {
     [assetTypes, selectedAssetTypeId]
   )
 
+  // Portal-scoped hierarchy (orgId set, projectId not) reads every record
+  // across every survey in the org; the legacy Project tree keeps reading
+  // one project's records (Portal redesign Phase 8).
   async function loadRecords() {
     setLoading(true)
     try {
-      const data = await authedFetch(`/api/projects/${projectId}/records`)
+      const data = orgId
+        ? await authedFetch(`/api/organisations/${orgId}/records`)
+        : await authedFetch(`/api/projects/${projectId}/records`)
       setRecords(data)
     } catch (err) {
       setError(err.message)
@@ -126,7 +131,7 @@ export default function ProjectRecords() {
   useEffect(() => {
     loadRecords()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [orgId, projectId])
 
   useEffect(() => {
     if (assetTypes.length && !selectedAssetTypeId) {
@@ -180,7 +185,13 @@ export default function ProjectRecords() {
         })
         setEditingRecordId(null)
       } else {
-        await authedFetch(`/api/projects/${projectId}/records`, {
+        // Creation is keyed by survey, not project, once records are
+        // org-scoped — the survey comes off the chosen asset type, since
+        // every asset type now belongs to exactly one survey.
+        const createPath = orgId
+          ? `/api/surveys/${selectedAssetType.survey_id}/records`
+          : `/api/projects/${projectId}/records`
+        await authedFetch(createPath, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -235,7 +246,11 @@ export default function ProjectRecords() {
 
   return (
     <div>
-      {canWrite && (
+      {/* Bulk import still only has a project-scoped backend route
+          (`POST /projects/{project_id}/records/import`) — no survey- or
+          org-scoped equivalent has been added yet, so this stays
+          project-only until that's built. */}
+      {canWrite && projectId && (
         <ImportDataPanel projectId={projectId} assetType={selectedAssetType} onImported={loadRecords} />
       )}
       <div className="ws-grid ws-grid-2">

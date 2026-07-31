@@ -12,7 +12,7 @@ const RANK = {
 }
 
 export default function ProjectDashboards() {
-  const { projectId, myRole } = useOutletContext()
+  const { orgId, projectId, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
   const canCreate = (RANK[myRole] ?? 0) >= RANK.analyst
 
@@ -23,10 +23,15 @@ export default function ProjectDashboards() {
   const [description, setDescription] = useState('')
   const [creating, setCreating] = useState(false)
 
+  // Org-scoped mode lists/creates dashboards at the organisation directly;
+  // the legacy Project tree keeps using the project-scoped routes
+  // (Portal redesign Phase 8).
+  const listPath = orgId ? `/api/organisations/${orgId}/dashboards` : `/api/projects/${projectId}/dashboards`
+
   async function load() {
     setLoading(true)
     try {
-      const data = await authedFetch(`/api/projects/${projectId}/dashboards`)
+      const data = await authedFetch(listPath)
       setDashboards(data)
     } catch (err) {
       setError(err.message)
@@ -38,7 +43,7 @@ export default function ProjectDashboards() {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [orgId, projectId])
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -46,7 +51,7 @@ export default function ProjectDashboards() {
     setCreating(true)
     setError('')
     try {
-      await authedFetch(`/api/projects/${projectId}/dashboards`, {
+      await authedFetch(listPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description: description || null }),
@@ -111,7 +116,7 @@ export default function ProjectDashboards() {
             <p>No dashboards yet.</p>
             <span>
               {canCreate
-                ? 'Create one above — think KPIs, charts, and tables built on this project\'s records.'
+                ? `Create one above — think KPIs, charts, and tables built on ${orgId ? "this organisation's" : "this project's"} records.`
                 : 'A Project Analyst, Manager, Administrator or Owner can create one.'}
             </span>
           </div>

@@ -106,7 +106,7 @@ function SharePanel({ projectId, canManageShare }) {
 }
 
 export default function ProjectReports() {
-  const { projectId, myRole } = useOutletContext()
+  const { orgId, projectId, myRole } = useOutletContext()
   const { authedFetch, token } = useAuth()
   const canManageShare = (RANK[myRole] ?? 0) >= RANK.project_manager
   const canGenerate = (RANK[myRole] ?? 0) >= RANK.data_collector
@@ -115,9 +115,14 @@ export default function ProjectReports() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
+  // Org-scoped mode lists/generates reports at the organisation directly;
+  // the legacy Project tree keeps using the project-scoped routes
+  // (Portal redesign Phase 8).
+  const reportsPath = orgId ? `/api/organisations/${orgId}/reports` : `/api/projects/${projectId}/reports`
+
   async function loadReports() {
     try {
-      const data = await authedFetch(`/api/projects/${projectId}/reports`)
+      const data = await authedFetch(reportsPath)
       setReports(data)
     } catch (err) {
       setError(err.message)
@@ -129,13 +134,13 @@ export default function ProjectReports() {
   useEffect(() => {
     loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [orgId, projectId])
 
   async function handleGenerate() {
     setError('')
     setGenerating(true)
     try {
-      await authedFetch(`/api/projects/${projectId}/reports`, { method: 'POST' })
+      await authedFetch(reportsPath, { method: 'POST' })
       await loadReports()
     } catch (err) {
       setError(err.message)
@@ -164,7 +169,10 @@ export default function ProjectReports() {
 
   return (
     <div>
-      <SharePanel projectId={projectId} canManageShare={canManageShare} />
+      {/* Sharing still only has a project-scoped backend route
+          (`/projects/{project_id}/share`) — no org-scoped equivalent has
+          been added yet, so this stays project-only until that's built. */}
+      {projectId && <SharePanel projectId={projectId} canManageShare={canManageShare} />}
       <section className="panel">
         <div className="panel-head">
           <h2>Reports</h2>

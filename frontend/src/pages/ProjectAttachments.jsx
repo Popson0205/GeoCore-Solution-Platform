@@ -3,7 +3,7 @@ import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProjectAttachments() {
-  const { projectId, assetTypes } = useOutletContext()
+  const { orgId, projectId, assetTypes } = useOutletContext()
   const { authedFetch, token } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -15,7 +15,11 @@ export default function ProjectAttachments() {
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    authedFetch(`/api/projects/${projectId}/records`)
+    // Org-scoped mode lists every record in the org so any of its
+    // attachments are reachable here, instead of one project's records
+    // (Portal redesign Phase 8).
+    const path = orgId ? `/api/organisations/${orgId}/records` : `/api/projects/${projectId}/records`
+    authedFetch(path)
       .then((data) => {
         setRecords(data)
         if (!selectedRecordId && data.length) {
@@ -24,7 +28,7 @@ export default function ProjectAttachments() {
       })
       .catch((err) => setError(err.message))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId])
+  }, [orgId, projectId])
 
   async function loadAttachments(recordId) {
     if (!recordId) return

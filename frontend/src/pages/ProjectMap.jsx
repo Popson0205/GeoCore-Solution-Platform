@@ -32,7 +32,7 @@ function popupHtml(assetType, record) {
 }
 
 export default function ProjectMap() {
-  const { projectId, assetTypes } = useOutletContext()
+  const { orgId, projectId, assetTypes } = useOutletContext()
   const { authedFetch } = useAuth()
   const mapEl = useRef(null)
   const mapRef = useRef(null)
@@ -42,11 +42,16 @@ export default function ProjectMap() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    authedFetch(`/api/projects/${projectId}/records`)
+    // Full RecordOut shape is needed here (not the lightweight
+    // .../records/geometry endpoint) since popups read field_data —
+    // org-scoped mode just points at every record in the org instead of
+    // one project's (Portal redesign Phase 8).
+    const path = orgId ? `/api/organisations/${orgId}/records` : `/api/projects/${projectId}/records`
+    authedFetch(path)
       .then(setRecords)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [projectId, authedFetch])
+  }, [orgId, projectId, authedFetch])
 
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
