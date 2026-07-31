@@ -4,13 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import require_org_role, require_survey_role
+from backend.app.api.deps_project import get_membership, require_org_role, require_survey_role
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.models.project import Project
 from backend.app.models.survey import Survey
+from backend.app.models.survey_assignment import SurveyAssignment
 from backend.app.models.user import User
 from backend.app.schemas.survey import SurveyCreate, SurveyOut, SurveyUpdate
+from backend.app.schemas.survey_assignment import SurveyAssignmentCreate, SurveyAssignmentOut
 
 router = APIRouter()
 
@@ -116,4 +118,91 @@ def archive_survey(
     db.commit()
     db.refresh(survey)
     return survey
+
+
+# ---------------------------------------------------------------------------
+# Per-survey Data Collector assignment (Portal redesign Phase 9) — optional
+# scoping of which surveys a Data Collector may write to. Managed at the
+# same bar as survey editing (Project Manager+), since this is a
+# configuration action, not itself a data-collection one. See
+# deps_project.require_survey_role / _enforce_survey_assignment_scope for
+# how these rows actually change access.
+# ---------------------------------------------------------------------------
+
+
+def _assignment_to_out(assignment: SurveyAssignment) -> SurveyAssignmentOut:
+    return SurveyAssignmentOut(
+        id=assignment.id,
+        survey_id=assignment.survey_id,
+        user_id=assignment.user_id,
+        user_email=assignment.user.email,
+        created_at=assignment.created_at,
+    )
+
+
+@router.get("/surveys/{survey_id}/assignments", response_model=list[SurveyAssignmentOut])
+def list_survey_assignments(
+    survey_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    survey, _ = require_survey_role(db, survey_id, current_user.id, PROJECT_MANAGER)
+    assignments = db.query(SurveyAssignment).filter(SurveyAssignment.survey_id == survey.id).all()
+    return [_assignment_to_out(a) for a in assignments]
+
+
+@router.post(
+    "/surveys/{survey_id}/assignments",
+    response_model=SurveyAssignmentOut,
+    status_code=201,
+)
+def create_survey_assignment(
+    survey_id: uuid.UUID,
+    payload: SurveyAssignmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    survey, _ = require_survey_role(db, survey_id, current_user.id, PROJECT_MANAGER)
+
+    if not get_membership(db, survey.organisation_id, payload.user_id):
+        raise HTTPException(
+            status_code=404, detail="User is not a member of this organisation"
+        )
+
+    existing = (
+        db.query(SurveyAssignment)
+        .filter(
+            SurveyAssignment.survey_id == survey.id,
+            SurveyAssignment.user_id == payload.user_id,
+        )
+        .first()
+    )
+    if existing:
+        return _assignment_to_out(existing)
+
+    assignment = SurveyAssignment(survey_id=survey.id, user_id=payload.user_id)
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+    return _assignment_to_out(assignment)
+
+
+@router.delete("/surveys/{survey_id}/assignments/{user_id}", status_code=204)
+def delete_survey_assignment(
+    survey_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    survey, _ = require_survey_role(db, survey_id, current_user.id, PROJECT_MANAGER)
+    assignment = (
+        db.query(SurveyAssignment)
+        .filter(SurveyAssignment.survey_id == survey.id, SurveyAssignment.user_id == user_id)
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.delete(assignment)
+    db.commit()
+    return None
 

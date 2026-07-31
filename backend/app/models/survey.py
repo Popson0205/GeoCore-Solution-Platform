@@ -59,4 +59,10 @@ class Survey(Base):
     assignees = relationship(
         "SubmissionAssignee", back_populates="survey", cascade="all, delete-orphan"
     )
+    # Per-survey Data Collector scoping (Portal redesign Phase 9) — see
+    # models/survey_assignment.py for how presence/absence of rows here
+    # changes a Data Collector's write access.
+    scoped_assignments = relationship(
+        "SurveyAssignment", back_populates="survey", cascade="all, delete-orphan"
+    )
 

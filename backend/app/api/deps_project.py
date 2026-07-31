@@ -3,10 +3,11 @@ import uuid
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from backend.app.core.roles import has_min_role
+from backend.app.core.roles import DATA_COLLECTOR, has_min_role
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.project import Project
 from backend.app.models.survey import Survey
+from backend.app.models.survey_assignment import SurveyAssignment
 
 
 def get_membership(
@@ -138,12 +139,47 @@ def get_survey_for_member(db: Session, survey_id: uuid.UUID, user_id: uuid.UUID)
     return survey
 
 
+def _enforce_survey_assignment_scope(db: Session, survey: Survey, user_id: uuid.UUID) -> None:
+    """Data Collectors only (Portal redesign Phase 9): if this user has at
+    least one `SurveyAssignment` row anywhere in the survey's organisation,
+    their access narrows to exactly the surveys listed there. A user with
+    zero assignment rows in the org is unrestricted — their org role
+    applies unchanged, which is what keeps this purely opt-in.
+    """
+    has_any_assignment = (
+        db.query(SurveyAssignment.id)
+        .join(Survey, Survey.id == SurveyAssignment.survey_id)
+        .filter(
+            SurveyAssignment.user_id == user_id,
+            Survey.organisation_id == survey.organisation_id,
+        )
+        .first()
+        is not None
+    )
+    if not has_any_assignment:
+        return
+
+    is_assigned_to_this_survey = (
+        db.query(SurveyAssignment.id)
+        .filter(SurveyAssignment.survey_id == survey.id, SurveyAssignment.user_id == user_id)
+        .first()
+        is not None
+    )
+    if not is_assigned_to_this_survey:
+        raise HTTPException(
+            status_code=403, detail="You're not assigned to this survey"
+        )
+
+
 def require_survey_role(
     db: Session, survey_id: uuid.UUID, user_id: uuid.UUID, minimum: str
 ) -> tuple[Survey, OrganisationMember]:
     """Fetch a survey and enforce that the caller's role in its organisation
     is at least `minimum`. The survey-scoped analogue of
     `require_project_role` — use for any survey write (create/update/delete).
+
+    Also enforces per-survey Data Collector scoping (Portal redesign
+    Phase 9) — see `_enforce_survey_assignment_scope`.
     """
     survey, membership = get_survey_and_role(db, survey_id, user_id)
     if not has_min_role(membership.role, minimum):
@@ -151,4 +187,6 @@ def require_survey_role(
             status_code=403,
             detail=f"This action requires the '{minimum}' role or higher",
         )
+    if membership.role == DATA_COLLECTOR:
+        _enforce_survey_assignment_scope(db, survey, user_id)
     return survey, membership
