@@ -105,6 +105,11 @@ export default function Dashboard() {
             {showNewOrg ? 'Cancel' : 'New organisation'}
           </button>
           {activeOrg && (
+            <Link to={`/workspace/organisations/${activeOrg.id}`} className="hero-btn">
+              Open organisation
+            </Link>
+          )}
+          {activeOrg && (
             <Link to={`/workspace/organisations/${activeOrg.id}/settings`} className="hero-btn">
               Organisation settings
             </Link>

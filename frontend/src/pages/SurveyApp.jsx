@@ -12,18 +12,16 @@ function formatRole(role) {
 /**
  * GeoCore Survey — the "app" identity for building forms and collecting
  * data, the way Survey123 is its own branded product sitting on top of
- * the same ArcGIS Online organisation. With exactly one organisation and
- * one project there's nothing to pick, so it routes straight into the
- * form builder. Otherwise, picking a project navigates straight into the
- * builder too — submission-link sharing lives there (ProjectAssetTypes),
- * not duplicated on this landing screen.
+ * the same ArcGIS Online organisation. Lists Surveys directly (Portal
+ * redesign Phase 7 — Surveys are the primary data-collection container,
+ * not Projects) and routes straight into a survey's form builder.
  */
 export default function SurveyApp({ homePath = '/apps/survey' }) {
   const { status, authedFetch } = useAuth()
   const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
   const [activeOrg, setActiveOrg] = useState(null)
-  const [projects, setProjects] = useState([])
+  const [surveys, setSurveys] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -41,15 +39,16 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
 
   useEffect(() => {
     if (!activeOrg) return
-    authedFetch(`/api/organisations/${activeOrg.id}/projects`)
+    authedFetch(`/api/organisations/${activeOrg.id}/surveys`)
       .then((data) => {
-        setProjects(data)
-        // Exactly one organisation and one project: nothing to pick,
+        setSurveys(data)
+        // Exactly one organisation and one survey: nothing to pick,
         // skip straight to the builder.
         if (orgs.length === 1 && data.length === 1) {
-          navigate(`/workspace/organisations/${activeOrg.id}/projects/${data[0].id}/asset-types`, {
-            replace: true,
-          })
+          navigate(
+            `/workspace/organisations/${activeOrg.id}/surveys/${data[0].id}/asset-types`,
+            { replace: true },
+          )
         }
       })
       .catch((err) => setError(err.message))
@@ -132,29 +131,44 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
           {activeOrg && (
             <section className="panel">
               <div className="panel-head">
-                <h2>{activeOrg.name} — projects</h2>
-                <span className="panel-count">{projects.length}</span>
+                <h2>{activeOrg.name} — surveys</h2>
+                <span className="panel-count">{surveys.length}</span>
               </div>
-              {projects.length === 0 ? (
+              {surveys.length === 0 ? (
                 <div className="empty-state">
-                  <p>No projects yet.</p>
-                  <span>Create one in GeoCore Portal, then come back here to build its form.</span>
+                  <p>No surveys yet.</p>
+                  <span>
+                    Create one from{' '}
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/workspace/organisations/${activeOrg.id}/surveys`)
+                      }}
+                    >
+                      GeoCore Portal
+                    </a>
+                    , then come back here to build its form.
+                  </span>
                 </div>
               ) : (
                 <div className="gallery-grid">
-                  {projects.map((p) => (
+                  {surveys.map((s) => (
                     <button
-                      key={p.id}
+                      key={s.id}
                       className="gallery-card is-link"
                       onClick={() =>
-                        navigate(`/workspace/organisations/${activeOrg.id}/projects/${p.id}/asset-types`)
+                        navigate(`/workspace/organisations/${activeOrg.id}/surveys/${s.id}/asset-types`)
                       }
                     >
-                      <span className="gallery-card-thumb" style={{ background: '#046566' }}>
-                        {p.name.slice(0, 2).toUpperCase()}
+                      <span
+                        className="gallery-card-thumb"
+                        style={{ background: s.status === 'archived' ? '#6b7280' : '#046566' }}
+                      >
+                        {s.title.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="gallery-card-body">
-                        <strong>{p.name}</strong>
+                        <strong>{s.title}</strong>
                         <span className="ws-muted">Open form builder</span>
                       </span>
                     </button>

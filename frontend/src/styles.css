@@ -556,6 +556,16 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 }
 .coming-soon-panel h2 { font-size: 1.05rem; margin-bottom: 10px; color: var(--ws-text); }
 
+.phase-notice {
+  border: 1px solid var(--amber-soft);
+  background: var(--amber-soft);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.phase-notice .coming-soon-badge { margin-bottom: 6px; }
+.phase-notice p { color: var(--ws-text-muted); font-size: 0.88rem; line-height: 1.5; margin: 0; }
+
 /* =================================================================
    Project tabs + module UI (asset types, records, map, attachments, reports)
 ================================================================= */

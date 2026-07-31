@@ -101,7 +101,13 @@ function EditFormPanel({ assetType, onSave, onCancel }) {
 
 function XLSFormImportPanel({ onImported }) {
   const { authedFetch } = useAuth()
-  const { projectId } = useOutletContext()
+  // Mounted under either a Survey (Portal redesign Phase 7) or the legacy
+  // Project tree — surveyId wins when both happen to be present, since a
+  // Survey's asset types are the real target now (Phase 5's backend).
+  const { projectId, surveyId } = useOutletContext()
+  const importPath = surveyId
+    ? `/api/surveys/${surveyId}/asset-types/import-xlsform`
+    : `/api/projects/${projectId}/asset-types/import-xlsform`
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [warnings, setWarnings] = useState(null)
@@ -116,7 +122,7 @@ function XLSFormImportPanel({ onImported }) {
     try {
       const form = new FormData()
       form.append('file', file)
-      const result = await authedFetch(`/api/projects/${projectId}/asset-types/import-xlsform`, {
+      const result = await authedFetch(importPath, {
         method: 'POST',
         body: form,
       })
@@ -175,7 +181,10 @@ function NewAssetTypeForm({ onCreated }) {
   const [sections, setSections] = useState(() => [emptySection('General')])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const { projectId } = useOutletContext()
+  const { projectId, surveyId } = useOutletContext()
+  const createPath = surveyId
+    ? `/api/surveys/${surveyId}/asset-types`
+    : `/api/projects/${projectId}/asset-types`
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -183,7 +192,7 @@ function NewAssetTypeForm({ onCreated }) {
     setSaving(true)
     setError('')
     try {
-      await authedFetch(`/api/projects/${projectId}/asset-types`, {
+      await authedFetch(createPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
