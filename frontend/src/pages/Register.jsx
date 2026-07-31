@@ -38,6 +38,10 @@ export default function Register() {
   return (
     <main className="page auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
+        <span className="auth-logo">
+          <span className="auth-logo-mark">GC</span>
+          GeoCore
+        </span>
         <p className="card-eyebrow">Access</p>
         <h2>Create an account</h2>
         <p className="auth-sub">Set up your organisation's GeoCore workspace.</p>

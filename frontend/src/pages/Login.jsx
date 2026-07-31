@@ -39,6 +39,10 @@ export default function Login() {
   return (
     <main className="page auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
+        <span className="auth-logo">
+          <span className="auth-logo-mark">GC</span>
+          GeoCore
+        </span>
         <p className="card-eyebrow">Access</p>
         <h2>Sign in</h2>
         <p className="auth-sub">Welcome back — enter your workspace credentials.</p>
