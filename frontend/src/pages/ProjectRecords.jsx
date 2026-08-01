@@ -13,7 +13,7 @@ const RANK = {
   owner: 5,
 }
 
-function ImportDataPanel({ projectId, assetType, onImported }) {
+function ImportDataPanel({ projectId, survey, onImported }) {
   const { authedFetch } = useAuth()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -21,14 +21,14 @@ function ImportDataPanel({ projectId, assetType, onImported }) {
 
   async function handleFile(e) {
     const file = e.target.files?.[0]
-    if (!file || !assetType) return
+    if (!file || !survey) return
     setError('')
     setSummary(null)
     setUploading(true)
     try {
       const form = new FormData()
       form.append('file', file)
-      form.append('asset_type_id', assetType.id)
+      form.append('survey_id', survey.id)
       const result = await authedFetch(`/api/projects/${projectId}/records/import`, {
         method: 'POST',
         body: form,
@@ -43,7 +43,7 @@ function ImportDataPanel({ projectId, assetType, onImported }) {
     }
   }
 
-  if (!assetType) return null
+  if (!survey) return null
 
   return (
     <section className="panel" style={{ marginBottom: 20 }}>
@@ -51,7 +51,7 @@ function ImportDataPanel({ projectId, assetType, onImported }) {
         <h2>Import data</h2>
       </div>
       <p className="builder-hint">
-        Bring in existing data for <strong>{assetType.name}</strong> from a .csv, .json, or
+        Bring in existing data for <strong>{survey.title}</strong> from a .csv, .json, or
         .geojson file. CSV/flat JSON needs latitude/longitude columns (or a "geometry" column for
         lines/polygons); GeoJSON's geometry is used directly. Every row runs through the same
         validation and calculations a normal entry does — bad rows are skipped and listed, not
@@ -90,7 +90,7 @@ function ImportDataPanel({ projectId, assetType, onImported }) {
 }
 
 export default function ProjectRecords() {
-  const { orgId, projectId, assetTypes, myRole } = useOutletContext()
+  const { orgId, projectId, surveys, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
   const canWrite = (RANK[myRole] ?? 0) >= RANK.data_collector
   const canDelete = (RANK[myRole] ?? 0) >= RANK.project_manager
@@ -101,19 +101,19 @@ export default function ProjectRecords() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [errorList, setErrorList] = useState([])
-  const [selectedAssetTypeId, setSelectedAssetTypeId] = useState('')
+  const [selectedSurveyId, setSelectedSurveyId] = useState('')
   const [geometry, setGeometry] = useState(null)
   const [fieldData, setFieldData] = useState({})
   const [saving, setSaving] = useState(false)
 
-  const selectedAssetType = useMemo(
-    () => assetTypes.find((at) => at.id === selectedAssetTypeId) || null,
-    [assetTypes, selectedAssetTypeId]
+  const selectedSurvey = useMemo(
+    () => surveys.find((s) => s.id === selectedSurveyId) || null,
+    [surveys, selectedSurveyId]
   )
 
   // Portal-scoped hierarchy (orgId set, projectId not) reads every record
   // across every survey in the org; the legacy Project tree keeps reading
-  // one project's records (Portal redesign Phase 8).
+  // one project's records.
   async function loadRecords() {
     setLoading(true)
     try {
@@ -134,18 +134,18 @@ export default function ProjectRecords() {
   }, [orgId, projectId])
 
   useEffect(() => {
-    if (assetTypes.length && !selectedAssetTypeId) {
-      setSelectedAssetTypeId(assetTypes[0].id)
+    if (surveys.length && !selectedSurveyId) {
+      setSelectedSurveyId(surveys[0].id)
     }
-  }, [assetTypes, selectedAssetTypeId])
+  }, [surveys, selectedSurveyId])
 
-  function assetTypeById(id) {
-    return assetTypes.find((at) => at.id === id)
+  function surveyById(id) {
+    return surveys.find((s) => s.id === id)
   }
 
   function startEdit(record) {
     setEditingRecordId(record.id)
-    setSelectedAssetTypeId(record.asset_type_id)
+    setSelectedSurveyId(record.survey_id)
     setFieldData(record.field_data || {})
     setGeometry(record.geometry)
     setError('')
@@ -162,13 +162,13 @@ export default function ProjectRecords() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!selectedAssetType) return
+    if (!selectedSurvey) return
     setError('')
     setErrorList([])
 
     if (!geometry) {
       setError(
-        selectedAssetType.geometry_type === 'point'
+        selectedSurvey.geometry_type === 'point'
           ? 'Click the map (or use "Use my location") to set a location.'
           : 'Click the map to add points for this shape.'
       )
@@ -185,17 +185,12 @@ export default function ProjectRecords() {
         })
         setEditingRecordId(null)
       } else {
-        // Creation is keyed by survey, not project, once records are
-        // org-scoped — the survey comes off the chosen asset type, since
-        // every asset type now belongs to exactly one survey.
-        const createPath = orgId
-          ? `/api/surveys/${selectedAssetType.survey_id}/records`
-          : `/api/projects/${projectId}/records`
-        await authedFetch(createPath, {
+        // Creation is keyed directly by the chosen survey — one Record ==
+        // one filled-out Survey form (flat Survey123/KoBo model).
+        await authedFetch(`/api/surveys/${selectedSurvey.id}/records`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            asset_type_id: selectedAssetType.id,
             geometry,
             field_data: fieldData,
           }),
@@ -235,11 +230,11 @@ export default function ProjectRecords() {
     return `${geometry.type} (${geometry.coordinates.length} vertices)`
   }
 
-  if (assetTypes.length === 0) {
+  if (surveys.length === 0) {
     return (
       <div className="empty-state">
-        <p>No asset types yet.</p>
-        <span>Define one in "Asset types &amp; fields" before collecting records.</span>
+        <p>No surveys yet.</p>
+        <span>Create one and build its form before collecting records.</span>
       </div>
     )
   }
@@ -251,7 +246,7 @@ export default function ProjectRecords() {
           org-scoped equivalent has been added yet, so this stays
           project-only until that's built. */}
       {canWrite && projectId && (
-        <ImportDataPanel projectId={projectId} assetType={selectedAssetType} onImported={loadRecords} />
+        <ImportDataPanel projectId={projectId} survey={selectedSurvey} onImported={loadRecords} />
       )}
       <div className="ws-grid ws-grid-2">
       {canWrite ? (
@@ -266,35 +261,35 @@ export default function ProjectRecords() {
           </div>
           <form onSubmit={handleSubmit} className="stacked-form">
             <label className="form-label">
-              Asset type
+              Survey
               <select
-                value={selectedAssetTypeId}
+                value={selectedSurveyId}
                 disabled={!!editingRecordId}
                 onChange={(e) => {
-                  setSelectedAssetTypeId(e.target.value)
+                  setSelectedSurveyId(e.target.value)
                   setFieldData({})
                 }}
               >
-                {assetTypes.map((at) => (
-                  <option key={at.id} value={at.id}>
-                    {at.name}
+                {surveys.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
                   </option>
                 ))}
               </select>
             </label>
 
-            {selectedAssetType && (
+            {selectedSurvey && (
               <LocationPicker
-                geometryType={selectedAssetType.geometry_type}
+                geometryType={selectedSurvey.geometry_type}
                 initialGeometry={geometry}
                 onChange={setGeometry}
-                resetKey={editingRecordId || `new-${selectedAssetTypeId}`}
+                resetKey={editingRecordId || `new-${selectedSurveyId}`}
               />
             )}
 
-            {selectedAssetType && (
+            {selectedSurvey && (
               <FormSections
-                sections={selectedAssetType.sections}
+                sections={selectedSurvey.sections}
                 fieldData={fieldData}
                 setFieldData={setFieldData}
               />
@@ -340,12 +335,12 @@ export default function ProjectRecords() {
         ) : (
           <ul className="entity-list">
             {records.map((record) => {
-              const at = assetTypeById(record.asset_type_id)
+              const s = surveyById(record.survey_id)
               return (
                 <li key={record.id} className="record-row">
-                  <span className="color-dot" style={{ background: at?.color || '#999' }} />
+                  <span className="color-dot" style={{ background: s?.color || '#999' }} />
                   <div style={{ flex: 1 }}>
-                    <strong>{at?.name || 'Unknown asset type'}</strong>
+                    <strong>{s?.title || 'Unknown survey'}</strong>
                     <div className="ws-muted">{geometrySummary(record.geometry)}</div>
                   </div>
                   <Link

@@ -20,34 +20,25 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
   const { orgId } = useParams()
   const { authedFetch } = useAuth()
   const [org, setOrg] = useState(null)
-  const [assetTypes, setAssetTypes] = useState([])
+  const [surveys, setSurveys] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // Records/Map/Attachments/Dashboards/Reports need the full set of asset
-  // types across every survey in the org (e.g. to label a record by its
-  // asset type, or resolve a record's `survey_id` on create). There's no
-  // single org-scoped asset-types endpoint (Phase 5 only added the
-  // survey-scoped one), so this fetches the org's surveys and flattens
-  // each survey's asset types into one list (Portal redesign Phase 8).
+  // Records/Map/Attachments/Dashboards/Reports need the full set of
+  // surveys across the org (e.g. to label a record by its survey, or
+  // resolve a record's `survey_id` on create). In the flat Survey123/KoBo
+  // model a Survey already carries its own form (sections/field_definitions)
+  // directly, so a single fetch of the org's surveys is everything these
+  // pages need — no more per-survey asset-types fan-out.
   useEffect(() => {
     let cancelled = false
-    async function loadAssetTypes() {
-      try {
-        const surveys = await authedFetch(`/api/organisations/${orgId}/surveys`)
-        if (cancelled) return
-        const perSurvey = await Promise.all(
-          surveys.map((s) =>
-            authedFetch(`/api/surveys/${s.id}/asset-types`).catch(() => [])
-          )
-        )
-        if (cancelled) return
-        setAssetTypes(perSurvey.flat())
-      } catch {
-        if (!cancelled) setAssetTypes([])
-      }
-    }
-    loadAssetTypes()
+    authedFetch(`/api/organisations/${orgId}/surveys`)
+      .then((data) => {
+        if (!cancelled) setSurveys(data)
+      })
+      .catch(() => {
+        if (!cancelled) setSurveys([])
+      })
     return () => {
       cancelled = true
     }
@@ -106,9 +97,10 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
         <p className="card-eyebrow">Organisation</p>
         <h1>{org.name}</h1>
         <p className="ws-page-sub">
-          Surveys are now the primary container here (Portal redesign, Phase 3+) — each one
-          holds its own asset types and submission link, and can optionally sit inside a
-          Project folder. The classic Project-scoped view is still available at{' '}
+          Surveys are the primary container here — each one <em>is</em> its own form (flat
+          Survey123/KoBo model: fields, sections and a submission link live directly on it), and
+          can optionally sit inside a Project folder. The classic Project-scoped view is still
+          available at{' '}
           <Link to={`/workspace/organisations/${orgId}/settings`}>organisation settings</Link>.
         </p>
       </div>
@@ -135,13 +127,12 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
           myRole: org?.my_role || 'viewer',
           // Records/Map/Attachments/Dashboards/Reports below read `orgId`
           // off this context and use it to hit the org-scoped API instead
-          // of a `projectId`-scoped one (Portal redesign Phase 8).
-          // `projectId` is intentionally left undefined here — these pages
-          // treat "orgId present, projectId absent" as "use the org-scoped
-          // routes" (mirroring the surveyId/projectId branch already used
-          // by ProjectAssetTypes.jsx).
+          // of a `projectId`-scoped one. `projectId` is intentionally left
+          // undefined here — these pages treat "orgId present, projectId
+          // absent" as "use the org-scoped routes" (mirroring the
+          // surveyId/projectId branch used elsewhere).
           projectId: undefined,
-          assetTypes,
+          surveys,
         }}
       />
     </div>

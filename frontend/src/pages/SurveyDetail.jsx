@@ -15,7 +15,7 @@ const STATUSES = ['draft', 'published', 'archived']
 
 const TABS = [
   { to: '', label: 'Overview', end: true },
-  { to: 'asset-types', label: 'Asset types & fields' },
+  { to: 'form', label: 'Form' },
 ]
 
 export default function SurveyDetail() {
@@ -23,7 +23,6 @@ export default function SurveyDetail() {
   const { orgId, myRole } = useOutletContext()
   const { authedFetch } = useAuth()
   const [survey, setSurvey] = useState(null)
-  const [assetTypes, setAssetTypes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingStatus, setSavingStatus] = useState(false)
@@ -43,25 +42,10 @@ export default function SurveyDetail() {
     }
   }, [authedFetch, surveyId])
 
-  // Phase 8 cutover: asset types under a Survey now read/write the Phase 5
-  // survey-scoped endpoint directly, instead of the stubbed empty list this
-  // page used to hand down while the tab rendered the legacy project page
-  // ahead of schedule.
-  const refreshAssetTypes = useCallback(async () => {
-    try {
-      const data = await authedFetch(`/api/surveys/${surveyId}/asset-types`)
-      setAssetTypes(data)
-      return data
-    } catch (err) {
-      setError(err.message)
-      return []
-    }
-  }, [authedFetch, surveyId])
-
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    Promise.all([refreshSurvey(), refreshAssetTypes()]).finally(() => {
+    refreshSurvey().finally(() => {
       if (!cancelled) setLoading(false)
     })
     return () => {
@@ -184,13 +168,6 @@ export default function SurveyDetail() {
           orgId,
           myRole,
           refreshSurvey,
-          // Phase 8: asset types here are real survey-scoped data now —
-          // ProjectAssetTypes reads `surveyId` off context (falling back to
-          // `projectId` when mounted under the legacy project tree) to pick
-          // the right endpoint. `projectId` is intentionally left undefined
-          // so that fallback never fires in the survey context.
-          assetTypes,
-          refreshAssetTypes,
         }}
       />
     </div>

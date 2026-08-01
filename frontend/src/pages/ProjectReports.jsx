@@ -191,7 +191,7 @@ export default function ProjectReports() {
         <div className="empty-state">
           <p>No reports yet.</p>
           <span>
-            Generate one to snapshot this project's asset types, records and attachments into a
+            Generate one to snapshot this project's surveys, records and attachments into a
             downloadable PDF.
           </span>
         </div>
@@ -203,7 +203,7 @@ export default function ProjectReports() {
                 <strong>{report.title}</strong>
                 <div className="ws-muted">
                   {report.summary?.record_count ?? 0} records ·{' '}
-                  {report.summary?.asset_type_count ?? 0} asset types ·{' '}
+                  {report.summary?.survey_count ?? 0} surveys ·{' '}
                   {report.summary?.attachment_count ?? 0} attachments
                 </div>
               </div>

@@ -46,7 +46,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
         // skip straight to the builder.
         if (orgs.length === 1 && data.length === 1) {
           navigate(
-            `/workspace/organisations/${activeOrg.id}/surveys/${data[0].id}/asset-types`,
+            `/workspace/organisations/${activeOrg.id}/surveys/${data[0].id}/form`,
             { replace: true },
           )
         }
@@ -69,14 +69,14 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
     <div className="portal-shell">
       <AppHeader
         appName="GeoCore Survey"
-        accent="#3f7a5c"
+        accent="#058b8c"
         navItems={[{ to: homePath, label: 'Home', end: true }]}
         homeTo={homePath}
       />
       <main className="portal-content">
-        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #3f7a5c, #2e5c45)' }}>
+        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #058b8c, #046566)' }}>
           <div className="org-hero-inner">
-            <span className="org-hero-logo" style={{ background: '#3f7a5c' }}>
+            <span className="org-hero-logo" style={{ background: '#058b8c' }}>
               GS
             </span>
             <div>
@@ -115,7 +115,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                     className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
                     onClick={() => setActiveOrg(org)}
                   >
-                    <span className="gallery-card-thumb" style={{ background: '#3f7a5c' }}>
+                    <span className="gallery-card-thumb" style={{ background: '#058b8c' }}>
                       {org.name.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="gallery-card-body">
@@ -158,12 +158,12 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                       key={s.id}
                       className="gallery-card is-link"
                       onClick={() =>
-                        navigate(`/workspace/organisations/${activeOrg.id}/surveys/${s.id}/asset-types`)
+                        navigate(`/workspace/organisations/${activeOrg.id}/surveys/${s.id}/form`)
                       }
                     >
                       <span
                         className="gallery-card-thumb"
-                        style={{ background: s.status === 'archived' ? '#6b7280' : '#2e5c45' }}
+                        style={{ background: s.status === 'archived' ? '#6b7280' : '#046566' }}
                       >
                         {s.title.slice(0, 2).toUpperCase()}
                       </span>

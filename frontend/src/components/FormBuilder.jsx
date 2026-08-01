@@ -31,11 +31,11 @@ const FIELD_TYPE_ICONS = {
   signature: '✎',
 }
 const FIELD_TYPE_COLORS = {
-  text: '#d4551a',
-  long_text: '#d4551a',
-  number: '#5b4b8a',
-  date: '#3f7a5c',
-  datetime: '#3f7a5c',
+  text: '#0079c1',
+  long_text: '#0079c1',
+  number: '#7a2e8e',
+  date: '#058b8c',
+  datetime: '#058b8c',
   single_select: '#f59e0b',
   multi_select: '#f59e0b',
   boolean: '#16a34a',
@@ -76,7 +76,7 @@ export function emptySection(title = 'New section') {
   }
 }
 
-/** Converts saved AssetTypeOut.sections (from the API) into builder state. */
+/** Converts saved SurveyOut.sections (from the API) into builder state. */
 export function sectionsFromApi(sections) {
   return (sections || []).map((s) => ({
     _uid: uid(),

@@ -15,7 +15,8 @@ import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectOverview from './pages/ProjectOverview'
-import ProjectAssetTypes from './pages/ProjectAssetTypes'
+import ProjectSurveys from './pages/ProjectSurveys'
+import SurveyForm from './pages/SurveyForm'
 import ProjectRecords from './pages/ProjectRecords'
 import ProjectMap from './pages/ProjectMap'
 import ProjectAttachments from './pages/ProjectAttachments'
@@ -41,7 +42,7 @@ export default function App() {
         {/* Unauthenticated, read-only view of a project's shareable link —
             deliberately outside WorkspaceLayout's auth gate. */}
         <Route path="/share/:token" element={<PublicShare />} />
-        {/* Unauthenticated data-collection form for an asset type's
+        {/* Unauthenticated data-collection form for a survey's
             submission link — a field officer's entire world. */}
         <Route path="/submit/:token" element={<PublicSubmit />} />
 
@@ -55,10 +56,10 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="organisations/:orgId/settings" element={<OrganisationSettings />} />
 
-          {/* Portal-scoped hierarchy (Portal redesign Phase 7 route tree,
-              Phase 8 data-fetching cutover): Surveys are the primary
-              container, addressed directly under the organisation; asset
-              types live under a Survey instead of a Project.
+          {/* Portal-scoped hierarchy: Surveys are the primary container,
+              addressed directly under the organisation. A Survey *is* the
+              form (flat Survey123/KoBo model) — its own form/submission
+              link live on its "Form" tab, no separate asset-type layer.
               Records/Map/Attachments/Dashboards/Reports are org-scoped —
               they read `orgId` off OrganisationDetail's outlet context and
               fetch from the org-scoped API directly (no `projectId` in
@@ -68,7 +69,7 @@ export default function App() {
             <Route path="surveys" element={<SurveyList />} />
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>
               <Route index element={<SurveyOverview />} />
-              <Route path="asset-types" element={<ProjectAssetTypes />} />
+              <Route path="form" element={<SurveyForm />} />
             </Route>
             <Route path="records" element={<ProjectRecords />} />
             <Route path="map" element={<ProjectMap />} />
@@ -79,16 +80,17 @@ export default function App() {
           </Route>
 
           {/* Legacy Project-scoped hierarchy — fully functional via the
-              Phase 5/6 deprecation shims, kept working for old links now
-              that the org-scoped tabs above are the primary path
-              (Phase 8). Slated for removal in Phase 10 once shim traffic
-              is confirmed dead. */}
+              deprecation shims, kept working for old links now that the
+              org-scoped tabs above are the primary path. A project's
+              former "Asset types & fields" tab now lists the Surveys
+              filed under it instead (each Survey owns its own form
+              directly — open one to edit it). */}
           <Route
             path="organisations/:orgId/projects/:projectId"
             element={<ProjectDetail />}
           >
             <Route index element={<ProjectOverview />} />
-            <Route path="asset-types" element={<ProjectAssetTypes />} />
+            <Route path="surveys" element={<ProjectSurveys />} />
             <Route path="records" element={<ProjectRecords />} />
             <Route path="map" element={<ProjectMap />} />
             <Route path="attachments" element={<ProjectAttachments />} />

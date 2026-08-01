@@ -24,7 +24,7 @@ function PortalLink({ to, children, ...props }) {
 
 const TABS = [
   { to: '', label: 'Overview', end: true },
-  { to: 'asset-types', label: 'Asset types & fields' },
+  { to: 'surveys', label: 'Surveys' },
   { to: 'records', label: 'Records' },
   { to: 'map', label: 'Map' },
   { to: 'attachments', label: 'Attachments' },
@@ -37,20 +37,25 @@ export default function ProjectDetail() {
   const { authedFetch } = useAuth()
   const [org, setOrg] = useState(null)
   const [project, setProject] = useState(null)
-  const [assetTypes, setAssetTypes] = useState([])
+  const [surveys, setSurveys] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const refreshAssetTypes = useCallback(async () => {
+  // There's no project-scoped survey list endpoint (Surveys live directly
+  // under an organisation with an optional project_id folder tag) — so
+  // this fetches every survey in the org and filters to this project
+  // client-side, the same pattern OrganisationDetail uses org-wide.
+  const refreshSurveys = useCallback(async () => {
     try {
-      const data = await authedFetch(`/api/projects/${projectId}/asset-types`)
-      setAssetTypes(data)
-      return data
+      const data = await authedFetch(`/api/organisations/${orgId}/surveys`)
+      const scoped = data.filter((s) => s.project_id === projectId)
+      setSurveys(scoped)
+      return scoped
     } catch (err) {
       setError(err.message)
       return []
     }
-  }, [authedFetch, projectId])
+  }, [authedFetch, orgId, projectId])
 
   useEffect(() => {
     let cancelled = false
@@ -68,7 +73,7 @@ export default function ProjectDetail() {
         const matchedProject = projects.find((p) => p.id === projectId)
         setProject(matchedProject || null)
 
-        await refreshAssetTypes()
+        await refreshSurveys()
       } catch (err) {
         if (!cancelled) setError(err.message)
       } finally {
@@ -153,8 +158,8 @@ export default function ProjectDetail() {
           project,
           orgId,
           projectId,
-          assetTypes,
-          refreshAssetTypes,
+          surveys,
+          refreshSurveys,
           // The org object returned by GET /api/organisations/ now carries
           // my_role — used purely to show/hide UI. The backend re-checks
           // the real role on every write, so this is UX, not security.

@@ -33,9 +33,9 @@ const AGGREGATIONS = [
 ]
 
 /** Data-source picker backed by GET /organisations/{id}/feature-layers —
- * every asset type across every project in the org, not just the
- * dashboard's own project. Grouped by project so it's still easy to find
- * "this project's layers" first.
+ * every Survey across every project in the org, not just the dashboard's
+ * own project. Grouped by project so it's still easy to find "this
+ * project's layers" first.
  */
 function useFeatureLayers(orgId) {
   const { authedFetch } = useAuth()
@@ -58,7 +58,7 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
   const { layers } = useFeatureLayers(orgId)
   const [title, setTitle] = useState(initial?.title || '')
   const [widgetType, setWidgetType] = useState(initial?.widget_type || 'kpi')
-  const [assetTypeId, setAssetTypeId] = useState(initial?.config?.asset_type_id || '')
+  const [surveyId, setSurveyId] = useState(initial?.config?.survey_id || '')
   const [layerFields, setLayerFields] = useState([])
   const [aggregation, setAggregation] = useState(initial?.config?.aggregation || 'count')
   const [fieldKey, setFieldKey] = useState(initial?.config?.field_key || '')
@@ -86,15 +86,15 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
   })
 
   useEffect(() => {
-    if (!assetTypeId) {
+    if (!surveyId) {
       setLayerFields([])
       return
     }
-    authedFetch(`/api/asset-types/${assetTypeId}`)
-      .then((at) => setLayerFields(at.field_definitions || []))
+    authedFetch(`/api/surveys/${surveyId}`)
+      .then((s) => setLayerFields(s.field_definitions || []))
       .catch(() => setLayerFields([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetTypeId])
+  }, [surveyId])
 
   const fields = layerFields
   const numberFields = fields.filter((f) => f.field_type === 'number')
@@ -117,7 +117,7 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
       : []
 
     let config = { filters }
-    if (assetTypeId) config.asset_type_id = assetTypeId
+    if (surveyId) config.survey_id = surveyId
 
     if (widgetType === 'kpi') {
       config = { ...config, aggregation, field_key: aggregation === 'count' ? null : fieldKey }
@@ -179,12 +179,12 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
 
       <label className="form-label">
         Layer (feature layer — any project in this org) {widgetType === 'map' && '· optional, blank shows every layer'}
-        <select value={assetTypeId} onChange={(e) => setAssetTypeId(e.target.value)}>
+        <select value={surveyId} onChange={(e) => setSurveyId(e.target.value)}>
           {widgetType === 'map' && <option value="">All layers</option>}
           {widgetType !== 'map' && <option value="">Select a layer…</option>}
           {orderedLayers.map((layer) => (
-            <option key={layer.asset_type_id} value={layer.asset_type_id}>
-              {layer.project_name} — {layer.name} ({layer.record_count})
+            <option key={layer.survey_id} value={layer.survey_id}>
+              {layer.project_name} — {layer.survey_title} ({layer.record_count})
             </option>
           ))}
         </select>

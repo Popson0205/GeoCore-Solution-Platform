@@ -26,8 +26,7 @@ export default function SurveyOverview() {
           <h2>Next step</h2>
         </div>
         <p className="ws-muted">
-          Open <Link to="asset-types">Asset types &amp; fields</Link> to define what this survey
-          collects.
+          Open <Link to="form">Form</Link> to define what this survey collects.
         </p>
       </section>
     </div>

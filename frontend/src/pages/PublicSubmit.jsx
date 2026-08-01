@@ -62,7 +62,7 @@ export default function PublicSubmit() {
 
     if (!geometry) {
       setSubmitError(
-        schema.asset_type.geometry_type === 'point'
+        schema.survey.geometry_type === 'point'
           ? 'Click the map (or use "Use my location") to set a location.'
           : 'Click the map to add points for this shape.'
       )
@@ -123,7 +123,7 @@ export default function PublicSubmit() {
       <div className="ws-page">
         <div className="panel" style={{ textAlign: 'center' }}>
           <h1>Submitted</h1>
-          <p className="ws-muted">Thanks — your entry for {schema.asset_type.name} has been recorded.</p>
+          <p className="ws-muted">Thanks — your entry for {schema.survey.title} has been recorded.</p>
           <button className="btn-primary" onClick={submitAnother} style={{ marginTop: 12 }}>
             Submit another
           </button>
@@ -132,14 +132,14 @@ export default function PublicSubmit() {
     )
   }
 
-  const { asset_type: assetType } = schema
+  const { survey } = schema
 
   return (
     <div className="ws-page">
       <div className="ws-page-head">
         <p className="card-eyebrow">{schema.project_name}</p>
-        <h1>{assetType.name}</h1>
-        {assetType.description && <p className="ws-page-sub">{assetType.description}</p>}
+        <h1>{survey.title}</h1>
+        {survey.description && <p className="ws-page-sub">{survey.description}</p>}
       </div>
 
       <section className="panel">
@@ -163,13 +163,13 @@ export default function PublicSubmit() {
           )}
 
           <LocationPicker
-            geometryType={assetType.geometry_type}
+            geometryType={survey.geometry_type}
             initialGeometry={geometry}
             onChange={setGeometry}
             resetKey="form"
           />
 
-          <FormSections sections={assetType.sections} fieldData={fieldData} setFieldData={setFieldData} />
+          <FormSections sections={survey.sections} fieldData={fieldData} setFieldData={setFieldData} />
 
           <button type="submit" className="btn-primary" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit'}

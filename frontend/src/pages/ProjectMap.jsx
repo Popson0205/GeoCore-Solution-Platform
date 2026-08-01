@@ -19,20 +19,20 @@ function geometryToLatLngs(geometry) {
   return null
 }
 
-function popupHtml(assetType, record) {
+function popupHtml(survey, record) {
   const rows = Object.entries(record.field_data || {})
     .map(([key, value]) => {
-      const field = assetType?.field_definitions.find((f) => f.field_key === key)
+      const field = survey?.field_definitions.find((f) => f.field_key === key)
       const label = field ? field.label : key
       const display = Array.isArray(value) ? value.join(', ') : String(value)
       return `<div><strong>${label}:</strong> ${display}</div>`
     })
     .join('')
-  return `<div class="map-popup"><h4>${assetType?.name || 'Record'}</h4>${rows || '<em>No field data</em>'}</div>`
+  return `<div class="map-popup"><h4>${survey?.title || 'Record'}</h4>${rows || '<em>No field data</em>'}</div>`
 }
 
 export default function ProjectMap() {
-  const { orgId, projectId, assetTypes } = useOutletContext()
+  const { orgId, projectId, surveys } = useOutletContext()
   const { authedFetch } = useAuth()
   const mapEl = useRef(null)
   const mapRef = useRef(null)
@@ -45,7 +45,7 @@ export default function ProjectMap() {
     // Full RecordOut shape is needed here (not the lightweight
     // .../records/geometry endpoint) since popups read field_data —
     // org-scoped mode just points at every record in the org instead of
-    // one project's (Portal redesign Phase 8).
+    // one project's.
     const path = orgId ? `/api/organisations/${orgId}/records` : `/api/projects/${projectId}/records`
     authedFetch(path)
       .then(setRecords)
@@ -74,8 +74,8 @@ export default function ProjectMap() {
 
     const bounds = []
     records.forEach((record) => {
-      const assetType = assetTypes.find((at) => at.id === record.asset_type_id)
-      const color = assetType?.color || '#d4551a'
+      const survey = surveys.find((s) => s.id === record.survey_id)
+      const color = survey?.color || '#0079c1'
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
 
@@ -97,14 +97,14 @@ export default function ProjectMap() {
         latLngs.forEach((ring) => bounds.push(...ring))
       }
 
-      layer.bindPopup(popupHtml(assetType, record))
+      layer.bindPopup(popupHtml(survey, record))
       layer.addTo(layerRef.current)
     })
 
     if (bounds.length) {
       mapRef.current.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 })
     }
-  }, [records, assetTypes])
+  }, [records, surveys])
 
   return (
     <section className="panel map-panel">
@@ -121,10 +121,10 @@ export default function ProjectMap() {
       )}
       <div ref={mapEl} className="map-container" />
       <div className="map-legend">
-        {assetTypes.map((at) => (
-          <span key={at.id} className="map-legend-item">
-            <span className="color-dot" style={{ background: at.color }} />
-            {at.name}
+        {surveys.map((s) => (
+          <span key={s.id} className="map-legend-item">
+            <span className="color-dot" style={{ background: s.color }} />
+            {s.title}
           </span>
         ))}
       </div>

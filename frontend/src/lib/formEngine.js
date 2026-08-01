@@ -1,5 +1,5 @@
 // Mirrors backend/app/core/{expressions,visibility}.py and
-// backend/app/schemas/asset_type.py's slugify_key. This is used for LIVE
+// backend/app/schemas/survey.py's slugify_key. This is used for LIVE
 // preview only (visibility toggling, calculated-field preview as someone
 // fills a form) — the backend re-evaluates everything authoritatively on
 // submit, so nothing here needs to be perfectly tamper-proof, but it still

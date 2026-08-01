@@ -37,7 +37,7 @@ export default function PublicShare() {
   const layerRef = useRef(null)
 
   const [project, setProject] = useState(null)
-  const [assetTypes, setAssetTypes] = useState([])
+  const [surveys, setSurveys] = useState([])
   const [records, setRecords] = useState([])
   const [reports, setReports] = useState([])
   const [error, setError] = useState('')
@@ -49,15 +49,15 @@ export default function PublicShare() {
       setLoading(true)
       setError('')
       try {
-        const [proj, types, recs, reps] = await Promise.all([
+        const [proj, surveyList, recs, reps] = await Promise.all([
           publicFetch(`/api/public/${token}/project`),
-          publicFetch(`/api/public/${token}/asset-types`),
+          publicFetch(`/api/public/${token}/surveys`),
           publicFetch(`/api/public/${token}/records`),
           publicFetch(`/api/public/${token}/reports`),
         ])
         if (cancelled) return
         setProject(proj)
-        setAssetTypes(types)
+        setSurveys(surveyList)
         setRecords(recs)
         setReports(reps)
       } catch (err) {
@@ -91,8 +91,8 @@ export default function PublicShare() {
     layerRef.current.clearLayers()
     const bounds = []
     records.forEach((record) => {
-      const assetType = assetTypes.find((at) => at.id === record.asset_type_id)
-      const color = assetType?.color || '#d4551a'
+      const survey = surveys.find((s) => s.id === record.survey_id)
+      const color = survey?.color || '#0079c1'
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
 
@@ -107,13 +107,13 @@ export default function PublicShare() {
         layer = L.polygon(latLngs, { color, fillColor: color, fillOpacity: 0.25 })
         latLngs.forEach((ring) => bounds.push(...ring))
       }
-      layer.bindPopup(`<div class="map-popup"><h4>${assetType?.name || 'Record'}</h4></div>`)
+      layer.bindPopup(`<div class="map-popup"><h4>${survey?.title || 'Record'}</h4></div>`)
       layer.addTo(layerRef.current)
     })
     if (bounds.length) {
       mapRef.current.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 })
     }
-  }, [records, assetTypes])
+  }, [records, surveys])
 
   if (loading) {
     return (
@@ -147,8 +147,8 @@ export default function PublicShare() {
 
       <div className="ws-grid" style={{ marginBottom: 20 }}>
         <div className="panel stat-card">
-          <span className="stat-label">Asset types</span>
-          <span className="stat-value">{assetTypes.length}</span>
+          <span className="stat-label">Surveys</span>
+          <span className="stat-value">{surveys.length}</span>
         </div>
         <div className="panel stat-card">
           <span className="stat-label">Records</span>
@@ -166,10 +166,10 @@ export default function PublicShare() {
         </div>
         <div ref={mapEl} className="map-container" />
         <div className="map-legend">
-          {assetTypes.map((at) => (
-            <span key={at.id} className="map-legend-item">
-              <span className="color-dot" style={{ background: at.color }} />
-              {at.name}
+          {surveys.map((s) => (
+            <span key={s.id} className="map-legend-item">
+              <span className="color-dot" style={{ background: s.color }} />
+              {s.title}
             </span>
           ))}
         </div>

@@ -107,7 +107,7 @@ function FieldsRenderer({ fields, values, onFieldChange }) {
   )
 }
 
-/** Renders every section of an asset type's form, wired up to a flat
+/** Renders every section of a survey's form, wired up to a flat
  * `fieldData` object (top-level keys for ungrouped/non-repeat fields,
  * section_key -> array of instances for repeatable sections) — the exact
  * shape backend/app/core/form_engine.py expects on submit. Used by both

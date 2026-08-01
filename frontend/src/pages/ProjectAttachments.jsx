@@ -3,7 +3,7 @@ import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProjectAttachments() {
-  const { orgId, projectId, assetTypes } = useOutletContext()
+  const { orgId, projectId, surveys } = useOutletContext()
   const { authedFetch, token } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -121,8 +121,8 @@ export default function ProjectAttachments() {
   }
 
   function recordLabel(record) {
-    const at = assetTypes.find((a) => a.id === record.asset_type_id)
-    return `${at?.name || 'Record'} · ${new Date(record.created_at).toLocaleDateString()}`
+    const s = surveys.find((sv) => sv.id === record.survey_id)
+    return `${s?.title || 'Record'} · ${new Date(record.created_at).toLocaleDateString()}`
   }
 
   return (

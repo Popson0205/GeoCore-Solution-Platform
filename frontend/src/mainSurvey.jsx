@@ -11,7 +11,8 @@ import OrganisationDetail from './pages/OrganisationDetail'
 import SurveyList from './pages/SurveyList'
 import SurveyDetail from './pages/SurveyDetail'
 import ProjectDetail from './pages/ProjectDetail'
-import ProjectAssetTypes from './pages/ProjectAssetTypes'
+import ProjectSurveys from './pages/ProjectSurveys'
+import SurveyForm from './pages/SurveyForm'
 import ProjectRecords from './pages/ProjectRecords'
 import ProjectAttachments from './pages/ProjectAttachments'
 import NotFound from './pages/NotFound'
@@ -31,13 +32,13 @@ const SURVEY_APP_ORG_TABS = [{ to: 'surveys', label: 'Surveys', end: true }]
  * own, narrower route tree — no dashboard builder, no org settings, no
  * portal home page bundled in.
  *
- * Surveys are the primary container here now (Portal redesign Phase 7) —
- * `/workspace/organisations/:orgId/surveys/:surveyId/asset-types` is
- * where SurveyApp actually navigates a person into the form builder.
+ * Surveys are the primary container here — each Survey owns its own form
+ * directly (flat Survey123/KoBo model: no separate asset-type layer), and
+ * `/workspace/organisations/:orgId/surveys/:surveyId/form` is where
+ * SurveyApp actually navigates a person into the form builder.
  * `/workspace/organisations/:orgId/projects/:projectId` still mounts the
- * full ProjectDetail tab strip (Records/Map/Attachments/Dashboards/
- * Reports alongside Asset types) for old links into a Project's asset
- * types — kept working, not the primary path anymore.
+ * ProjectDetail tab strip for old links into a Project's surveys — kept
+ * working, not the primary path anymore.
  */
 function SurveyStandaloneApp() {
   return (
@@ -65,14 +66,14 @@ function SurveyStandaloneApp() {
           <Route index element={<Navigate to="surveys" replace />} />
           <Route path="surveys" element={<SurveyList />} />
           <Route path="surveys/:surveyId" element={<SurveyDetail />}>
-            <Route index element={<ProjectAssetTypes />} />
-            <Route path="asset-types" element={<ProjectAssetTypes />} />
+            <Route index element={<SurveyForm />} />
+            <Route path="form" element={<SurveyForm />} />
           </Route>
         </Route>
 
         <Route path="/workspace/organisations/:orgId/projects/:projectId" element={<ProjectDetail />}>
-          <Route index element={<ProjectAssetTypes />} />
-          <Route path="asset-types" element={<ProjectAssetTypes />} />
+          <Route index element={<ProjectSurveys />} />
+          <Route path="surveys" element={<ProjectSurveys />} />
           <Route path="records" element={<ProjectRecords />} />
           <Route path="attachments" element={<ProjectAttachments />} />
         </Route>
