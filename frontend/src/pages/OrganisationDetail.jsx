@@ -7,13 +7,15 @@ import { useAuth } from '../context/AuthContext'
 // Organisation). A narrower bundle (e.g. the standalone Survey app) can
 // override this with a smaller list via the `tabs` prop.
 export const DEFAULT_TABS = [
-  { to: '', label: 'Overview', end: true },
+  { to: '', label: 'Home', end: true },
+  { to: 'content', label: 'Content' },
   { to: 'surveys', label: 'Surveys' },
   { to: 'records', label: 'Records' },
   { to: 'map', label: 'Map' },
   { to: 'attachments', label: 'Attachments' },
   { to: 'dashboards', label: 'Dashboards' },
   { to: 'reports', label: 'Reports' },
+  { to: 'settings', label: 'Organization' },
 ]
 
 export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
@@ -88,53 +90,45 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
   }
 
   return (
-    <div className="ws-page ws-page-wide">
-      <Link to="/workspace" className="ws-breadcrumb">
-        &larr; Organisations
-      </Link>
+    <div>
+      <div className="ws-page ws-page-wide org-shell-topbar">
+        <Link to="/workspace" className="ws-breadcrumb">
+          &larr; Organisations
+        </Link>
 
-      <div className="ws-page-head">
-        <p className="card-eyebrow">Organisation</p>
-        <h1>{org.name}</h1>
-        <p className="ws-page-sub">
-          Surveys are the primary container here — each one <em>is</em> its own form (flat
-          Survey123/KoBo model: fields, sections and a submission link live directly on it), and
-          can optionally sit inside a Project folder. The classic Project-scoped view is still
-          available at{' '}
-          <Link to={`/workspace/organisations/${orgId}/settings`}>organisation settings</Link>.
-        </p>
+        <nav className="project-tabs">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.to || 'overview'}
+              to={tab.to}
+              end={tab.end}
+              className={({ isActive }) => `project-tab${isActive ? ' is-active' : ''}`}
+            >
+              {tab.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        {error && <p className="hint">{error}</p>}
       </div>
 
-      <nav className="project-tabs">
-        {tabs.map((tab) => (
-          <NavLink
-            key={tab.to || 'overview'}
-            to={tab.to}
-            end={tab.end}
-            className={({ isActive }) => `project-tab${isActive ? ' is-active' : ''}`}
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      {error && <p className="hint">{error}</p>}
-
-      <Outlet
-        context={{
-          org,
-          orgId,
-          myRole: org?.my_role || 'viewer',
-          // Records/Map/Attachments/Dashboards/Reports below read `orgId`
-          // off this context and use it to hit the org-scoped API instead
-          // of a `projectId`-scoped one. `projectId` is intentionally left
-          // undefined here — these pages treat "orgId present, projectId
-          // absent" as "use the org-scoped routes" (mirroring the
-          // surveyId/projectId branch used elsewhere).
-          projectId: undefined,
-          surveys,
-        }}
-      />
+      <div className="ws-page ws-page-wide">
+        <Outlet
+          context={{
+            org,
+            orgId,
+            myRole: org?.my_role || 'viewer',
+            // Records/Map/Attachments/Dashboards/Reports below read `orgId`
+            // off this context and use it to hit the org-scoped API instead
+            // of a `projectId`-scoped one. `projectId` is intentionally left
+            // undefined here — these pages treat "orgId present, projectId
+            // absent" as "use the org-scoped routes" (mirroring the
+            // surveyId/projectId branch used elsewhere).
+            projectId: undefined,
+            surveys,
+          }}
+        />
+      </div>
     </div>
   )
 }

@@ -42,6 +42,12 @@ export default function OrganisationSettings() {
   const [inviteRole, setInviteRole] = useState('viewer')
   const [inviting, setInviting] = useState(false)
 
+  const [aboutText, setAboutText] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [openDataUrl, setOpenDataUrl] = useState('')
+  const [savingBranding, setSavingBranding] = useState(false)
+  const [brandingSaved, setBrandingSaved] = useState(false)
+
   async function load() {
     setLoading(true)
     setError('')
@@ -49,6 +55,11 @@ export default function OrganisationSettings() {
       const orgs = await authedFetch('/api/organisations/')
       const matched = orgs.find((o) => o.id === orgId)
       setOrg(matched || null)
+      if (matched) {
+        setAboutText(matched.about_text || '')
+        setWebsiteUrl(matched.website_url || '')
+        setOpenDataUrl(matched.open_data_url || '')
+      }
 
       const memberList = await authedFetch(`/api/organisations/${orgId}/members`)
       setMembers(memberList)
@@ -63,6 +74,30 @@ export default function OrganisationSettings() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
+
+  async function handleSaveBranding(e) {
+    e.preventDefault()
+    setSavingBranding(true)
+    setError('')
+    try {
+      const updated = await authedFetch(`/api/organisations/${orgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          about_text: aboutText || null,
+          website_url: websiteUrl || null,
+          open_data_url: openDataUrl || null,
+        }),
+      })
+      setOrg((prev) => ({ ...prev, ...updated }))
+      setBrandingSaved(true)
+      setTimeout(() => setBrandingSaved(false), 2000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingBranding(false)
+    }
+  }
 
   async function handleInvite(e) {
     e.preventDefault()
@@ -153,6 +188,52 @@ export default function OrganisationSettings() {
       </div>
 
       {error && <p className="hint">{error}</p>}
+
+      {manage && (
+        <section className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-head">
+            <h2>Home page</h2>
+          </div>
+          <p className="ws-muted" style={{ marginBottom: 12 }}>
+            Shown on this organisation's Home tab — the "About Us" text and the two quick-link
+            buttons under the hero banner.
+          </p>
+          <form onSubmit={handleSaveBranding} className="stacked-form">
+            <label className="form-label">
+              About Us
+              <textarea
+                value={aboutText}
+                onChange={(e) => setAboutText(e.target.value)}
+                rows={5}
+                placeholder="Tell people what this organisation does…"
+              />
+            </label>
+            <div className="form-row">
+              <label className="form-label" style={{ flex: 1 }}>
+                Website URL
+                <input
+                  value={websiteUrl}
+                  onChange={(e) => setWebsiteUrl(e.target.value)}
+                  placeholder="https://example.com"
+                />
+              </label>
+              <label className="form-label" style={{ flex: 1 }}>
+                Open Data URL
+                <input
+                  value={openDataUrl}
+                  onChange={(e) => setOpenDataUrl(e.target.value)}
+                  placeholder="https://example.com/open-data"
+                />
+              </label>
+            </div>
+            <div className="form-row">
+              <button type="submit" className="btn-primary" disabled={savingBranding}>
+                {savingBranding ? 'Saving…' : brandingSaved ? 'Saved!' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       {manage && (
         <section className="panel" style={{ marginBottom: 20 }}>

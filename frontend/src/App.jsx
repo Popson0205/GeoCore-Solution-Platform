@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard'
 import OrganisationSettings from './pages/OrganisationSettings'
 import OrganisationDetail from './pages/OrganisationDetail'
 import OrganisationOverview from './pages/OrganisationOverview'
+import Content from './pages/Content'
 import SurveyList from './pages/SurveyList'
 import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
@@ -89,6 +90,7 @@ export default function App() {
               itself any more. */}
           <Route path="organisations/:orgId" element={<OrganisationDetail />}>
             <Route index element={<OrganisationOverview />} />
+            <Route path="content" element={<Content />} />
             <Route path="surveys" element={<SurveyList />} />
             <Route path="surveys/new" element={<SurveyNew />} />
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>

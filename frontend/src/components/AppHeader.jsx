@@ -3,26 +3,20 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { portalPath } from '../config'
 
-// The three "apps" GeoCore currently ships. Each is really just a branded
-// entry point into functionality that already exists (asset types / form
+// The "apps" GeoCore ships alongside the main Portal. Each is really just
+// a branded entry point into functionality that already exists (the form
 // builder, dashboards) — the App Launcher's job is presenting them as
 // distinct products, the way ArcGIS Online's launcher fans out into
-// Survey123, Dashboards, Field Maps, etc. as separate-feeling apps that
-// all sit on the same underlying platform data.
+// Survey123, Dashboards, Field Maps, etc. GeoCore Portal itself is
+// deliberately NOT listed here — it's the hub these apps launch from, the
+// same way arcgis.com's own home page isn't one of the tiles in its own
+// App Launcher.
 //
-// GeoCore Portal stays an in-bundle react-router route. Survey and
-// Dashboard are genuinely separate Vite bundles (survey.html /
+// Survey and Dashboard are genuinely separate Vite bundles (survey.html /
 // dashboard.html — see vite.config.js), so they open in a new tab via a
 // real <a> rather than a router <Link>, which would try to client-side
 // navigate into a page this bundle doesn't have.
 const APPS = [
-  {
-    to: '/workspace',
-    name: 'GeoCore Portal',
-    tagline: 'Organisations & projects',
-    color: '#0079c1',
-    icon: 'grid',
-  },
   {
     href: portalPath('/survey.html'),
     external: true,

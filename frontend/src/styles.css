@@ -788,7 +788,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .dashboard-list-item { display: flex; align-items: center; gap: 10px; }
 
 /* --- ArcGIS-Online-style portal chrome --- */
-.portal-shell { min-height: 100vh; background: var(--ws-bg); color: var(--ws-text); }
+.portal-shell { min-height: 100vh; background: var(--ws-bg); color: var(--ws-text); overflow-x: hidden; }
 .portal-content { max-width: 1180px; margin: 0 auto; padding: 24px 24px 60px; }
 
 .app-header {
@@ -1710,3 +1710,156 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   color: var(--ws-text);
   white-space: pre-wrap;
 }
+
+/* =================================================================
+   Organisation home page (ArcGIS-Online-style): full-bleed hero banner,
+   a green quick-link CTA bar, and an "About Us" section. The hero/CTA
+   bar deliberately escape the page's normal max-width column (the
+   standard "break out of a centered container" trick: 100vw + a
+   negative left margin computed from the viewport center) so they run
+   edge-to-edge regardless of how deep this page sits in the layout.
+================================================================= */
+
+.org-shell-topbar { padding-top: 18px; }
+
+.org-hero-banner, .org-home-cta-bar {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+}
+
+.org-hero-banner {
+  position: relative;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.org-hero-banner-texture { position: absolute; inset: 0; width: 100%; height: 100%; }
+.org-hero-banner-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+  width: 100%;
+}
+.org-hero-banner-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.org-hero-banner-content h1 { color: #ffffff; font-size: 1.9rem; }
+
+.org-home-cta-bar {
+  background: #1f7a3d;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 24px;
+}
+.org-home-cta-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+.org-home-cta-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+.org-home-about { padding-top: 32px; max-width: 780px; }
+.org-home-about h2 { font-size: 1.3rem; margin-bottom: 14px; }
+.org-home-about p { color: var(--ws-text); line-height: 1.7; margin-bottom: 14px; font-size: 0.98rem; }
+
+/* =================================================================
+   Content page — ArcGIS-Online-Content-style unified browser across
+   every Survey, Dashboard and Report in the organisation.
+================================================================= */
+
+.content-page { display: flex; gap: 24px; margin: 20px 0 40px; align-items: flex-start; }
+.content-sidebar { width: 220px; flex-shrink: 0; }
+.content-sidebar-heading {
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ws-text-muted);
+  margin-bottom: 8px;
+}
+.content-folder-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 7px 8px;
+  border-radius: 4px;
+  font-size: 0.86rem;
+  color: var(--ws-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.content-folder-item:hover { background: var(--ws-bg); }
+.content-folder-item.is-active { background: var(--brand-soft); color: var(--brand-dark); font-weight: 600; }
+.content-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: var(--ws-text);
+  padding: 5px 8px;
+}
+
+.content-main { flex: 1; min-width: 0; }
+.content-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.content-search {
+  flex: 1;
+  max-width: 320px;
+  padding: 9px 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: 4px;
+  font-size: 0.88rem;
+}
+
+.content-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.content-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ws-text-muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ws-border);
+}
+.content-table td { padding: 10px; border-bottom: 1px solid var(--ws-border); vertical-align: middle; }
+.content-table-title { display: flex; align-items: center; gap: 8px; color: var(--ws-text); font-weight: 500; }
+.content-table-icon { font-size: 1rem; }
+
+@media (max-width: 760px) {
+  .content-page { flex-direction: column; }
+  .content-sidebar { width: 100%; }
+}
+
+/* Small module cards used on the org Home page (Content/Surveys/Dashboards
+   quick links) — reuses .panel but needs its own hover + link reset. */
+.module-card { text-decoration: none; display: block; transition: box-shadow 0.12s ease, border-color 0.12s ease; }
+.module-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); }
