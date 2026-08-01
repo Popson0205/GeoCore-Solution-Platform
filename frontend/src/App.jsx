@@ -11,12 +11,13 @@ import OrganisationSettings from './pages/OrganisationSettings'
 import OrganisationDetail from './pages/OrganisationDetail'
 import OrganisationOverview from './pages/OrganisationOverview'
 import SurveyList from './pages/SurveyList'
+import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
+import SurveyDesigner from './pages/SurveyDesigner'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectOverview from './pages/ProjectOverview'
 import ProjectSurveys from './pages/ProjectSurveys'
-import SurveyForm from './pages/SurveyForm'
 import ProjectRecords from './pages/ProjectRecords'
 import ProjectMap from './pages/ProjectMap'
 import ProjectAttachments from './pages/ProjectAttachments'
@@ -46,6 +47,12 @@ export default function App() {
             submission link — a field officer's entire world. */}
         <Route path="/submit/:token" element={<PublicSubmit />} />
 
+        {/* The full-screen Survey Designer (Survey123-style: title, tabs,
+            palette, canvas, Publish) is deliberately a top-level route
+            outside WorkspaceLayout — it renders its own complete top bar,
+            so it must not be nested under the Portal's blue AppHeader too. */}
+        <Route path="/design/surveys/:surveyId" element={<SurveyDesigner />} />
+
         {/* App Launcher destinations — branded entry points into the same
             underlying project data, the way Survey123/Dashboards feel like
             distinct apps on top of one ArcGIS Online organisation. */}
@@ -58,8 +65,12 @@ export default function App() {
 
           {/* Portal-scoped hierarchy: Surveys are the primary container,
               addressed directly under the organisation. A Survey *is* the
-              form (flat Survey123/KoBo model) — its own form/submission
-              link live on its "Form" tab, no separate asset-type layer.
+              form (flat Survey123/KoBo model) — building/editing it
+              happens in the full-screen Designer at /design/surveys/:id
+              (see above), not nested in this tab strip. "New survey"
+              mirrors Survey123's own picker: blank / template / XLSForm —
+              no "attach to an existing feature layer" option, since a
+              Survey creates its own feature layer.
               Records/Map/Attachments/Dashboards/Reports are org-scoped —
               they read `orgId` off OrganisationDetail's outlet context and
               fetch from the org-scoped API directly (no `projectId` in
@@ -67,9 +78,9 @@ export default function App() {
           <Route path="organisations/:orgId" element={<OrganisationDetail />}>
             <Route index element={<OrganisationOverview />} />
             <Route path="surveys" element={<SurveyList />} />
+            <Route path="surveys/new" element={<SurveyNew />} />
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>
               <Route index element={<SurveyOverview />} />
-              <Route path="form" element={<SurveyForm />} />
             </Route>
             <Route path="records" element={<ProjectRecords />} />
             <Route path="map" element={<ProjectMap />} />

@@ -9,10 +9,12 @@ import SurveyApp from './pages/SurveyApp'
 import PublicSubmit from './pages/PublicSubmit'
 import OrganisationDetail from './pages/OrganisationDetail'
 import SurveyList from './pages/SurveyList'
+import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
+import SurveyOverview from './pages/SurveyOverview'
+import SurveyDesigner from './pages/SurveyDesigner'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectSurveys from './pages/ProjectSurveys'
-import SurveyForm from './pages/SurveyForm'
 import ProjectRecords from './pages/ProjectRecords'
 import ProjectAttachments from './pages/ProjectAttachments'
 import NotFound from './pages/NotFound'
@@ -34,11 +36,11 @@ const SURVEY_APP_ORG_TABS = [{ to: 'surveys', label: 'Surveys', end: true }]
  *
  * Surveys are the primary container here — each Survey owns its own form
  * directly (flat Survey123/KoBo model: no separate asset-type layer), and
- * `/workspace/organisations/:orgId/surveys/:surveyId/form` is where
- * SurveyApp actually navigates a person into the form builder.
- * `/workspace/organisations/:orgId/projects/:projectId` still mounts the
- * ProjectDetail tab strip for old links into a Project's surveys — kept
- * working, not the primary path anymore.
+ * `/design/surveys/:surveyId` (a standalone route with its own full-screen
+ * chrome, added below) is where SurveyApp actually navigates a person into
+ * the form designer. `/workspace/organisations/:orgId/projects/:projectId`
+ * still mounts the ProjectDetail tab strip for old links into a Project's
+ * surveys — kept working, not the primary path anymore.
  */
 function SurveyStandaloneApp() {
   return (
@@ -50,6 +52,11 @@ function SurveyStandaloneApp() {
         </Route>
 
         <Route path="/submit/:token" element={<PublicSubmit />} />
+
+        {/* The full-screen Survey Designer (Survey123-style: title, tabs,
+            palette, canvas, Publish) is deliberately a top-level route —
+            it renders its own complete top bar, so nothing else wraps it. */}
+        <Route path="/design/surveys/:surveyId" element={<SurveyDesigner />} />
 
         {/* Backend serves this bundle at /survey.html (see backend static
             mount) — that's window.location.pathname on load, so it must
@@ -65,9 +72,9 @@ function SurveyStandaloneApp() {
         >
           <Route index element={<Navigate to="surveys" replace />} />
           <Route path="surveys" element={<SurveyList />} />
+          <Route path="surveys/new" element={<SurveyNew />} />
           <Route path="surveys/:surveyId" element={<SurveyDetail />}>
-            <Route index element={<SurveyForm />} />
-            <Route path="form" element={<SurveyForm />} />
+            <Route index element={<SurveyOverview />} />
           </Route>
         </Route>
 

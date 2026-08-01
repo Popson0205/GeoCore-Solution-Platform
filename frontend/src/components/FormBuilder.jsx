@@ -51,11 +51,11 @@ function uid() {
   return `tmp_${_uidCounter}_${Date.now()}`
 }
 
-export function emptyField() {
+export function emptyField(fieldType = 'text') {
   return {
     _uid: uid(),
     label: '',
-    field_type: 'text',
+    field_type: fieldType,
     options: [],
     is_required: false,
     visibility: null,

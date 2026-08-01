@@ -46,7 +46,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
         // skip straight to the builder.
         if (orgs.length === 1 && data.length === 1) {
           navigate(
-            `/workspace/organisations/${activeOrg.id}/surveys/${data[0].id}/form`,
+            `/design/surveys/${data[0].id}`,
             { replace: true },
           )
         }
@@ -132,24 +132,20 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
             <section className="panel">
               <div className="panel-head">
                 <h2>{activeOrg.name} — surveys</h2>
-                <span className="panel-count">{surveys.length}</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className="panel-count">{surveys.length}</span>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => navigate(`/workspace/organisations/${activeOrg.id}/surveys/new`)}
+                  >
+                    + New survey
+                  </button>
+                </div>
               </div>
               {surveys.length === 0 ? (
                 <div className="empty-state">
                   <p>No surveys yet.</p>
-                  <span>
-                    Create one from{' '}
-                    <a
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        navigate(`/workspace/organisations/${activeOrg.id}/surveys`)
-                      }}
-                    >
-                      GeoCore Portal
-                    </a>
-                    , then come back here to build its form.
-                  </span>
+                  <span>Create one above to start designing its form.</span>
                 </div>
               ) : (
                 <div className="gallery-grid">
@@ -158,7 +154,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                       key={s.id}
                       className="gallery-card is-link"
                       onClick={() =>
-                        navigate(`/workspace/organisations/${activeOrg.id}/surveys/${s.id}/form`)
+                        navigate(`/design/surveys/${s.id}`)
                       }
                     >
                       <span
@@ -169,7 +165,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                       </span>
                       <span className="gallery-card-body">
                         <strong>{s.title}</strong>
-                        <span className="ws-muted">Open form builder</span>
+                        <span className="ws-muted">Open in Designer</span>
                       </span>
                     </button>
                   ))}

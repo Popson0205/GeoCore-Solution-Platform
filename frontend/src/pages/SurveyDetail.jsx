@@ -13,10 +13,7 @@ const RANK = {
 
 const STATUSES = ['draft', 'published', 'archived']
 
-const TABS = [
-  { to: '', label: 'Overview', end: true },
-  { to: 'form', label: 'Form' },
-]
+const TABS = [{ to: '', label: 'Overview', end: true }]
 
 export default function SurveyDetail() {
   const { surveyId } = useParams()

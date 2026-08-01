@@ -2,7 +2,7 @@ import React from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 
 export default function SurveyOverview() {
-  const { survey } = useOutletContext()
+  const { survey, surveyId } = useOutletContext()
 
   return (
     <div>
@@ -26,7 +26,8 @@ export default function SurveyOverview() {
           <h2>Next step</h2>
         </div>
         <p className="ws-muted">
-          Open <Link to="form">Form</Link> to define what this survey collects.
+          Open the <Link to={`/design/surveys/${surveyId}`}>Designer</Link> to define what this
+          survey collects.
         </p>
       </section>
     </div>
