@@ -296,3 +296,49 @@ export function TableWidget({ columns, rows }) {
     </div>
   )
 }
+
+export function DetailsWidget({ items }) {
+  if (!items || items.length === 0) return <p className="ws-muted">No record yet.</p>
+  return (
+    <dl className="details-widget">
+      {items.map((item, i) => (
+        <div key={i} className="details-widget-row">
+          <dt>{item.label}</dt>
+          <dd>{item.value === '' || item.value == null ? '—' : item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+// Rich text is authored as plain-ish markdown-lite (bold/italic/line
+// breaks only) rather than raw HTML, so a dashboard editor can't use this
+// widget to inject arbitrary markup — same reasoning as CSP: keep static
+// content genuinely static.
+function renderRichText(content) {
+  const escaped = (content || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  const withItalic = withBold.replace(/\*(.+?)\*/g, '<em>$1</em>')
+  const withBreaks = withItalic.replace(/\n/g, '<br />')
+  return { __html: withBreaks }
+}
+
+export function RichTextWidget({ content }) {
+  if (!content) return <p className="ws-muted">No content yet.</p>
+  return <div className="rich-text-widget" dangerouslySetInnerHTML={renderRichText(content)} />
+}
+
+export function EmbeddedWidget({ url }) {
+  if (!url) return <p className="ws-muted">No URL set yet.</p>
+  return (
+    <iframe
+      className="embedded-widget-frame"
+      src={url}
+      title="Embedded content"
+      sandbox="allow-scripts allow-same-origin allow-popups"
+    />
+  )
+}

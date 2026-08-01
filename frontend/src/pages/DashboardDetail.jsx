@@ -1,8 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router-dom'
+import { useOutletContext, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { VISIBILITY_OPERATORS } from '../lib/formEngine'
-import { BarChart, GaugeChart, KpiCard, LineChart, ListWidget, MapWidget, PieChart, TableWidget } from '../components/charts/Charts'
+import {
+  BarChart,
+  DetailsWidget,
+  EmbeddedWidget,
+  GaugeChart,
+  KpiCard,
+  LineChart,
+  ListWidget,
+  MapWidget,
+  PieChart,
+  RichTextWidget,
+  TableWidget,
+} from '../components/charts/Charts'
+import {
+  DASHBOARD_THEMES,
+  DEFAULT_THEME_PRESET,
+  THEME_COLOR_FIELDS,
+  resolveThemeColors,
+  themeColorsToCssVars,
+} from '../lib/dashboardThemes'
 
 const RANK = {
   viewer: 0,
@@ -13,15 +32,22 @@ const RANK = {
   owner: 5,
 }
 
+// Matches ArcGIS Dashboards' own "Add element" menu — Map, Serial chart
+// (bar/line kept as two distinct entries since they're two distinct
+// widget_types on the backend), Pie chart, Indicator, Gauge, List, Table,
+// Details, Rich text, Embedded content.
 const WIDGET_TYPES = [
-  { value: 'kpi', label: 'KPI number' },
-  { value: 'gauge', label: 'Gauge (% of target)' },
-  { value: 'bar_chart', label: 'Bar chart' },
-  { value: 'pie_chart', label: 'Pie chart' },
-  { value: 'line_chart', label: 'Line chart (over time)' },
-  { value: 'table', label: 'Table' },
-  { value: 'list', label: 'List' },
-  { value: 'map', label: 'Map' },
+  { value: 'map', label: 'Map', icon: '\u{1F5FA}' },
+  { value: 'bar_chart', label: 'Serial chart (bar)', icon: '\u{1F4CA}' },
+  { value: 'line_chart', label: 'Serial chart (line)', icon: '\u{1F4C8}' },
+  { value: 'pie_chart', label: 'Pie chart', icon: '\u{1F967}' },
+  { value: 'kpi', label: 'Indicator', icon: '#' },
+  { value: 'gauge', label: 'Gauge', icon: '\u25D4' },
+  { value: 'list', label: 'List', icon: '\u2263' },
+  { value: 'table', label: 'Table', icon: '\u229E' },
+  { value: 'details', label: 'Details', icon: '\u2261' },
+  { value: 'rich_text', label: 'Rich text', icon: 'abc' },
+  { value: 'embedded', label: 'Embedded content', icon: '\u29C9' },
 ]
 
 const AGGREGATIONS = [
@@ -31,6 +57,11 @@ const AGGREGATIONS = [
   { value: 'min', label: 'Minimum' },
   { value: 'max', label: 'Maximum' },
 ]
+
+// Widget types that don't operate on a Survey's records at all — no
+// layer picker, no filters, nothing to compute server-side beyond echoing
+// their own static config back (see core/dashboard_engine.py).
+const STATIC_WIDGET_TYPES = new Set(['rich_text', 'embedded'])
 
 /** Data-source picker backed by GET /organisations/{id}/feature-layers —
  * every Survey across every project in the org, not just the dashboard's
@@ -53,11 +84,11 @@ function useFeatureLayers(orgId) {
   return { layers, loading }
 }
 
-function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
+function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }) {
   const { authedFetch } = useAuth()
   const { layers } = useFeatureLayers(orgId)
   const [title, setTitle] = useState(initial?.title || '')
-  const [widgetType, setWidgetType] = useState(initial?.widget_type || 'kpi')
+  const [widgetType, setWidgetType] = useState(initial?.widget_type || initialType || 'kpi')
   const [surveyId, setSurveyId] = useState(initial?.config?.survey_id || '')
   const [layerFields, setLayerFields] = useState([])
   const [aggregation, setAggregation] = useState(initial?.config?.aggregation || 'count')
@@ -74,15 +105,19 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
   const [filterField, setFilterField] = useState(initial?.config?.filters?.[0]?.field_key || '')
   const [filterOperator, setFilterOperator] = useState(initial?.config?.filters?.[0]?.operator || 'equals')
   const [filterValue, setFilterValue] = useState(initial?.config?.filters?.[0]?.value ?? '')
+  const [content, setContent] = useState(initial?.config?.content || '')
+  const [embedUrl, setEmbedUrl] = useState(initial?.config?.url || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  const isStatic = STATIC_WIDGET_TYPES.has(widgetType)
 
   // Default to the current project's own layers on top of the list, then
   // every other layer in the org below — most widgets are same-project.
   const orderedLayers = [...layers].sort((a, b) => {
     if (a.project_id === projectId && b.project_id !== projectId) return -1
     if (b.project_id === projectId && a.project_id !== projectId) return 1
-    return a.project_name.localeCompare(b.project_name)
+    return (a.project_name || '').localeCompare(b.project_name || '')
   })
 
   useEffect(() => {
@@ -116,8 +151,8 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
       ? [{ field_key: filterField, operator: filterOperator, value: filterValue }]
       : []
 
-    let config = { filters }
-    if (surveyId) config.survey_id = surveyId
+    let config = isStatic ? {} : { filters }
+    if (!isStatic && surveyId) config.survey_id = surveyId
 
     if (widgetType === 'kpi') {
       config = { ...config, aggregation, field_key: aggregation === 'count' ? null : fieldKey }
@@ -146,6 +181,8 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
       }
     } else if (widgetType === 'table') {
       config = { ...config, field_keys: selectedFieldKeys, limit: parseInt(limit, 10) || 20 }
+    } else if (widgetType === 'details') {
+      config = { ...config, field_keys: selectedFieldKeys }
     } else if (widgetType === 'list') {
       config = {
         ...config,
@@ -153,6 +190,10 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
         subtitle_field_keys: subtitleFieldKeys,
         limit: parseInt(limit, 10) || 20,
       }
+    } else if (widgetType === 'rich_text') {
+      config = { content }
+    } else if (widgetType === 'embedded') {
+      config = { url: embedUrl }
     }
 
     try {
@@ -168,7 +209,7 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
     <form onSubmit={handleSubmit} className="stacked-form">
       <div className="form-row">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Widget title" style={{ flex: 1 }} />
-        <select value={widgetType} onChange={(e) => setWidgetType(e.target.value)}>
+        <select value={widgetType} onChange={(e) => setWidgetType(e.target.value)} disabled={!!initial}>
           {WIDGET_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
@@ -177,18 +218,21 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
         </select>
       </div>
 
-      <label className="form-label">
-        Layer (feature layer — any project in this org) {widgetType === 'map' && '· optional, blank shows every layer'}
-        <select value={surveyId} onChange={(e) => setSurveyId(e.target.value)}>
-          {widgetType === 'map' && <option value="">All layers</option>}
-          {widgetType !== 'map' && <option value="">Select a layer…</option>}
-          {orderedLayers.map((layer) => (
-            <option key={layer.survey_id} value={layer.survey_id}>
-              {layer.project_name} — {layer.survey_title} ({layer.record_count})
-            </option>
-          ))}
-        </select>
-      </label>
+      {!isStatic && (
+        <label className="form-label">
+          Layer (feature layer — any project in this org) {widgetType === 'map' && '· optional, blank shows every layer'}
+          <select value={surveyId} onChange={(e) => setSurveyId(e.target.value)}>
+            {widgetType === 'map' && <option value="">All layers</option>}
+            {widgetType !== 'map' && <option value="">Select a layer…</option>}
+            {orderedLayers.map((layer) => (
+              <option key={layer.survey_id} value={layer.survey_id}>
+                {layer.project_name ? `${layer.project_name} — ` : ''}
+                {layer.survey_title} ({layer.record_count})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {widgetType === 'kpi' && (
         <div className="form-row">
@@ -314,9 +358,9 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
         </div>
       )}
 
-      {widgetType === 'table' && (
+      {(widgetType === 'table' || widgetType === 'details') && (
         <div>
-          <p className="builder-hint">Columns to show:</p>
+          <p className="builder-hint">{widgetType === 'table' ? 'Columns to show:' : 'Fields to show:'}</p>
           <div className="checkbox-group">
             {fields.map((f) => (
               <label key={f.field_key} className="checkbox-label">
@@ -329,10 +373,17 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
               </label>
             ))}
           </div>
-          <label className="form-label" style={{ maxWidth: 120, marginTop: 6 }}>
-            Row limit
-            <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
-          </label>
+          {widgetType === 'table' && (
+            <label className="form-label" style={{ maxWidth: 120, marginTop: 6 }}>
+              Row limit
+              <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
+            </label>
+          )}
+          {widgetType === 'details' && (
+            <p className="builder-hint" style={{ marginTop: 6 }}>
+              Shows the single most recent matching record — leave fields unchecked to show all of them.
+            </p>
+          )}
         </div>
       )}
 
@@ -369,7 +420,30 @@ function WidgetForm({ orgId, projectId, initial, onSave, onCancel }) {
         </div>
       )}
 
-      {widgetType !== 'map' && (
+      {widgetType === 'rich_text' && (
+        <label className="form-label">
+          Content — **bold**, *italic*, and line breaks are supported
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={6}
+            placeholder="Write a note, instructions, or context for this dashboard…"
+          />
+        </label>
+      )}
+
+      {widgetType === 'embedded' && (
+        <label className="form-label">
+          URL to embed
+          <input
+            value={embedUrl}
+            onChange={(e) => setEmbedUrl(e.target.value)}
+            placeholder="https://example.com/embed"
+          />
+        </label>
+      )}
+
+      {!isStatic && widgetType !== 'map' && (
         <div>
           <p className="builder-subhead">Filter (optional)</p>
           <div className="condition-row">
@@ -427,8 +501,335 @@ function WidgetBody({ widget, data }) {
   if (widget.widget_type === 'line_chart') return <LineChart rows={data.rows} />
   if (widget.widget_type === 'table') return <TableWidget columns={data.columns} rows={data.rows} />
   if (widget.widget_type === 'list') return <ListWidget rows={data.rows} />
+  if (widget.widget_type === 'details') return <DetailsWidget items={data.items} />
+  if (widget.widget_type === 'rich_text') return <RichTextWidget content={data.content} />
+  if (widget.widget_type === 'embedded') return <EmbeddedWidget url={data.url} />
   if (widget.widget_type === 'map') return <MapWidget features={data.features} />
   return null
+}
+
+// ---------------------------------------------------------------------------
+// The empty-state screen shown before a dashboard has any widgets — mirrors
+// ArcGIS Dashboards' own "Visualize, monitor, and share information" screen.
+// ---------------------------------------------------------------------------
+
+function EmptyStateIllustration() {
+  return (
+    <svg viewBox="0 0 200 140" width={180} height={126} aria-hidden="true">
+      <rect x="30" y="30" width="90" height="70" rx="4" fill="none" stroke="var(--ws-border)" strokeWidth="2" />
+      <circle cx="55" cy="80" r="14" fill="none" stroke="var(--dash-warning, #d99000)" strokeWidth="4" strokeDasharray="60 30" />
+      <rect x="85" y="70" width="8" height="20" fill="var(--dash-warning, #d99000)" />
+      <rect x="97" y="60" width="8" height="30" fill="var(--dash-warning, #d99000)" />
+      <path d="M40 45 L60 45 L60 35 L80 55" fill="none" stroke="var(--dash-warning, #d99000)" strokeWidth="2" />
+      <circle cx="40" cy="45" r="3" fill="var(--dash-warning, #d99000)" />
+      <circle cx="80" cy="55" r="3" fill="var(--ws-text-muted)" />
+      <circle cx="140" cy="40" r="16" fill="none" stroke="var(--dash-warning, #d99000)" strokeWidth="3" />
+      <path d="M140 40 L140 28 M140 40 L150 40" stroke="var(--dash-warning, #d99000)" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="115" cy="70" r="8" fill="none" stroke="var(--ws-border)" strokeWidth="2" />
+      <path d="M111 70 L119 70 M115 66 L115 74" stroke="var(--ws-border)" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function AddElementMenu({ onPick, style }) {
+  return (
+    <div className="add-element-menu" style={style}>
+      {WIDGET_TYPES.map((t) => (
+        <button key={t.value} className="add-element-menu-item" onClick={() => onPick(t.value)}>
+          <span className="add-element-menu-icon">{t.icon}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ canEdit, onPick, onGoToPanel }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="dashboard-empty">
+      <EmptyStateIllustration />
+      <h2>Visualize, monitor, and share information</h2>
+      {canEdit ? (
+        <p>
+          Click the button below to start building your dashboard.
+          <br />
+          Need some inspiration first? Check out the links below.
+        </p>
+      ) : (
+        <p>This dashboard doesn't have any elements yet.</p>
+      )}
+      {canEdit && (
+        <div style={{ position: 'relative' }}>
+          <button className="dashboard-add-fab" onClick={() => setOpen((v) => !v)} title="Add element">
+            +
+          </button>
+          {open && (
+            <AddElementMenu
+              style={{ top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8 }}
+              onPick={(type) => {
+                setOpen(false)
+                onPick(type)
+              }}
+            />
+          )}
+        </div>
+      )}
+      {canEdit && (
+        <div className="dashboard-empty-links">
+          <button className="dashboard-empty-link" onClick={() => onGoToPanel('data')}>
+            Browse data sources
+          </button>
+          <button className="dashboard-empty-link" onClick={() => onGoToPanel('theme')}>
+            Choose a theme
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Left sidebar + its side panels (Add element / View / Data sources /
+// Theme / Time and region / Save) — the ArcGIS Dashboards builder chrome.
+// ---------------------------------------------------------------------------
+
+const SIDEBAR_ITEMS = [
+  { key: 'add', label: 'Add element', icon: '\u2295' },
+  { key: 'view', label: 'View', icon: '\u25A2' },
+  { key: 'data', label: 'Data sources', icon: '\u2261' },
+  { key: 'theme', label: 'Theme', icon: '\u25D1' },
+  { key: 'time', label: 'Time and region', icon: '\u25F7' },
+]
+
+function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget }) {
+  const [tab, setTab] = useState('body')
+  const [name, setName] = useState(dashboard.name)
+  const [description, setDescription] = useState(dashboard.description || '')
+  const [saving, setSaving] = useState(false)
+
+  async function saveHeader(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await onSaveDetails({ name, description: description || null })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="dashboard-side-panel">
+      <div className="dashboard-side-panel-head">
+        <h3>View</h3>
+        <button className="dashboard-panel-close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="dashboard-view-tabs">
+        {['body', 'header', 'sidebar', 'settings'].map((t) => (
+          <button
+            key={t}
+            className={`dashboard-view-tab${tab === t ? ' is-active' : ''}`}
+            onClick={() => setTab(t)}
+          >
+            {t[0].toUpperCase() + t.slice(1)}
+          </button>
+        ))}
+      </div>
+      <div className="dashboard-side-panel-body">
+        {tab === 'body' &&
+          (dashboard.widgets.length === 0 ? (
+            <div className="empty-state">
+              <p>This dashboard is empty.</p>
+              <span>Add an element to get started.</span>
+            </div>
+          ) : (
+            <ul className="entity-list">
+              {dashboard.widgets.map((w) => (
+                <li key={w.id} className="record-row">
+                  <div style={{ flex: 1 }}>
+                    <strong>{w.title}</strong>
+                    <div className="ws-muted">{WIDGET_TYPES.find((t) => t.value === w.widget_type)?.label}</div>
+                  </div>
+                  {canEdit && (
+                    <button className="btn-ghost" onClick={() => onDeleteWidget(w.id)}>
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ))}
+
+        {tab === 'header' &&
+          (canEdit ? (
+            <form onSubmit={saveHeader} className="stacked-form">
+              <label className="form-label">
+                Dashboard title
+                <input value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+              <label className="form-label">
+                Description
+                <input value={description} onChange={(e) => setDescription(e.target.value)} />
+              </label>
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : 'Save header'}
+              </button>
+            </form>
+          ) : (
+            <p className="ws-muted">Read-only for your role.</p>
+          ))}
+
+        {tab === 'sidebar' && (
+          <div className="empty-state">
+            <p>Sidebar layout is coming soon.</p>
+            <span>For now, every element lives in the main body grid.</span>
+          </div>
+        )}
+
+        {tab === 'settings' && (
+          <div className="empty-state">
+            <p>Additional settings are coming soon.</p>
+            <span>Renaming and describing this dashboard live under the Header tab for now.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DataSourcesPanel({ orgId, projectId, onClose }) {
+  const { layers, loading } = useFeatureLayers(orgId)
+  const ordered = [...layers].sort((a, b) => {
+    if (a.project_id === projectId && b.project_id !== projectId) return -1
+    if (b.project_id === projectId && a.project_id !== projectId) return 1
+    return (a.project_name || '').localeCompare(b.project_name || '')
+  })
+
+  return (
+    <div className="dashboard-side-panel">
+      <div className="dashboard-side-panel-head">
+        <h3>Data sources</h3>
+        <button className="dashboard-panel-close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="dashboard-side-panel-body">
+        <p className="builder-hint">
+          Every Survey in this organisation is available as a feature layer to bind widgets to —
+          pick one when adding or editing an element.
+        </p>
+        {loading ? (
+          <p className="ws-muted">Loading…</p>
+        ) : ordered.length === 0 ? (
+          <div className="empty-state">
+            <p>No feature layers yet.</p>
+            <span>Create a Survey first — every Survey is its own feature layer.</span>
+          </div>
+        ) : (
+          <ul className="entity-list">
+            {ordered.map((layer) => (
+              <li key={layer.survey_id} className="record-row">
+                <span className="color-dot" style={{ background: layer.color }} />
+                <div style={{ flex: 1 }}>
+                  <strong>{layer.survey_title}</strong>
+                  <div className="ws-muted">
+                    {layer.project_name || 'No project'} · {layer.record_count} records
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ThemePanel({ dashboard, canEdit, onClose, onSaveTheme }) {
+  const [step, setStep] = useState('presets') // presets | custom
+  const [preset, setPreset] = useState(dashboard.theme?.preset || DEFAULT_THEME_PRESET)
+  const [overrides, setOverrides] = useState(dashboard.theme?.overrides || {})
+
+  function applyPreset(key) {
+    setPreset(key)
+    setOverrides({})
+    onSaveTheme({ preset: key, overrides: {} })
+  }
+
+  function setColor(fieldKey, value) {
+    const next = { ...overrides, [fieldKey]: value }
+    setOverrides(next)
+    onSaveTheme({ preset, overrides: next })
+  }
+
+  const liveColors = resolveThemeColors({ preset, overrides })
+
+  return (
+    <div className="dashboard-side-panel">
+      <div className="dashboard-side-panel-head">
+        {step === 'custom' ? (
+          <>
+            <button className="dashboard-panel-back" onClick={() => setStep('presets')}>
+              &larr;
+            </button>
+            <h3>Custom theme</h3>
+          </>
+        ) : (
+          <h3>Theme</h3>
+        )}
+        <button className="dashboard-panel-close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="dashboard-side-panel-body">
+        {!canEdit ? (
+          <p className="ws-muted">Read-only for your role.</p>
+        ) : step === 'presets' ? (
+          <>
+            <p className="builder-hint">Select a theme to apply or customize.</p>
+            <div className="theme-preset-list">
+              {Object.entries(DASHBOARD_THEMES).map(([key, t]) => (
+                <button
+                  key={key}
+                  className={`theme-preset-row${preset === key ? ' is-active' : ''}`}
+                  onClick={() => applyPreset(key)}
+                >
+                  <span className="theme-preset-swatch" style={{ background: t.colors.backgroundColor }}>
+                    <span style={{ background: t.colors.accentColor }} />
+                    <span style={{ background: t.colors.foregroundColor }} />
+                  </span>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button className="btn-primary btn-block" style={{ marginTop: 14 }} onClick={() => setStep('custom')}>
+              Customize selected theme
+            </button>
+          </>
+        ) : (
+          <>
+            {THEME_COLOR_FIELDS.map((group) => (
+              <div key={group.group} className="theme-color-group">
+                <p className="palette-group-label">{group.group}</p>
+                {group.fields.map((f) => (
+                  <label key={f.key} className="theme-color-row">
+                    {f.label}
+                    <input
+                      type="color"
+                      value={liveColors[f.key]}
+                      onChange={(e) => setColor(f.key, e.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function DashboardDetail() {
@@ -441,10 +842,13 @@ export default function DashboardDetail() {
   const [widgetData, setWidgetData] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showAddWidget, setShowAddWidget] = useState(false)
+  const [activePanel, setActivePanel] = useState(null)
+  const [addingType, setAddingType] = useState(null)
   const [editingWidgetId, setEditingWidgetId] = useState(null)
   const [dragWidgetId, setDragWidgetId] = useState(null)
   const [resizing, setResizing] = useState(null) // { id, w } — live width during a drag-resize
+  const [collapsed, setCollapsed] = useState(false)
+  const [saveFlash, setSaveFlash] = useState(false)
   const gridRef = useRef(null)
 
   async function load() {
@@ -482,7 +886,7 @@ export default function DashboardDetail() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    setShowAddWidget(false)
+    setAddingType(null)
     await load()
   }
 
@@ -499,6 +903,33 @@ export default function DashboardDetail() {
   async function handleDeleteWidget(widgetId) {
     await authedFetch(`/api/widgets/${widgetId}`, { method: 'DELETE' })
     await load()
+  }
+
+  async function handleSaveDetails(patch) {
+    const updated = await authedFetch(`/api/dashboards/${dashboardId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    setDashboard((d) => ({ ...d, ...updated }))
+  }
+
+  async function handleSaveTheme(theme) {
+    setDashboard((d) => ({ ...d, theme })) // instant local preview
+    try {
+      await authedFetch(`/api/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme }),
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function handleSaveClick() {
+    setSaveFlash(true)
+    load().finally(() => setTimeout(() => setSaveFlash(false), 1500))
   }
 
   async function handleReorderWidget(draggedId, targetId) {
@@ -590,108 +1021,192 @@ export default function DashboardDetail() {
     )
   }
 
+  const themeVars = themeColorsToCssVars(resolveThemeColors(dashboard.theme))
+
+  function togglePanel(key) {
+    setActivePanel((cur) => (cur === key ? null : key))
+    setAddingType(null)
+  }
+
   return (
-    <div className="dashboard-dark dashboard-canvas">
-      <div className="panel-head" style={{ marginBottom: 14 }}>
+    <div className="dashboard-builder dashboard-dark">
+      <aside className={`dashboard-sidebar${collapsed ? ' is-collapsed' : ''}`}>
         <div>
-          <h2 style={{ margin: 0 }}>{dashboard.name}</h2>
-          {dashboard.description && <p className="ws-muted" style={{ margin: '4px 0 0' }}>{dashboard.description}</p>}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary" onClick={refreshData}>
-            Refresh data
-          </button>
+          {SIDEBAR_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              className={`dashboard-sidebar-item${activePanel === item.key ? ' is-active' : ''}${
+                !canEdit && item.key !== 'data' ? ' is-disabled' : ''
+              }`}
+              onClick={() => (canEdit || item.key === 'data') && togglePanel(item.key)}
+              disabled={!canEdit && item.key !== 'data'}
+            >
+              <span className="dashboard-sidebar-icon">{item.icon}</span>
+              {!collapsed && item.label}
+            </button>
+          ))}
           {canEdit && (
-            <button className="btn-primary" onClick={() => setShowAddWidget(!showAddWidget)}>
-              {showAddWidget ? 'Close' : '+ Add widget'}
+            <button className="dashboard-sidebar-item" onClick={handleSaveClick}>
+              <span className="dashboard-sidebar-icon">{'\u2B07'}</span>
+              {!collapsed && (saveFlash ? 'Saved' : 'Save')}
             </button>
           )}
         </div>
-      </div>
+        <button className="dashboard-sidebar-collapse" onClick={() => setCollapsed((v) => !v)}>
+          {collapsed ? '\u00BB' : `\u00AB Collapse`}
+        </button>
+      </aside>
 
-      {error && <p className="hint">{error}</p>}
-
-      {showAddWidget && (
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <WidgetForm orgId={orgId} projectId={projectId} onSave={handleAddWidget} onCancel={() => setShowAddWidget(false)} />
-        </section>
+      {activePanel === 'add' && (
+        <div className="dashboard-side-panel">
+          <div className="dashboard-side-panel-head">
+            <h3>Add element</h3>
+            <button className="dashboard-panel-close" onClick={() => setActivePanel(null)}>
+              ×
+            </button>
+          </div>
+          <div className="dashboard-side-panel-body">
+            <AddElementMenu
+              onPick={(type) => {
+                setAddingType(type)
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {activePanel === 'view' && (
+        <ViewPanel
+          dashboard={dashboard}
+          canEdit={canEdit}
+          onClose={() => setActivePanel(null)}
+          onSaveDetails={handleSaveDetails}
+          onDeleteWidget={handleDeleteWidget}
+        />
+      )}
+      {activePanel === 'data' && (
+        <DataSourcesPanel orgId={orgId} projectId={projectId} onClose={() => setActivePanel(null)} />
+      )}
+      {activePanel === 'theme' && (
+        <ThemePanel
+          dashboard={dashboard}
+          canEdit={canEdit}
+          onClose={() => setActivePanel(null)}
+          onSaveTheme={handleSaveTheme}
+        />
+      )}
+      {activePanel === 'time' && (
+        <div className="dashboard-side-panel">
+          <div className="dashboard-side-panel-head">
+            <h3>Time and region</h3>
+            <button className="dashboard-panel-close" onClick={() => setActivePanel(null)}>
+              ×
+            </button>
+          </div>
+          <div className="dashboard-side-panel-body">
+            <div className="empty-state">
+              <p>Time and region settings are coming soon.</p>
+              <span>All data currently renders in your browser's local time zone.</span>
+            </div>
+          </div>
+        </div>
       )}
 
-      {dashboard.widgets.length === 0 ? (
-        <div className="empty-state">
-          <p>No widgets yet.</p>
-          <span>
-            {canEdit ? 'Add a KPI, chart, table or map above to start building this dashboard.' : 'Nothing to see here yet.'}
-          </span>
+      <div className="dashboard-canvas-outer" style={themeVars}>
+        <div className="dashboard-canvas-header">
+          <h1>{dashboard.name}</h1>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="btn-secondary" onClick={refreshData}>
+              Refresh data
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="dashboard-grid" ref={gridRef}>
-          {dashboard.widgets.map((widget) => {
-            const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
-            return (
-              <div
-                key={widget.id}
-                className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
-                style={{ gridColumn: `span ${Math.min(liveWidth, 12)}`, position: 'relative' }}
-                draggable={canEdit}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  setDragWidgetId(widget.id)
-                }}
-                onDragEnd={() => setDragWidgetId(null)}
-                onDragOver={(e) => canEdit && e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  if (canEdit && dragWidgetId && dragWidgetId !== widget.id) {
-                    handleReorderWidget(dragWidgetId, widget.id)
-                  }
-                  setDragWidgetId(null)
-                }}
-              >
-                <div className="widget-card-head">
-                  {canEdit && <span className="drag-handle" title="Drag to reorder">⠿</span>}
-                  <h3>{widget.title}</h3>
-                  {canEdit && (
-                    <>
-                      <button
-                        className="btn-ghost"
-                        onClick={() => setEditingWidgetId(editingWidgetId === widget.id ? null : widget.id)}
-                      >
-                        {editingWidgetId === widget.id ? 'Close' : 'Edit'}
-                      </button>
-                      <button className="btn-ghost" onClick={() => handleDeleteWidget(widget.id)}>
-                        Delete
-                      </button>
-                    </>
+
+        {error && <p className="hint" style={{ padding: '0 20px' }}>{error}</p>}
+
+        {(addingType || editingWidgetId) && (
+          <section className="panel" style={{ margin: '0 20px 16px' }}>
+            <WidgetForm
+              orgId={orgId}
+              projectId={projectId}
+              initialType={addingType}
+              initial={editingWidgetId ? dashboard.widgets.find((w) => w.id === editingWidgetId) : undefined}
+              onSave={(payload) =>
+                editingWidgetId ? handleUpdateWidget(editingWidgetId, payload) : handleAddWidget(payload)
+              }
+              onCancel={() => {
+                setAddingType(null)
+                setEditingWidgetId(null)
+              }}
+            />
+          </section>
+        )}
+
+        {dashboard.widgets.length === 0 && !addingType ? (
+          <EmptyState canEdit={canEdit} onPick={setAddingType} onGoToPanel={togglePanel} />
+        ) : (
+          <div className="dashboard-grid" ref={gridRef} style={{ margin: '0 20px 20px' }}>
+            {dashboard.widgets.map((widget) => {
+              const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
+              return (
+                <div
+                  key={widget.id}
+                  className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
+                  style={{ gridColumn: `span ${Math.min(liveWidth, 12)}`, position: 'relative' }}
+                  draggable={canEdit}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    setDragWidgetId(widget.id)
+                  }}
+                  onDragEnd={() => setDragWidgetId(null)}
+                  onDragOver={(e) => canEdit && e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (canEdit && dragWidgetId && dragWidgetId !== widget.id) {
+                      handleReorderWidget(dragWidgetId, widget.id)
+                    }
+                    setDragWidgetId(null)
+                  }}
+                >
+                  <div className="widget-card-head">
+                    {canEdit && <span className="drag-handle" title="Drag to reorder">⠿</span>}
+                    <h3>{widget.title}</h3>
+                    {canEdit && (
+                      <>
+                        <button
+                          className="btn-ghost"
+                          onClick={() => {
+                            setAddingType(null)
+                            setEditingWidgetId(editingWidgetId === widget.id ? null : widget.id)
+                          }}
+                        >
+                          {editingWidgetId === widget.id ? 'Close' : 'Edit'}
+                        </button>
+                        <button className="btn-ghost" onClick={() => handleDeleteWidget(widget.id)}>
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {editingWidgetId !== widget.id && (
+                    <div className="widget-body">
+                      <WidgetBody widget={widget} data={widgetData[widget.id]} />
+                    </div>
+                  )}
+                  {canEdit && editingWidgetId !== widget.id && (
+                    <span
+                      className="widget-resize-handle"
+                      title="Drag to resize"
+                      onMouseDown={(e) => startResize(e, widget)}
+                    >
+                      ◢
+                    </span>
                   )}
                 </div>
-                {editingWidgetId === widget.id ? (
-                  <WidgetForm
-                    orgId={orgId}
-                    projectId={projectId}
-                    initial={widget}
-                    onSave={(payload) => handleUpdateWidget(widget.id, payload)}
-                    onCancel={() => setEditingWidgetId(null)}
-                  />
-                ) : (
-                  <div className="widget-body">
-                    <WidgetBody widget={widget} data={widgetData[widget.id]} />
-                  </div>
-                )}
-                {canEdit && editingWidgetId !== widget.id && (
-                  <span
-                    className="widget-resize-handle"
-                    title="Drag to resize"
-                    onMouseDown={(e) => startResize(e, widget)}
-                  >
-                    ◢
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
