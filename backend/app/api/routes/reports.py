@@ -1,17 +1,21 @@
 import io
 import logging
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member
+from backend.app.core import geoai
+from backend.app.core.dashboard_engine import compute_widget
 from backend.app.core.database import get_db
 from backend.app.models.attachment import Attachment
+from backend.app.models.dashboard import Dashboard
 from backend.app.models.record import Record
 from backend.app.models.report import Report
 from backend.app.models.survey import Survey
@@ -61,6 +65,72 @@ def _build_project_summary(db: Session, project_id: uuid.UUID) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# GeoAI context — everything a report actually renders (survey structure,
+# dashboard widgets and their live computed values) gets handed to
+# core/geoai.py so the narrative it writes can reference real field names,
+# real chart values, and real survey titles instead of generic filler.
+# ---------------------------------------------------------------------------
+
+
+def _build_geoai_context(db: Session, organisation, surveys: list, summary: dict) -> dict:
+    survey_ctx = [
+        {
+            "title": s.title,
+            "description": s.description,
+            "geometry_type": s.geometry_type,
+            "record_count": next(
+                (row["record_count"] for row in summary["by_survey"] if row["name"] == s.title), 0
+            ),
+            "fields": [{"label": f.label, "field_type": f.field_type} for f in s.field_definitions],
+        }
+        for s in surveys
+    ]
+
+    dashboards = (
+        db.query(Dashboard)
+        .options(selectinload(Dashboard.widgets))
+        .filter(Dashboard.organisation_id == organisation.id)
+        .all()
+    )
+
+    records_by_survey: dict = defaultdict(list)
+    referenced_ids = {
+        w.config.get("survey_id") for d in dashboards for w in d.widgets if w.config.get("survey_id")
+    }
+    if referenced_ids:
+        for r in db.query(Record).filter(Record.survey_id.in_(referenced_ids)).all():
+            records_by_survey[str(r.survey_id)].append(r)
+    needs_org_records = any(
+        w.widget_type == "map" and not w.config.get("survey_id") for d in dashboards for w in d.widgets
+    )
+    if needs_org_records:
+        for r in db.query(Record).filter(Record.organisation_id == organisation.id).all():
+            records_by_survey[str(r.survey_id)].append(r)
+
+    dashboard_ctx = [
+        {
+            "name": d.name,
+            "widgets": [
+                {
+                    "title": w.title,
+                    "widget_type": w.widget_type,
+                    "data": compute_widget(w, records_by_survey),
+                }
+                for w in d.widgets
+            ],
+        }
+        for d in dashboards
+    ]
+
+    return {
+        "organisation_name": organisation.name,
+        "summary": summary,
+        "surveys": survey_ctx,
+        "dashboards": dashboard_ctx,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Organisation-scoped (Portal-wide) reports — Reports centralize to Portal
 # scope alongside Dashboards, since a report that can't see cross-survey
 # data would otherwise be the one artifact left behind by the rest of the
@@ -71,17 +141,41 @@ def _build_project_summary(db: Session, project_id: uuid.UUID) -> dict:
 @router.post("/organisations/{organisation_id}/reports", response_model=ReportOut, status_code=201)
 def generate_report_for_organisation(
     organisation_id: uuid.UUID,
+    include_ai: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """`include_ai=true` asks GeoAI to write a narrative section — an
+    actual explanation of what the data shows (referencing real survey
+    fields and dashboard chart values), not just the counts in `summary`.
+    Requires ANTHROPIC_API_KEY to be configured on this deployment; if
+    it's not, this 503s with a clear message rather than silently
+    returning a report without the narrative the caller explicitly asked
+    for.
+    """
     organisation = get_organisation_for_member(db, organisation_id, current_user.id)
-    summary = _build_organisation_summary(db, organisation_id)
+    surveys = (
+        db.query(Survey)
+        .options(selectinload(Survey.field_definitions))
+        .filter(Survey.organisation_id == organisation_id)
+        .all()
+    )
+    summary = _build_summary_for_surveys(db, surveys)
+
+    ai_summary = None
+    if include_ai:
+        try:
+            context = _build_geoai_context(db, organisation, surveys, summary)
+            ai_summary = geoai.generate_narrative(context)
+        except geoai.GeoAIUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
 
     report = Report(
         organisation_id=organisation_id,
         project_id=None,
         title=f"{organisation.name} report — {datetime.now(timezone.utc):%Y-%m-%d}",
         summary=summary,
+        ai_summary=ai_summary,
         generated_by=current_user.id,
     )
     db.add(report)
@@ -103,6 +197,22 @@ def list_reports_for_organisation(
         .order_by(Report.created_at.desc())
         .all()
     )
+
+
+@router.get("/organisations/{organisation_id}/reports/geoai-status")
+def geoai_status(
+    organisation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lets the frontend show/hide the "Generate with GeoAI insights"
+    option instead of only discovering it's unavailable after a failed
+    attempt.
+    """
+    get_organisation_for_member(db, organisation_id, current_user.id)
+    from backend.app.core.config import settings
+
+    return {"available": bool(settings.anthropic_api_key)}
 
 
 # ---------------------------------------------------------------------------
@@ -183,13 +293,39 @@ def _get_report_for_member(db: Session, report_id: uuid.UUID, user: User) -> Rep
     return report
 
 
+def _wrap_text(pdf, text: str, x: float, y: float, max_width: float, font: str, size: int, leading: float):
+    """Simple word-wrap for reportlab, which has no built-in paragraph
+    flow on a bare Canvas. Returns the new y position after drawing.
+    """
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    pdf.setFont(font, size)
+    words = (text or "").split()
+    line = ""
+    for word in words:
+        candidate = f"{line} {word}".strip()
+        if stringWidth(candidate, font, size) > max_width and line:
+            pdf.drawString(x, y, line)
+            y -= leading
+            line = word
+        else:
+            line = candidate
+    if line:
+        pdf.drawString(x, y, line)
+        y -= leading
+    return y
+
+
 def render_report_pdf(report: Report) -> io.BytesIO:
     """Render a Report row to a PDF buffer. Shared by the authenticated
     download endpoint below and the public share endpoint
     (routes/public.py) so both always produce the same document.
+
+    Beyond the summary indicators, this also carries the GeoAI narrative
+    (if one was generated) — the report is meant to stand on its own as
+    an explanation of what was collected and what it shows, not just a
+    count of records.
     """
-    # Imported lazily so the reportlab dependency only needs to load when a
-    # PDF is actually requested.
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
@@ -197,40 +333,59 @@ def render_report_pdf(report: Report) -> io.BytesIO:
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    margin = 20 * mm
+    max_width = width - 2 * margin
 
-    y = height - 25 * mm
+    def new_page_if_needed(y, threshold=30 * mm):
+        if y < threshold:
+            pdf.showPage()
+            return height - margin
+        return y
+
+    y = height - margin
     pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(20 * mm, y, "GeoCore Report")
+    pdf.drawString(margin, y, "GeoCore Report")
     y -= 10 * mm
     pdf.setFont("Helvetica", 12)
-    pdf.drawString(20 * mm, y, report.title)
+    pdf.drawString(margin, y, report.title)
     y -= 12 * mm
 
+    if report.ai_summary:
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.drawString(margin, y, "GeoAI narrative")
+        y -= 8 * mm
+        for paragraph in report.ai_summary.split("\n"):
+            if not paragraph.strip():
+                y -= 3 * mm
+                continue
+            y = _wrap_text(pdf, paragraph, margin, y, max_width, "Helvetica", 10, 5 * mm)
+            y = new_page_if_needed(y)
+        y -= 6 * mm
+        y = new_page_if_needed(y)
+
     pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawString(20 * mm, y, "Summary indicators")
+    pdf.drawString(margin, y, "Summary indicators")
     y -= 8 * mm
     pdf.setFont("Helvetica", 11)
     summary = report.summary or {}
-    lines = [
+    for line in [
         f"Surveys: {summary.get('survey_count', 0)}",
         f"Records: {summary.get('record_count', 0)}",
         f"Attachments: {summary.get('attachment_count', 0)}",
-    ]
-    for line in lines:
-        pdf.drawString(22 * mm, y, line)
+    ]:
+        pdf.drawString(margin + 2 * mm, y, line)
         y -= 7 * mm
+    y -= 3 * mm
+    y = new_page_if_needed(y)
 
-    y -= 5 * mm
     pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawString(20 * mm, y, "Records by survey")
+    pdf.drawString(margin, y, "Records by survey")
     y -= 8 * mm
     pdf.setFont("Helvetica", 11)
     for row in summary.get("by_survey", []):
-        pdf.drawString(22 * mm, y, f"{row['name']}: {row['record_count']}")
+        pdf.drawString(margin + 2 * mm, y, f"{row['name']}: {row['record_count']}")
         y -= 7 * mm
-        if y < 25 * mm:
-            pdf.showPage()
-            y = height - 25 * mm
+        y = new_page_if_needed(y)
 
     pdf.showPage()
     pdf.save()

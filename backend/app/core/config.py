@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
+    # GeoAI — optional narrative analysis woven into generated reports (see
+    # core/geoai.py). Reports work fine with this unset; the "Generate with
+    # GeoAI insights" option is just unavailable until a key is configured.
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
