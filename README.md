@@ -72,12 +72,14 @@ Any short, brandable domain is fine. A custom domain gives you a professional li
 
 - Authentication (register / login / me)
 - Organisations (multi-tenant, with owner membership on creation)
-- Projects (scoped to an organisation, membership-checked)
-- Asset types and dynamic field definitions
-- Spatial records (GeoJSON stored in a JSONB column — see note below)
-- Interactive map (Leaflet), colored and popup-annotated by asset type
+- Projects (optional folder scope under an organisation, membership-checked)
+- Surveys — a Survey123/KoBo-style flat form: one Survey *is* the form (sections, fields, skip
+  logic, calculations, validation, and a single geometry type), no separate asset-type layer
+- Spatial records (GeoJSON stored in a JSONB column — see note below); one Record = one
+  filled-out Survey submission
+- Interactive map (Leaflet), colored and popup-annotated by Survey
 - Attachments (local-disk file storage, 15 MB per file)
-- Dashboard indicators (asset type / record / attachment counts)
+- Dashboard indicators (survey / record / attachment counts)
 - Reports (generated PDF summary, with history)
 
 ## Note on spatial storage
@@ -92,10 +94,11 @@ change, not an API change. Do this before relying on spatial indexing,
 
 ## What to build next
 
-- Alembic migrations (tables are currently created with `create_all()` on startup)
+- Alembic migrations (`backend/alembic/versions/`) drive schema changes — run `alembic upgrade head` after pulling; `create_all()` is a fallback for a brand-new empty database only.
 - Migrate `records.geometry` to a real PostGIS geometry column + spatial index
 - S3-compatible object storage for attachments (local disk today)
-- Conditional logic, repeat groups and offline collection for forms
+- Offline collection for forms (conditional logic and repeat groups already exist — see
+  `backend/app/core/form_engine.py` and `frontend/src/components/FormBuilder.jsx`)
 - Role-based permission enforcement beyond "is a member" (owner / admin / project manager / data collector / analyst / viewer)
 - Pilot with a real geospatial use case
 

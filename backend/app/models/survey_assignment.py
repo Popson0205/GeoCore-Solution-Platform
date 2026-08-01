@@ -12,7 +12,7 @@ class SurveyAssignment(Base):
     """Optionally scopes a Data Collector's write access to specific
     Surveys within an organisation (Portal redesign Phase 9).
 
-    Distinct from `SubmissionAssignee` (asset_type.py): that model is an
+    Distinct from `SubmissionAssignee` (survey.py): that model is an
     email-only allowlist for the public, unauthenticated submission link;
     this model links a real GeoCore `User` to a `Survey` they're allowed
     to collect data against as an internal, logged-in Data Collector.

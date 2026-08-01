@@ -1,5 +1,8 @@
-"""Server-side processing of a record's field_data against its asset type's
-form definition (blueprint section 12: Forms and Field Data Collection).
+"""Server-side processing of a record's field_data against its parent
+Survey's form definition (blueprint section 12: Forms and Field Data
+Collection). A Survey *is* the form (flat Survey123/KoBo model) — it owns
+its sections/field_definitions directly, so this validates straight
+against the Survey with no asset-type indirection.
 
 This runs on every record create/update — see routes/records.py — so
 validation and calculations can never be bypassed by a client that skips
@@ -25,7 +28,7 @@ from backend.app.core.expressions import ExpressionError, evaluate
 from backend.app.core.visibility import is_visible
 
 if TYPE_CHECKING:
-    from backend.app.models.asset_type import AssetType, FieldDefinition
+    from backend.app.models.survey import FieldDefinition, Survey
 
 
 class FormValidationError(ValueError):
@@ -93,9 +96,9 @@ def _process_scope(
     section_by_id: dict | None = None,
 ) -> dict:
     """Evaluate visibility, apply calculations, and validate one flat scope
-    — either the asset type's top-level fields, or a single repeat
-    instance's fields. Returns the processed values (calculated fields
-    overwritten with their server-recomputed value).
+    — either the survey's top-level fields, or a single repeat instance's
+    fields. Returns the processed values (calculated fields overwritten
+    with their server-recomputed value).
     """
     processed = dict(values)
     for field in fields:
@@ -120,7 +123,7 @@ def _process_scope(
     return processed
 
 
-def process_submission(asset_type: AssetType, field_data: dict) -> dict:
+def process_submission(survey: Survey, field_data: dict) -> dict:
     """The authoritative pass over a submission. Call this from
     routes/records.py on every create and update — never persist
     field_data that hasn't been through here.
@@ -128,16 +131,16 @@ def process_submission(asset_type: AssetType, field_data: dict) -> dict:
     errors: list[str] = []
     field_data = dict(field_data or {})
 
-    section_by_id = {section.id: section for section in asset_type.sections}
+    section_by_id = {section.id: section for section in survey.sections}
     top_level_fields = [
         f
-        for f in asset_type.field_definitions
+        for f in survey.field_definitions
         if f.section_id is None or not section_by_id[f.section_id].repeatable
     ]
 
     processed = _process_scope(top_level_fields, field_data, errors, section_by_id)
 
-    for section in asset_type.sections:
+    for section in survey.sections:
         if not section.repeatable:
             continue
         if not is_visible(section.visibility, processed):

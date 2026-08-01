@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member
 from backend.app.core.database import get_db
-from backend.app.models.asset_type import AssetType
 from backend.app.models.attachment import Attachment
 from backend.app.models.record import Record
 from backend.app.models.report import Report
@@ -23,60 +22,49 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _build_summary_for_asset_types(db: Session, asset_types: list[AssetType]) -> dict:
-    asset_type_ids = [a.id for a in asset_types]
-    counts_by_type = {}
+def _build_summary_for_surveys(db: Session, surveys: list[Survey]) -> dict:
+    survey_ids = [s.id for s in surveys]
+    counts_by_survey = {}
     attachment_count = 0
-    if asset_type_ids:
-        counts_by_type = dict(
-            db.query(Record.asset_type_id, func.count(Record.id))
-            .filter(Record.asset_type_id.in_(asset_type_ids))
-            .group_by(Record.asset_type_id)
+    if survey_ids:
+        counts_by_survey = dict(
+            db.query(Record.survey_id, func.count(Record.id))
+            .filter(Record.survey_id.in_(survey_ids))
+            .group_by(Record.survey_id)
             .all()
         )
         attachment_count = (
             db.query(func.count(Attachment.id))
             .join(Record, Record.id == Attachment.record_id)
-            .filter(Record.asset_type_id.in_(asset_type_ids))
+            .filter(Record.survey_id.in_(survey_ids))
             .scalar()
             or 0
         )
     return {
-        "asset_type_count": len(asset_types),
-        "record_count": sum(counts_by_type.values()),
+        "survey_count": len(surveys),
+        "record_count": sum(counts_by_survey.values()),
         "attachment_count": attachment_count,
-        "by_asset_type": [
-            {"name": a.name, "record_count": counts_by_type.get(a.id, 0)} for a in asset_types
+        "by_survey": [
+            {"name": s.title, "record_count": counts_by_survey.get(s.id, 0)} for s in surveys
         ],
     }
 
 
 def _build_organisation_summary(db: Session, organisation_id: uuid.UUID) -> dict:
-    asset_types = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(Survey.organisation_id == organisation_id)
-        .all()
-    )
-    return _build_summary_for_asset_types(db, asset_types)
+    surveys = db.query(Survey).filter(Survey.organisation_id == organisation_id).all()
+    return _build_summary_for_surveys(db, surveys)
 
 
 def _build_project_summary(db: Session, project_id: uuid.UUID) -> dict:
-    asset_types = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(Survey.project_id == project_id)
-        .all()
-    )
-    return _build_summary_for_asset_types(db, asset_types)
+    surveys = db.query(Survey).filter(Survey.project_id == project_id).all()
+    return _build_summary_for_surveys(db, surveys)
 
 
 # ---------------------------------------------------------------------------
-# Organisation-scoped (Portal-wide) reports (Portal redesign Phase 2, this
-# Phase 6) — Reports centralize to Portal scope alongside Dashboards, per
-# the 10-phase plan's Phase 6 "Open question" recommendation, since a
-# report that can't see cross-survey data would otherwise be the one
-# artifact left behind by the rest of the redesign.
+# Organisation-scoped (Portal-wide) reports — Reports centralize to Portal
+# scope alongside Dashboards, since a report that can't see cross-survey
+# data would otherwise be the one artifact left behind by the rest of the
+# redesign.
 # ---------------------------------------------------------------------------
 
 
@@ -224,7 +212,7 @@ def render_report_pdf(report: Report) -> io.BytesIO:
     pdf.setFont("Helvetica", 11)
     summary = report.summary or {}
     lines = [
-        f"Asset types: {summary.get('asset_type_count', 0)}",
+        f"Surveys: {summary.get('survey_count', 0)}",
         f"Records: {summary.get('record_count', 0)}",
         f"Attachments: {summary.get('attachment_count', 0)}",
     ]
@@ -234,10 +222,10 @@ def render_report_pdf(report: Report) -> io.BytesIO:
 
     y -= 5 * mm
     pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawString(20 * mm, y, "Records by asset type")
+    pdf.drawString(20 * mm, y, "Records by survey")
     y -= 8 * mm
     pdf.setFont("Helvetica", 11)
-    for row in summary.get("by_asset_type", []):
+    for row in summary.get("by_survey", []):
         pdf.drawString(22 * mm, y, f"{row['name']}: {row['record_count']}")
         y -= 7 * mm
         if y < 25 * mm:

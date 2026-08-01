@@ -95,23 +95,22 @@ class DashboardSummaryOut(BaseModel):
 
 
 class FeatureLayerOut(BaseModel):
-    """One asset type, discoverable as a dashboard data source from
-    anywhere in the organisation — not just the dashboard's own project.
-    See GET /organisations/{id}/feature-layers.
+    """One Survey, discoverable as a dashboard data source from anywhere
+    in the organisation — not just the dashboard's own project. See
+    GET /organisations/{id}/feature-layers.
 
-    An asset type's real parent is its Survey (Portal redesign Phase 1),
-    not a Project directly, so this is keyed by survey_id/survey_title.
-    project_id/project_name are only populated when that survey happens to
-    sit under a project folder (a survey may live directly under the
-    organisation with no project at all).
+    In the flat Survey123/KoBo model a Survey *is* the feature layer now
+    (the old separate AssetType layer is retired) — this is keyed by
+    survey_id/survey_title directly. project_id/project_name are only
+    populated when the survey happens to sit under a project folder (a
+    survey may live directly under the organisation with no project at
+    all).
     """
 
-    asset_type_id: uuid.UUID
-    name: str
-    color: str
-    geometry_type: str
     survey_id: uuid.UUID
     survey_title: str
+    color: str
+    geometry_type: str
     project_id: Optional[uuid.UUID] = None
     project_name: Optional[str] = None
     record_count: int

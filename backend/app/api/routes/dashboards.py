@@ -16,7 +16,6 @@ from backend.app.api.deps_project import (
 from backend.app.core.dashboard_engine import compute_widget
 from backend.app.core.database import get_db
 from backend.app.core.roles import ANALYST, VIEWER
-from backend.app.models.asset_type import AssetType
 from backend.app.models.dashboard import Dashboard, DashboardWidget
 from backend.app.models.project import Project
 from backend.app.models.record import Record
@@ -52,7 +51,7 @@ def _get_dashboard(db: Session, dashboard_id: uuid.UUID) -> Dashboard:
 def _get_dashboard_for_member(db: Session, dashboard_id: uuid.UUID, user: User) -> Dashboard:
     dashboard = _get_dashboard(db, dashboard_id)
     # Resolved through organisation_id, not the now-optional project_id
-    # folder tag (Portal redesign Phase 2, this Phase 6).
+    # folder tag.
     get_organisation_for_member(db, dashboard.organisation_id, user.id)
     return dashboard
 
@@ -66,8 +65,8 @@ def _get_dashboard_for_role(
 
 
 # ---------------------------------------------------------------------------
-# Organisation-scoped dashboards (Portal redesign Phase 2, this Phase 6) —
-# the "actual queryable at the Portal, not walled in a Project" behaviour.
+# Organisation-scoped dashboards — the "actual queryable at the Portal, not
+# walled in a Project" behaviour.
 # ---------------------------------------------------------------------------
 
 
@@ -135,8 +134,8 @@ def list_dashboards_for_organisation(
 
 # ---------------------------------------------------------------------------
 # Deprecated project-scoped routes — kept so clients still built against the
-# old shape keep working (Portal redesign Phase 2, this Phase 6). New
-# integrations should use the organisation-scoped routes above.
+# old shape keep working. New integrations should use the organisation-
+# scoped routes above.
 # ---------------------------------------------------------------------------
 
 
@@ -254,30 +253,26 @@ def delete_dashboard(
     return None
 
 
-def _validate_widget_asset_type(db: Session, dashboard: Dashboard, config: dict) -> None:
-    """A widget can point at any asset type in the *same organisation* as
-    this dashboard — not just the dashboard's own project folder. This is
-    the "feature layer" model: data collected under one survey is still a
+def _validate_widget_survey(db: Session, dashboard: Dashboard, config: dict) -> None:
+    """A widget can point at any Survey in the *same organisation* as this
+    dashboard — not just the dashboard's own project folder. This is the
+    "feature layer" model: data collected under one survey is still a
     first-class layer any dashboard in the org can chart, the way an
     ArcGIS Online organisation's feature layers aren't locked to a single
     map. Cross-*organisation* references are never allowed — that would
     cross the tenant boundary from blueprint section 7.
 
-    Resolved through the asset type's Survey (Portal redesign Phase 1) —
-    an AssetType no longer has its own project_id, and a dashboard's real
-    tenancy anchor is organisation_id, not its optional project folder
-    (Portal redesign Phase 2, this Phase 6) — so comparing organisation_id
-    directly on both sides is simpler and more correct than the old
-    Project-to-Project join.
+    A Survey now carries its own organisation_id directly (flat model), so
+    comparing organisation_id on both sides is a single lookup — no join
+    through a former AssetType -> Survey chain needed any more.
     """
-    asset_type_id = config.get("asset_type_id")
-    if not asset_type_id:
+    survey_id = config.get("survey_id")
+    if not survey_id:
         return
-    asset_type = db.query(AssetType).filter(AssetType.id == asset_type_id).first()
-    if not asset_type:
-        raise HTTPException(status_code=404, detail="That layer's asset type no longer exists")
-    survey = db.query(Survey).filter(Survey.id == asset_type.survey_id).first()
-    if not survey or survey.organisation_id != dashboard.organisation_id:
+    survey = db.query(Survey).filter(Survey.id == survey_id).first()
+    if not survey:
+        raise HTTPException(status_code=404, detail="That layer's survey no longer exists")
+    if survey.organisation_id != dashboard.organisation_id:
         raise HTTPException(
             status_code=403, detail="That layer belongs to a different organisation"
         )
@@ -291,7 +286,7 @@ def add_widget(
     current_user: User = Depends(get_current_user),
 ):
     dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
-    _validate_widget_asset_type(db, dashboard, payload.config)
+    _validate_widget_survey(db, dashboard, payload.config)
     widget = DashboardWidget(
         dashboard_id=dashboard.id,
         widget_type=payload.widget_type,
@@ -327,7 +322,7 @@ def update_widget(
     widget = _get_widget_for_role(db, widget_id, current_user, ANALYST)
     if payload.config is not None:
         dashboard = _get_dashboard(db, widget.dashboard_id)
-        _validate_widget_asset_type(db, dashboard, payload.config)
+        _validate_widget_survey(db, dashboard, payload.config)
         widget.config = payload.config
     if payload.title is not None:
         widget.title = payload.title
@@ -361,33 +356,32 @@ def get_dashboard_data(
     """Computes every widget's current data in one call — see
     core/dashboard_engine.py. Returns {widget_id: computed_result}.
 
-    Records are fetched per-widget by the asset_type_id each widget's
-    config actually references (any layer in the org — see
-    _validate_widget_asset_type), not by a project_id. Map widgets with no
-    asset_type_id (asset_type_id is None => "every layer in the
-    organisation") now pull the whole organisation's records rather than
-    one project's — this is the Phase 6 behaviour change itself: a
+    Records are fetched per-widget by the survey_id each widget's config
+    actually references (any layer in the org — see
+    _validate_widget_survey), not by a project_id. Map widgets with no
+    survey_id (survey_id is None => "every survey in the organisation")
+    pull the whole organisation's records rather than one project's — a
     dashboard's map is Portal-wide by default, the same way its widget
-    picker already draws from any layer in the org.
+    picker already draws from any survey in the org.
     """
     dashboard = _get_dashboard_for_member(db, dashboard_id, current_user)
 
     referenced_ids = {
-        w.config.get("asset_type_id") for w in dashboard.widgets if w.config.get("asset_type_id")
+        w.config.get("survey_id") for w in dashboard.widgets if w.config.get("survey_id")
     }
     needs_org_records = any(
-        w.widget_type == "map" and not w.config.get("asset_type_id") for w in dashboard.widgets
+        w.widget_type == "map" and not w.config.get("survey_id") for w in dashboard.widgets
     )
 
-    records_by_asset_type: dict[str, list] = defaultdict(list)
+    records_by_survey: dict[str, list] = defaultdict(list)
     if referenced_ids:
-        for r in db.query(Record).filter(Record.asset_type_id.in_(referenced_ids)).all():
-            records_by_asset_type[str(r.asset_type_id)].append(r)
+        for r in db.query(Record).filter(Record.survey_id.in_(referenced_ids)).all():
+            records_by_survey[str(r.survey_id)].append(r)
     if needs_org_records:
         for r in db.query(Record).filter(Record.organisation_id == dashboard.organisation_id).all():
-            records_by_asset_type[str(r.asset_type_id)].append(r)
+            records_by_survey[str(r.survey_id)].append(r)
 
-    return {str(w.id): compute_widget(w, records_by_asset_type) for w in dashboard.widgets}
+    return {str(w.id): compute_widget(w, records_by_survey) for w in dashboard.widgets}
 
 
 @router.get("/organisations/{organisation_id}/feature-layers", response_model=list[FeatureLayerOut])
@@ -396,45 +390,41 @@ def list_feature_layers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Every asset type across every survey in this organisation, for the
-    dashboard widget builder's data-source picker — the "just select the
-    layer, even from a different survey/project" model. Read-only
-    discovery metadata (name/color/record count), not the records
-    themselves.
+    """Every Survey in this organisation, for the dashboard widget
+    builder's data-source picker — the "just select the layer, even from
+    a different survey/project" model. Read-only discovery metadata
+    (title/color/record count), not the records themselves.
 
-    Fixed to resolve through Survey (Portal redesign Phase 1) rather than
-    the removed `AssetType.project_id` — an asset type's real parent is
-    its survey, and that survey's project_id is only ever an optional
-    folder tag, so `project_id`/`project_name` below are populated only
-    when the survey happens to have one.
+    In the flat model a Survey *is* the feature layer (the separate
+    AssetType layer is retired), so this queries Survey directly —
+    project_id/project_name are populated only when the survey happens to
+    have one (a survey may live directly under the organisation with no
+    project at all).
     """
     require_org_role(db, organisation_id, current_user.id, VIEWER)
 
     rows = (
-        db.query(AssetType, Survey, Project)
-        .join(Survey, Survey.id == AssetType.survey_id)
+        db.query(Survey, Project)
         .outerjoin(Project, Project.id == Survey.project_id)
         .filter(Survey.organisation_id == organisation_id)
         .all()
     )
     counts = dict(
-        db.query(Record.asset_type_id, func.count(Record.id))
+        db.query(Record.survey_id, func.count(Record.id))
         .filter(Record.organisation_id == organisation_id)
-        .group_by(Record.asset_type_id)
+        .group_by(Record.survey_id)
         .all()
     )
 
     return [
         FeatureLayerOut(
-            asset_type_id=asset_type.id,
-            name=asset_type.name,
-            color=asset_type.color,
-            geometry_type=asset_type.geometry_type,
             survey_id=survey.id,
             survey_title=survey.title,
+            color=survey.color,
+            geometry_type=survey.geometry_type,
             project_id=project.id if project else None,
             project_name=project.name if project else None,
-            record_count=counts.get(asset_type.id, 0),
+            record_count=counts.get(survey.id, 0),
         )
-        for asset_type, survey, project in rows
+        for survey, project in rows
     ]

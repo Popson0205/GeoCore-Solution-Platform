@@ -53,13 +53,15 @@ class DashboardWidget(Base):
     backend/app/core/dashboard_engine.py for how `config` is turned into
     actual numbers.
 
-    `config` shape depends on `widget_type`:
-      kpi:        {asset_type_id, aggregation, field_key?, filters?}
+    `config` shape depends on `widget_type` (each Survey is itself a
+    "feature layer" now that the flat model retired the separate AssetType
+    layer — a widget binds to one Survey's records directly):
+      kpi:        {survey_id, aggregation, field_key?, filters?}
       bar_chart / pie_chart:
-                  {asset_type_id, group_by_field_key, aggregation, value_field_key?, filters?}
-      line_chart: {asset_type_id, interval, aggregation, value_field_key?, filters?}
-      table:      {asset_type_id, field_keys, filters?, limit?}
-      map:        {asset_type_id?, filters?}   (asset_type_id omitted = every asset type)
+                  {survey_id, group_by_field_key, aggregation, value_field_key?, filters?}
+      line_chart: {survey_id, interval, aggregation, value_field_key?, filters?}
+      table:      {survey_id, field_keys, filters?, limit?}
+      map:        {survey_id?, filters?}   (survey_id omitted = every survey)
 
     `layout` is grid position: {"x", "y", "w", "h"} on a 12-column grid.
     """

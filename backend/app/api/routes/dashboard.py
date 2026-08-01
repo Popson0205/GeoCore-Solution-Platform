@@ -7,12 +7,11 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member
 from backend.app.core.database import get_db
-from backend.app.models.asset_type import AssetType
 from backend.app.models.attachment import Attachment
 from backend.app.models.record import Record
 from backend.app.models.survey import Survey
 from backend.app.models.user import User
-from backend.app.schemas.dashboard import AssetTypeCount, OrganisationIndicators, ProjectIndicators
+from backend.app.schemas.dashboard import OrganisationIndicators, ProjectIndicators, SurveyCount
 
 router = APIRouter()
 
@@ -23,28 +22,23 @@ def organisation_indicators(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """The Portal-wide analogue of the project indicators panel below
-    (Portal redesign Phase 2, this Phase 6) — every asset type/record/
-    attachment across every survey in the organisation, not walled inside
-    one project.
+    """The Portal-wide indicators panel — every survey/record/attachment
+    across the organisation, not walled inside one project. In the flat
+    Survey123/KoBo model a Survey is itself the countable "layer" (the old
+    separate AssetType layer is retired), so this counts surveys directly.
     """
     get_organisation_for_member(db, organisation_id, current_user.id)
 
-    asset_types = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(Survey.organisation_id == organisation_id)
-        .all()
-    )
+    surveys = db.query(Survey).filter(Survey.organisation_id == organisation_id).all()
 
-    counts_by_type = dict(
-        db.query(Record.asset_type_id, func.count(Record.id))
+    counts_by_survey = dict(
+        db.query(Record.survey_id, func.count(Record.id))
         .filter(Record.organisation_id == organisation_id)
-        .group_by(Record.asset_type_id)
+        .group_by(Record.survey_id)
         .all()
     )
 
-    record_count = sum(counts_by_type.values())
+    record_count = sum(counts_by_survey.values())
 
     attachment_count = (
         db.query(func.count(Attachment.id))
@@ -56,17 +50,17 @@ def organisation_indicators(
 
     return OrganisationIndicators(
         organisation_id=organisation_id,
-        asset_type_count=len(asset_types),
+        survey_count=len(surveys),
         record_count=record_count,
         attachment_count=attachment_count,
-        records_by_asset_type=[
-            AssetTypeCount(
-                asset_type_id=asset_type.id,
-                name=asset_type.name,
-                color=asset_type.color,
-                record_count=counts_by_type.get(asset_type.id, 0),
+        records_by_survey=[
+            SurveyCount(
+                survey_id=survey.id,
+                name=survey.title,
+                color=survey.color,
+                record_count=counts_by_survey.get(survey.id, 0),
             )
-            for asset_type in asset_types
+            for survey in surveys
         ],
     )
 
@@ -78,55 +72,46 @@ def project_indicators(
     current_user: User = Depends(get_current_user),
 ):
     """Kept working (not deprecated — Project remains a valid optional
-    folder scope, per the 10-phase plan's Phase 10 note that Project can
-    stay as a permanent optional concept). Fixed to resolve asset types
-    through Survey.project_id, since AssetType no longer carries its own
-    project_id directly (Portal redesign Phase 1), and to count records by
-    asset type rather than by Record.project_id, since that column is now
-    only an optional folder tag and isn't reliably set on every record
-    filed under this project's surveys.
+    folder scope). Counts every Survey filed directly under this project
+    (Survey.project_id) and its records/attachments — no asset-type
+    indirection any more since a Survey owns its records' scope directly.
     """
     get_project_for_member(db, project_id, current_user.id)
 
-    asset_types = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(Survey.project_id == project_id)
-        .all()
-    )
-    asset_type_ids = [a.id for a in asset_types]
+    surveys = db.query(Survey).filter(Survey.project_id == project_id).all()
+    survey_ids = [s.id for s in surveys]
 
-    counts_by_type = {}
+    counts_by_survey = {}
     attachment_count = 0
-    if asset_type_ids:
-        counts_by_type = dict(
-            db.query(Record.asset_type_id, func.count(Record.id))
-            .filter(Record.asset_type_id.in_(asset_type_ids))
-            .group_by(Record.asset_type_id)
+    if survey_ids:
+        counts_by_survey = dict(
+            db.query(Record.survey_id, func.count(Record.id))
+            .filter(Record.survey_id.in_(survey_ids))
+            .group_by(Record.survey_id)
             .all()
         )
         attachment_count = (
             db.query(func.count(Attachment.id))
             .join(Record, Record.id == Attachment.record_id)
-            .filter(Record.asset_type_id.in_(asset_type_ids))
+            .filter(Record.survey_id.in_(survey_ids))
             .scalar()
             or 0
         )
 
-    record_count = sum(counts_by_type.values())
+    record_count = sum(counts_by_survey.values())
 
     return ProjectIndicators(
         project_id=project_id,
-        asset_type_count=len(asset_types),
+        survey_count=len(surveys),
         record_count=record_count,
         attachment_count=attachment_count,
-        records_by_asset_type=[
-            AssetTypeCount(
-                asset_type_id=asset_type.id,
-                name=asset_type.name,
-                color=asset_type.color,
-                record_count=counts_by_type.get(asset_type.id, 0),
+        records_by_survey=[
+            SurveyCount(
+                survey_id=survey.id,
+                name=survey.title,
+                color=survey.color,
+                record_count=counts_by_survey.get(survey.id, 0),
             )
-            for asset_type in asset_types
+            for survey in surveys
         ],
     )

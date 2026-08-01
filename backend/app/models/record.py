@@ -9,8 +9,10 @@ from backend.app.core.database import Base
 
 
 class Record(Base):
-    """An actual spatial data point/line/polygon collected against an asset
-    type (blueprint section 10 & 11).
+    """One filled-out Survey submission (blueprint section 10 & 11): a single
+    Record == one completed form. Its `geometry` shape (point/line/polygon,
+    or absent for a non-spatial survey) is dictated by the parent Survey's
+    geometry_type now that the Survey owns the form directly (flat model).
 
     `geometry` is stored as a plain GeoJSON geometry object
     (e.g. {"type": "Point", "coordinates": [lon, lat]}) in a JSONB column.
@@ -33,12 +35,11 @@ class Record(Base):
     survey_id = Column(
         UUID(as_uuid=True), ForeignKey("surveys.id"), nullable=False, index=True
     )
-    asset_type_id = Column(UUID(as_uuid=True), ForeignKey("asset_types.id"), nullable=False)
     # Now just an optional folder tag, no longer the scope boundary — records
     # are scoped by organisation_id/survey_id instead (Portal redesign Phase 1).
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     geometry = Column(JSONB, nullable=False)
-    # field_key -> value, keyed against that asset type's field_definitions
+    # field_key -> value, keyed against the parent Survey's field_definitions
     field_data = Column(JSONB, default=dict, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     # Set instead of created_by when a record comes in through a public or
@@ -56,7 +57,6 @@ class Record(Base):
     organisation = relationship("Organisation")
     survey = relationship("Survey")
     project = relationship("Project", backref="records")
-    asset_type = relationship("AssetType", backref="records")
     attachments = relationship(
         "Attachment", back_populates="record", cascade="all, delete-orphan"
     )

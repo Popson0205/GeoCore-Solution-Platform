@@ -20,7 +20,9 @@ class Geometry(BaseModel):
 
 
 class RecordCreate(BaseModel):
-    asset_type_id: uuid.UUID
+    # The parent Survey now comes from the request path (records are nested
+    # under a survey), so it's no longer part of the body — the old
+    # asset_type_id is gone with the flat model.
     geometry: Geometry
     field_data: dict[str, Any] = {}
 
@@ -36,7 +38,6 @@ class RecordOut(BaseModel):
     # folder tag (Portal redesign Phase 1).
     organisation_id: uuid.UUID
     survey_id: uuid.UUID
-    asset_type_id: uuid.UUID
     project_id: Optional[uuid.UUID] = None
     geometry: dict
     field_data: dict
@@ -54,7 +55,6 @@ class RecordGeometryOut(BaseModel):
     """
 
     id: uuid.UUID
-    asset_type_id: uuid.UUID
     survey_id: uuid.UUID
     geometry: dict
 

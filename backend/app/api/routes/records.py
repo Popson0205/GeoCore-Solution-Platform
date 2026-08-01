@@ -16,7 +16,6 @@ from backend.app.core.data_import import ImportError_, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.core.roles import DATA_COLLECTOR, PROJECT_MANAGER
-from backend.app.models.asset_type import AssetType
 from backend.app.models.record import Record
 from backend.app.models.survey import Survey
 from backend.app.models.user import User
@@ -34,21 +33,10 @@ logger = logging.getLogger(__name__)
 MAX_IMPORT_ROWS = 5000
 
 
-def _get_asset_type_in_survey(db: Session, asset_type_id: uuid.UUID, survey_id: uuid.UUID) -> AssetType:
-    asset_type = (
-        db.query(AssetType)
-        .filter(AssetType.id == asset_type_id, AssetType.survey_id == survey_id)
-        .first()
-    )
-    if not asset_type:
-        raise HTTPException(status_code=404, detail="Asset type not found in this survey")
-    return asset_type
-
-
 # ---------------------------------------------------------------------------
-# Survey-scoped create (Portal redesign Phase 2, this Phase 6) — records are
-# collected against a Survey's asset types, so creation is keyed by
-# survey_id directly rather than resolved indirectly through a project.
+# Survey-scoped create — one Record == one filled-out Survey form (flat
+# Survey123/KoBo model). A record is created directly against a Survey;
+# there's no intermediate asset type to resolve any more.
 # ---------------------------------------------------------------------------
 
 
@@ -62,14 +50,13 @@ def create_record_for_survey(
     # Collecting data is the Data Collector role's whole job — Analyst and
     # Viewer stay read-only (blueprint section 13).
     survey, _ = require_survey_role(db, survey_id, current_user.id, DATA_COLLECTOR)
-    asset_type = _get_asset_type_in_survey(db, payload.asset_type_id, survey_id)
 
     # Authoritative pass: evaluates skip logic, recomputes calculated
     # fields server-side, and validates — never persist raw client
     # field_data directly (blueprint section 12 & 19: validation can't
     # live only in the frontend).
     try:
-        processed_field_data = process_submission(asset_type, payload.field_data)
+        processed_field_data = process_submission(survey, payload.field_data)
     except FormValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors)
 
@@ -77,9 +64,8 @@ def create_record_for_survey(
         organisation_id=survey.organisation_id,
         survey_id=survey.id,
         # Copied over from the survey purely as an optional folder tag on
-        # the record (Portal redesign Phase 1/2) — not used for scoping.
+        # the record — not used for scoping.
         project_id=survey.project_id,
-        asset_type_id=payload.asset_type_id,
         geometry=payload.geometry.model_dump(),
         field_data=processed_field_data,
         created_by=current_user.id,
@@ -91,9 +77,8 @@ def create_record_for_survey(
 
 
 # ---------------------------------------------------------------------------
-# Organisation-wide (Portal-scoped) reads — the actual "queryable at the
-# Portal, not walled in a Project" behaviour (Portal redesign Phase 2, this
-# Phase 6).
+# Organisation-wide (Portal-scoped) reads — every record across every
+# survey in the organisation, filterable by survey_id.
 # ---------------------------------------------------------------------------
 
 
@@ -101,7 +86,6 @@ def create_record_for_survey(
 def list_records_for_organisation(
     organisation_id: uuid.UUID,
     survey_id: uuid.UUID | None = None,
-    asset_type_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -109,8 +93,6 @@ def list_records_for_organisation(
     query = db.query(Record).filter(Record.organisation_id == organisation_id)
     if survey_id:
         query = query.filter(Record.survey_id == survey_id)
-    if asset_type_id:
-        query = query.filter(Record.asset_type_id == asset_type_id)
     return query.order_by(Record.created_at.desc()).all()
 
 
@@ -121,13 +103,12 @@ def list_records_for_organisation(
 def list_record_geometry_for_organisation(
     organisation_id: uuid.UUID,
     survey_id: uuid.UUID | None = None,
-    asset_type_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lightweight, map-only shape (id/asset_type_id/survey_id/geometry) —
-    a Portal-wide map pulling every record across every survey doesn't
-    need each record's full field_data on the wire. Equivalent to
+    """Lightweight, map-only shape (id/survey_id/geometry) — a Portal-wide
+    map pulling every record across every survey doesn't need each
+    record's full field_data on the wire. Equivalent to
     `GET /organisations/{id}/records?geometry=true` in the 10-phase plan,
     split into its own path so the two response shapes stay independently
     typed (see RecordGeometryOut).
@@ -136,15 +117,13 @@ def list_record_geometry_for_organisation(
     query = db.query(Record).filter(Record.organisation_id == organisation_id)
     if survey_id:
         query = query.filter(Record.survey_id == survey_id)
-    if asset_type_id:
-        query = query.filter(Record.asset_type_id == asset_type_id)
     return query.all()
 
 
 # ---------------------------------------------------------------------------
 # Deprecated project-scoped routes — kept so clients still built against the
-# old shape keep working (Portal redesign Phase 2, this Phase 6). New
-# integrations should use the survey/organisation-scoped routes above.
+# old shape keep working. New integrations should use the survey/
+# organisation-scoped routes above.
 # ---------------------------------------------------------------------------
 
 
@@ -161,46 +140,16 @@ def create_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Deprecated — creation now happens under a Survey, not a Project
-    directly (use `POST /surveys/{survey_id}/records`). Kept for old
-    clients: resolves the asset type's own survey and requires that
-    survey to be filed under this project.
+    """Retired — creation now happens directly under a Survey (use
+    `POST /surveys/{survey_id}/records`). The old version of this route
+    resolved an `asset_type_id` from the request body to find the parent
+    survey; that indirection no longer exists in the flat model, so this
+    project-scoped variant can't be resolved any more and always 410s.
     """
-    require_project_role(db, project_id, current_user.id, DATA_COLLECTOR)
-    response.headers["Deprecation"] = "true"
-    logger.warning(
-        "Deprecated route called: POST /projects/%s/records "
-        "(use POST /surveys/{survey_id}/records instead)",
-        project_id,
+    raise HTTPException(
+        status_code=410,
+        detail="This route is retired — create records via POST /surveys/{survey_id}/records instead.",
     )
-
-    asset_type = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(AssetType.id == payload.asset_type_id, Survey.project_id == project_id)
-        .first()
-    )
-    if not asset_type:
-        raise HTTPException(status_code=404, detail="Asset type not found in this project")
-
-    try:
-        processed_field_data = process_submission(asset_type, payload.field_data)
-    except FormValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors)
-
-    record = Record(
-        organisation_id=asset_type.survey.organisation_id,
-        survey_id=asset_type.survey_id,
-        project_id=project_id,
-        asset_type_id=payload.asset_type_id,
-        geometry=payload.geometry.model_dump(),
-        field_data=processed_field_data,
-        created_by=current_user.id,
-    )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
 
 
 @router.get(
@@ -209,7 +158,6 @@ def create_record(
 def list_records(
     project_id: uuid.UUID,
     response: Response,
-    asset_type_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -228,10 +176,12 @@ def list_records(
     survey_ids = [row[0] for row in db.query(Survey.id).filter(Survey.project_id == project_id).all()]
     if not survey_ids:
         return []
-    query = db.query(Record).filter(Record.survey_id.in_(survey_ids))
-    if asset_type_id:
-        query = query.filter(Record.asset_type_id == asset_type_id)
-    return query.order_by(Record.created_at.desc()).all()
+    return (
+        db.query(Record)
+        .filter(Record.survey_id.in_(survey_ids))
+        .order_by(Record.created_at.desc())
+        .all()
+    )
 
 
 def _get_record_for_member(db: Session, record_id: uuid.UUID, user: User) -> Record:
@@ -271,7 +221,7 @@ def update_record(
         record.geometry = payload.geometry.model_dump()
     if payload.field_data is not None:
         try:
-            record.field_data = process_submission(record.asset_type, payload.field_data)
+            record.field_data = process_submission(record.survey, payload.field_data)
         except FormValidationError as exc:
             raise HTTPException(status_code=422, detail=exc.errors)
     db.commit()
@@ -302,7 +252,7 @@ def delete_record(
 async def import_records(
     project_id: uuid.UUID,
     response: Response,
-    asset_type_id: uuid.UUID = Form(...),
+    survey_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -318,9 +268,10 @@ async def import_records(
     is reported and skipped; the whole file is never aborted on one
     mistake, since real-world spreadsheets are never perfectly clean.
 
-    Deprecated (Portal redesign Phase 2, this Phase 6) along with the rest
-    of the project-scoped record routes above — kept working for old
-    clients by resolving the asset type through its survey.
+    Deprecated along with the rest of the project-scoped record routes
+    above — kept working for old clients by resolving the survey directly
+    (formerly resolved through an asset type; the flat model made that
+    indirection unnecessary).
     """
     require_project_role(db, project_id, current_user.id, DATA_COLLECTOR)
     response.headers["Deprecation"] = "true"
@@ -328,20 +279,19 @@ async def import_records(
         "Deprecated route called: POST /projects/%s/records/import", project_id
     )
 
-    asset_type = (
-        db.query(AssetType)
-        .join(Survey, Survey.id == AssetType.survey_id)
-        .filter(AssetType.id == asset_type_id, Survey.project_id == project_id)
+    survey = (
+        db.query(Survey)
+        .filter(Survey.id == survey_id, Survey.project_id == project_id)
         .first()
     )
-    if not asset_type:
-        raise HTTPException(status_code=404, detail="Asset type not found in this project")
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found in this project")
 
     content = await file.read()
-    field_keys = {f.field_key for f in asset_type.field_definitions}
+    field_keys = {f.field_key for f in survey.field_definitions}
 
     try:
-        rows = parse_import_file(file.filename, content, asset_type.geometry_type, field_keys)
+        rows = parse_import_file(file.filename, content, survey.geometry_type, field_keys)
     except (ImportError_, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -358,17 +308,16 @@ async def import_records(
             errors.append({"line": row.line_number, "message": row.error})
             continue
         try:
-            processed_field_data = process_submission(asset_type, row.field_data)
+            processed_field_data = process_submission(survey, row.field_data)
         except FormValidationError as exc:
             errors.append({"line": row.line_number, "message": "; ".join(exc.errors)})
             continue
 
         db.add(
             Record(
-                organisation_id=asset_type.survey.organisation_id,
-                survey_id=asset_type.survey_id,
+                organisation_id=survey.organisation_id,
+                survey_id=survey.id,
                 project_id=project_id,
-                asset_type_id=asset_type_id,
                 geometry=row.geometry,
                 field_data=processed_field_data,
                 created_by=current_user.id,

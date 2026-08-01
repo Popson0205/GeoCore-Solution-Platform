@@ -138,7 +138,7 @@ def compute_table(records: list[Any], config: dict) -> dict:
 def compute_map(records: list[Any], config: dict) -> list[dict]:
     records = apply_filters(records, config.get("filters"))
     return [
-        {"id": str(r.id), "asset_type_id": str(r.asset_type_id), "geometry": r.geometry}
+        {"id": str(r.id), "survey_id": str(r.survey_id), "geometry": r.geometry}
         for r in records
     ]
 
@@ -199,18 +199,18 @@ def compute_list(records: list[Any], config: dict) -> dict:
     return {"rows": rows}
 
 
-def compute_widget(widget: Any, records_by_asset_type: dict[str, list[Any]]) -> dict:
-    """`records_by_asset_type` maps str(asset_type_id) -> that asset type's
-    records for the project. Map widgets with no asset_type_id in their
-    config get every asset type's records combined.
+def compute_widget(widget: Any, records_by_survey: dict[str, list[Any]]) -> dict:
+    """`records_by_survey` maps str(survey_id) -> that survey's records
+    for the project. Map widgets with no survey_id in their config get
+    every survey's records combined.
     """
     config = widget.config or {}
-    asset_type_id = config.get("asset_type_id")
+    survey_id = config.get("survey_id")
 
-    if widget.widget_type == "map" and not asset_type_id:
-        records = [r for recs in records_by_asset_type.values() for r in recs]
+    if widget.widget_type == "map" and not survey_id:
+        records = [r for recs in records_by_survey.values() for r in recs]
     else:
-        records = records_by_asset_type.get(str(asset_type_id), []) if asset_type_id else []
+        records = records_by_survey.get(str(survey_id), []) if survey_id else []
 
     if widget.widget_type == "kpi":
         return compute_kpi(records, config)
