@@ -14,6 +14,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: EmailStr
     full_name: Optional[str] = None
+    is_platform_admin: bool = False
 
     model_config = {"from_attributes": True}
 

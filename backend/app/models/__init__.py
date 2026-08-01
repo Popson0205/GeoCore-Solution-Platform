@@ -14,3 +14,4 @@ from backend.app.models.survey_assignment import SurveyAssignment  # noqa: F401
 from backend.app.models.attachment import Attachment  # noqa: F401
 from backend.app.models.report import Report  # noqa: F401
 from backend.app.models.dashboard import Dashboard, DashboardWidget  # noqa: F401
+from backend.app.models.customer import Customer, License  # noqa: F401

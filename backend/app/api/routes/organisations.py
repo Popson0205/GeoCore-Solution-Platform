@@ -12,6 +12,7 @@ from backend.app.core.roles import ADMINISTRATOR, OWNER
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.user import User
 from backend.app.core import licensing
+from backend.app.models.customer import License as LicenseRecord
 from backend.app.schemas.organisation import (
     LicenseApply,
     LicenseStatus,
@@ -168,6 +169,15 @@ def apply_license(
     except licensing.LicenseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
+    # If this key was issued through the Admin Portal, honor a revocation
+    # recorded there — this is the one enforcement point available for a
+    # cloud-hosted organisation (there's no equivalent for an already-
+    # applied on-prem instance with no path back to this database; see
+    # models/customer.py's License docstring).
+    record = db.query(LicenseRecord).filter(LicenseRecord.license_key == payload.license_key).first()
+    if record and record.status == "revoked":
+        raise HTTPException(status_code=422, detail="This license key has been revoked.")
+
     org.license_key = payload.license_key
     org.plan = claims["plan"]
     org.license_tier = claims.get("tier")
@@ -175,6 +185,9 @@ def apply_license(
     org.license_expires_at = (
         datetime.fromisoformat(claims["expires_at"]) if claims.get("expires_at") else None
     )
+    if record and record.status != "revoked":
+        record.status = "applied"
+        record.applied_organisation_id = org.id
     db.commit()
 
     seats_used = (

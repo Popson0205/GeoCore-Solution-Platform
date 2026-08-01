@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.app.api.routes import (
+    admin,
     attachments,
     auth,
     dashboard,
@@ -28,6 +29,9 @@ router.include_router(attachments.router, tags=["attachments"])
 router.include_router(dashboard.router, tags=["dashboard"])
 router.include_router(dashboards.router, tags=["dashboards"])
 router.include_router(reports.router, tags=["reports"])
+# The Admin Portal — hidden (no nav link anywhere in the frontend) and
+# gated per-route by require_platform_admin, not by prefix obscurity.
+router.include_router(admin.router, prefix="/admin", tags=["admin"])
 # No get_current_user dependency on this router — access is controlled by
 # the share_token/share_enabled check inside each handler instead.
 router.include_router(public.router, prefix="/public", tags=["public"])

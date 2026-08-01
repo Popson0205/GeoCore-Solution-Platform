@@ -53,12 +53,27 @@ class Settings(BaseSettings):
     # their own via scripts/generate_license_keypair.py and set this to
     # the resulting public key.
     license_public_key: str | None = None
+    # The Ed25519 PRIVATE key — deliberately separate from the public key
+    # above. This must ONLY ever be set on your team's own Admin Portal
+    # instance, NEVER on any customer deployment (cloud or on-prem). The
+    # admin license-issuing endpoint (routes/admin.py) hard-requires this
+    # to be present and simply doesn't work without it — so even if the
+    # Admin Portal's routes exist in a customer's build, they're inert
+    # without this secret, which they never have.
+    license_private_key: str | None = None
     # "cloud" (multi-tenant, vendor-operated) or "on_prem" (customer-
     # operated, possibly air-gapped). Purely informational/diagnostic
     # today — license payloads carry their own deployment_mode that's
     # checked against this if you want to prevent an on-prem key being
     # used to unlock a cloud instance or vice versa.
     deployment_mode: str = "cloud"
+
+    # Resend (https://resend.com) — used only by the Admin Portal to
+    # email a newly-issued license key straight to the customer's address
+    # on file. Optional: if unset, license issuance still works, it just
+    # doesn't auto-send (see core/email.py).
+    resend_api_key: str | None = None
+    resend_from_email: str = "licensing@geocore.example"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
