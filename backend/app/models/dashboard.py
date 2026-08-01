@@ -30,6 +30,14 @@ class Dashboard(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    # {"preset": "dark", "overrides": {"accentColor": "#0079c1", ...}} — see
+    # frontend/src/lib/dashboardThemes.js for the preset catalog and the
+    # full set of override keys (Text/Foreground/Accent colors plus the
+    # "Advanced colors" set: Background, Secondary text, Inverse text,
+    # Link text, Outline, Axes and rule, Input border, Header text/
+    # foreground, Info/Success/Warning/Danger). NULL means "use the
+    # default dark preset" — most dashboards never touch this.
+    theme = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),

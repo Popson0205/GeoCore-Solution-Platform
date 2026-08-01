@@ -236,6 +236,8 @@ def update_dashboard(
         dashboard.name = payload.name
     if payload.description is not None:
         dashboard.description = payload.description
+    if payload.theme is not None:
+        dashboard.theme = payload.theme
     db.commit()
     db.refresh(dashboard)
     return dashboard

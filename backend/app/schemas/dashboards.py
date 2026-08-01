@@ -10,7 +10,19 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, field_validator
 
-WIDGET_TYPES = {"kpi", "bar_chart", "pie_chart", "line_chart", "table", "map", "gauge", "list"}
+WIDGET_TYPES = {
+    "kpi",
+    "bar_chart",
+    "pie_chart",
+    "line_chart",
+    "table",
+    "map",
+    "gauge",
+    "list",
+    "details",
+    "rich_text",
+    "embedded",
+}
 
 
 class DashboardCreate(BaseModel):
@@ -25,6 +37,9 @@ class DashboardCreate(BaseModel):
 class DashboardUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    # {"preset": "dark", "overrides": {...}} or None to reset to default.
+    # See models/dashboard.py's `theme` column docstring for the shape.
+    theme: Optional[dict[str, Any]] = None
 
 
 class WidgetLayout(BaseModel):
@@ -76,6 +91,7 @@ class DashboardOut(BaseModel):
     project_id: Optional[uuid.UUID] = None
     name: str
     description: Optional[str] = None
+    theme: Optional[dict[str, Any]] = None
     updated_at: datetime
     widgets: list[WidgetOut] = []
 

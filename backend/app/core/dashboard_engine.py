@@ -199,6 +199,32 @@ def compute_list(records: list[Any], config: dict) -> dict:
     return {"rows": rows}
 
 
+def compute_details(records: list[Any], config: dict) -> dict:
+    """The single most-recent matching record's fields, shown as
+    label/value pairs — e.g. "here's the latest inspection logged" rather
+    than a whole table. `field_keys` (optional) limits which fields show;
+    omitted means "every field this record has data for".
+    """
+    records = apply_filters(records, config.get("filters"))
+    records = sorted(records, key=lambda r: r.created_at or datetime.min, reverse=True)
+    if not records:
+        return {"record_id": None, "items": []}
+
+    record = records[0]
+    data = record.field_data or {}
+    field_keys = config.get("field_keys") or list(data.keys())
+
+    items = []
+    for key in field_keys:
+        if key not in data:
+            continue
+        value = data[key]
+        display = ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
+        items.append({"label": key, "value": display})
+
+    return {"record_id": str(record.id), "items": items}
+
+
 def compute_widget(widget: Any, records_by_survey: dict[str, list[Any]]) -> dict:
     """`records_by_survey` maps str(survey_id) -> that survey's records
     for the project. Map widgets with no survey_id in their config get
@@ -206,6 +232,14 @@ def compute_widget(widget: Any, records_by_survey: dict[str, list[Any]]) -> dict
     """
     config = widget.config or {}
     survey_id = config.get("survey_id")
+
+    # Rich text and embedded content are static — they render straight
+    # from their own config with no records lookup at all (no survey_id
+    # to resolve, nothing to compute).
+    if widget.widget_type == "rich_text":
+        return {"content": config.get("content", "")}
+    if widget.widget_type == "embedded":
+        return {"url": config.get("url", "")}
 
     if widget.widget_type == "map" and not survey_id:
         records = [r for recs in records_by_survey.values() for r in recs]
@@ -224,6 +258,8 @@ def compute_widget(widget: Any, records_by_survey: dict[str, list[Any]]) -> dict
         return compute_table(records, config)
     if widget.widget_type == "list":
         return compute_list(records, config)
+    if widget.widget_type == "details":
+        return compute_details(records, config)
     if widget.widget_type == "map":
         return {"features": compute_map(records, config)}
     return {"error": f"Unknown widget type: {widget.widget_type}"}
