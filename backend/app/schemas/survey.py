@@ -305,6 +305,12 @@ class SurveyOut(BaseModel):
     # just want a simple list (e.g. the map popup, or a dashboard widget
     # picking a field to chart).
     field_definitions: list[FieldDefinitionOut] = []
+    # Attached by routes/surveys.py at read time (not a mapped column) —
+    # how many Records have been submitted against this Survey so far.
+    # Used by the Survey gallery card (Records: N badge) and anywhere else
+    # that wants a quick sense of a survey's activity without a separate
+    # records query.
+    record_count: int = 0
 
     model_config = {"from_attributes": True}
 

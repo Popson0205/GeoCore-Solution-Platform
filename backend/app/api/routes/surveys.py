@@ -3,6 +3,7 @@ import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
@@ -11,6 +12,7 @@ from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
 from backend.app.models.project import Project
+from backend.app.models.record import Record
 from backend.app.models.survey import FieldDefinition, FormSection, Survey, SubmissionAssignee
 from backend.app.models.survey_assignment import SurveyAssignment
 from backend.app.models.user import User
@@ -44,7 +46,14 @@ _LOAD_OPTIONS = (
 
 
 def _survey_with_form(db: Session, survey_id: uuid.UUID) -> Survey:
-    return db.query(Survey).options(*_LOAD_OPTIONS).filter(Survey.id == survey_id).first()
+    survey = db.query(Survey).options(*_LOAD_OPTIONS).filter(Survey.id == survey_id).first()
+    if survey:
+        # Not a mapped column — attached in-memory so SurveyOut's
+        # from_attributes pickup finds it (see schemas/survey.py).
+        survey.record_count = (
+            db.query(func.count(Record.id)).filter(Record.survey_id == survey_id).scalar() or 0
+        )
+    return survey
 
 
 def _validate_project(
@@ -202,12 +211,21 @@ def list_surveys(
     current_user: User = Depends(get_current_user),
 ):
     require_org_role(db, organisation_id, current_user.id, VIEWER)
-    return (
+    surveys = (
         db.query(Survey)
         .options(*_LOAD_OPTIONS)
         .filter(Survey.organisation_id == organisation_id)
         .all()
     )
+    counts = dict(
+        db.query(Record.survey_id, func.count(Record.id))
+        .filter(Record.organisation_id == organisation_id)
+        .group_by(Record.survey_id)
+        .all()
+    )
+    for survey in surveys:
+        survey.record_count = counts.get(survey.id, 0)
+    return surveys
 
 
 @router.get("/surveys/{survey_id}", response_model=SurveyOut)
@@ -288,8 +306,7 @@ def archive_survey(
     survey, _ = require_survey_role(db, survey_id, current_user.id, ADMINISTRATOR)
     survey.status = "archived"
     db.commit()
-    db.refresh(survey)
-    return survey
+    return _survey_with_form(db, survey_id)
 
 
 # ---------------------------------------------------------------------------
