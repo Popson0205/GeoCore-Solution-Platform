@@ -1910,3 +1910,25 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .license-status-grid > div { display: flex; flex-direction: column; gap: 2px; }
 .license-status-grid span { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .license-status-grid strong { font-size: 0.94rem; color: var(--ws-text); }
+
+/* Admin Portal — license issuance result + status pills */
+.license-issue-result {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--ws-bg);
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+}
+.license-issue-result code {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.74rem;
+  word-break: break-all;
+  color: var(--ws-text);
+  background: var(--ws-surface);
+  padding: 8px;
+  border-radius: 4px;
+}
+.license-status-pill.status-issued { color: var(--brand-dark); border-color: var(--brand); }
+.license-status-pill.status-applied { color: #2e8540; border-color: #2e8540; }
+.license-status-pill.status-revoked { color: var(--coral); border-color: var(--coral); }
