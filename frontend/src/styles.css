@@ -94,9 +94,10 @@ a { color: inherit; }
 
 .btn-secondary {
   background: transparent;
-  border-color: var(--pub-border-strong);
-  color: var(--pub-text);
+  border-color: var(--ws-border);
+  color: var(--ws-text);
 }
+.btn-secondary:hover { border-color: var(--brand); color: var(--brand-dark); }
 
 .btn-ghost {
   background: transparent;
@@ -423,7 +424,7 @@ a { color: inherit; }
   font-family: var(--font-display);
 }
 
-.ws-page { max-width: 960px; margin: 0 auto; }
+.ws-page { max-width: 960px; margin: 0 auto; color: var(--ws-text); }
 .ws-breadcrumb {
   display: inline-flex;
   align-items: center;
@@ -472,6 +473,7 @@ a { color: inherit; }
   border: 1px solid var(--ws-border);
   border-radius: 6px;
   padding: 22px;
+  color: var(--ws-text);
 }
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .panel-head h2 { font-size: 1rem; color: var(--ws-text); }
@@ -786,7 +788,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .dashboard-list-item { display: flex; align-items: center; gap: 10px; }
 
 /* --- ArcGIS-Online-style portal chrome --- */
-.portal-shell { min-height: 100vh; background: var(--ws-bg); }
+.portal-shell { min-height: 100vh; background: var(--ws-bg); color: var(--ws-text); }
 .portal-content { max-width: 1180px; margin: 0 auto; padding: 24px 24px 60px; }
 
 .app-header {
@@ -924,7 +926,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .dashboard-dark .panel { border-color: #313846; }
 /* When the Dashboard app owns the whole viewport (GeoCore Dashboard app
    shell), let the dark theme fill the screen. */
-.portal-shell.dashboard-dark { min-height: 100vh; background: var(--ws-bg); }
+.portal-shell.dashboard-dark { min-height: 100vh; background: var(--ws-bg); color: var(--ws-text); }
 /* When embedded inside a light page (a project's Dashboards tab), render
    as a self-contained dark canvas card instead of fighting the page's
    own background. */
@@ -1122,6 +1124,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   display: flex;
   flex-direction: column;
   background: var(--ws-bg);
+  color: var(--ws-text);
 }
 
 .designer-topbar {
@@ -1553,3 +1556,119 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 @media (max-width: 900px) {
   .dashboard-side-panel { position: absolute; left: 56px; top: 0; bottom: 0; z-index: 30; box-shadow: 4px 0 12px rgba(0,0,0,0.2); }
 }
+
+/* =================================================================
+   GeoCore Survey — "My Surveys" gallery (matches ArcGIS Survey123's own
+   landing gallery: a green toolbar with a real "+ New survey" button,
+   then a grid of cards with a thumbnail, a Records badge, a title, and a
+   row of small action icons).
+================================================================= */
+
+.survey-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--survey-accent);
+  color: #ffffff;
+  padding: 14px 28px;
+}
+.survey-toolbar h1 { font-size: 1.1rem; color: #ffffff; margin: 0; }
+.survey-toolbar-org {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.survey-toolbar-new-btn {
+  background: #ffffff;
+  color: var(--survey-accent-dark);
+  border: none;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.survey-toolbar-new-btn:hover { background: #eaf4f4; }
+
+.survey-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0 14px;
+  border-bottom: 1px solid var(--ws-border);
+  margin-bottom: 18px;
+}
+.survey-gallery-filter { font-weight: 600; color: var(--ws-text); font-size: 0.94rem; }
+.survey-gallery-count { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ws-text-muted); }
+
+.survey-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
+}
+.survey-gallery-card {
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.survey-gallery-card:hover { border-color: var(--survey-accent); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); }
+.survey-gallery-thumb {
+  position: relative;
+  height: 130px;
+  background: var(--ws-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.survey-gallery-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  background: rgba(20, 22, 26, 0.82);
+  color: #ffffff;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.survey-gallery-body { padding: 12px 14px 6px; display: flex; flex-direction: column; gap: 3px; }
+.survey-gallery-title {
+  font-size: 0.92rem;
+  color: var(--ws-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.survey-gallery-status { font-size: 0.78rem; color: var(--ws-text-muted); }
+.survey-gallery-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px 10px;
+  border-top: 1px solid var(--ws-border);
+  margin-top: 8px;
+}
+.survey-card-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--ws-text-muted);
+  font-size: 0.92rem;
+  padding: 5px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.survey-card-icon-btn:hover:not(:disabled) { background: var(--ws-bg); color: var(--survey-accent-dark); }
+.survey-card-icon-btn:disabled { opacity: 0.4; cursor: default; }
