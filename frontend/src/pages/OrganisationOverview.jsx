@@ -1,5 +1,6 @@
 import React from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
+import { portalPath } from '../config'
 
 // A deterministic, generated hero pattern instead of requiring an
 // uploaded banner image — every organisation gets a distinct-looking but
@@ -112,16 +113,16 @@ export default function OrganisationOverview() {
             <h3 style={{ margin: '6px 0' }}>Content</h3>
             <p className="ws-muted">Every survey, dashboard and report in one place.</p>
           </Link>
-          <Link to="surveys" className="module-card panel">
-            <p className="card-eyebrow">Collect</p>
+          <a href={portalPath('/survey.html')} target="_blank" rel="noreferrer" className="module-card panel">
+            <p className="card-eyebrow">Collect · opens GeoCore Survey</p>
             <h3 style={{ margin: '6px 0' }}>Surveys</h3>
             <p className="ws-muted">Build forms and gather field data.</p>
-          </Link>
-          <Link to="dashboards" className="module-card panel">
-            <p className="card-eyebrow">Analyze</p>
+          </a>
+          <a href={portalPath('/dashboard.html')} target="_blank" rel="noreferrer" className="module-card panel">
+            <p className="card-eyebrow">Analyze · opens GeoCore Dashboard</p>
             <h3 style={{ margin: '6px 0' }}>Dashboards</h3>
             <p className="ws-muted">Turn records into KPIs, charts and maps.</p>
-          </Link>
+          </a>
         </div>
       </div>
     </div>

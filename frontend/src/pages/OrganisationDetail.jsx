@@ -6,14 +6,17 @@ import { useAuth } from '../context/AuthContext'
 // Survey; Records/Map/Attachments/Dashboards/Reports move up here, to the
 // Organisation). A narrower bundle (e.g. the standalone Survey app) can
 // override this with a smaller list via the `tabs` prop.
+//
+// Surveys, Records, and Dashboards are deliberately NOT tabs here any
+// more — that functionality now lives in the standalone GeoCore Survey
+// and GeoCore Dashboard apps (see the App Launcher), so the Portal isn't
+// duplicating a second, parallel way to reach the same builders. Map,
+// Attachments and Reports stay — there's no standalone app for those yet.
 export const DEFAULT_TABS = [
   { to: '', label: 'Home', end: true },
   { to: 'content', label: 'Content' },
-  { to: 'surveys', label: 'Surveys' },
-  { to: 'records', label: 'Records' },
   { to: 'map', label: 'Map' },
   { to: 'attachments', label: 'Attachments' },
-  { to: 'dashboards', label: 'Dashboards' },
   { to: 'reports', label: 'Reports' },
   { to: 'settings', label: 'Organization' },
 ]
