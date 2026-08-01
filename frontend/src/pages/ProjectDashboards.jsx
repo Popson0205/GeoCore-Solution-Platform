@@ -124,7 +124,7 @@ export default function ProjectDashboards() {
           <ul className="entity-list">
             {dashboards.map((d) => (
               <li key={d.id} className="record-row dashboard-list-item">
-                <Link to={d.id} style={{ flex: 1 }}>
+                <Link to={`/design/dashboards/${d.id}`} style={{ flex: 1 }}>
                   <strong>{d.name}</strong>
                   <div className="ws-muted">
                     {d.widget_count} widget{d.widget_count === 1 ? '' : 's'}

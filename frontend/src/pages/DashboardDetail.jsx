@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useOutletContext, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { VISIBILITY_OPERATORS } from '../lib/formEngine'
 import {
@@ -834,8 +834,9 @@ function ThemePanel({ dashboard, canEdit, onClose, onSaveTheme }) {
 
 export default function DashboardDetail() {
   const { dashboardId } = useParams()
-  const { orgId, projectId, myRole } = useOutletContext()
-  const { authedFetch } = useAuth()
+  const { status: authStatus, authedFetch } = useAuth()
+  const navigate = useNavigate()
+  const [myRole, setMyRole] = useState('viewer')
   const canEdit = (RANK[myRole] ?? 0) >= RANK.analyst
 
   const [dashboard, setDashboard] = useState(null)
@@ -850,6 +851,25 @@ export default function DashboardDetail() {
   const [collapsed, setCollapsed] = useState(false)
   const [saveFlash, setSaveFlash] = useState(false)
   const gridRef = useRef(null)
+
+  // A Dashboard already carries organisation_id/project_id directly (see
+  // schemas/dashboards.py's DashboardOut) — no need for an ancestor route
+  // to hand those down via outlet context. This is what lets this page be
+  // a genuinely standalone, full-screen builder (like SurveyDesigner.jsx)
+  // instead of living nested inside the Portal/Project tab chrome.
+  const orgId = dashboard?.organisation_id
+  const projectId = dashboard?.project_id
+
+  useEffect(() => {
+    if (!orgId) return
+    authedFetch('/api/organisations/')
+      .then((orgs) => {
+        const match = orgs.find((o) => o.id === orgId)
+        if (match) setMyRole(match.my_role)
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId])
 
   async function load() {
     setLoading(true)
@@ -1004,19 +1024,23 @@ export default function DashboardDetail() {
     document.addEventListener('mouseup', onUp)
   }
 
-  if (loading) {
+  if (authStatus === 'checking' || loading) {
     return (
-      <div className="ws-page">
-        <p className="ws-muted">Loading dashboard…</p>
+      <div className="ws-loading">
+        <span className="ws-loading-spinner" />
+        Loading dashboard…
       </div>
     )
   }
+  if (authStatus === 'guest') return <Navigate to="/login" replace />
 
   if (!dashboard) {
     return (
-      <div className="empty-state">
-        <p>Couldn't find that dashboard.</p>
-        <span>{error}</span>
+      <div className="ws-page">
+        <div className="empty-state">
+          <p>Couldn't find that dashboard.</p>
+          <span>{error}</span>
+        </div>
       </div>
     )
   }
@@ -1113,9 +1137,16 @@ export default function DashboardDetail() {
 
       <div className="dashboard-canvas-outer" style={themeVars}>
         <div className="dashboard-canvas-header">
+          <button
+            className="dashboard-header-back"
+            title="Back to dashboards"
+            onClick={() => navigate(`/workspace/organisations/${orgId}/dashboards`)}
+          >
+            &larr;
+          </button>
           <h1>{dashboard.name}</h1>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button className="btn-secondary" onClick={refreshData}>
+            <button className="dashboard-header-btn" onClick={refreshData}>
               Refresh data
             </button>
           </div>

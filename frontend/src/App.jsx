@@ -28,6 +28,7 @@ import PublicShare from './pages/PublicShare'
 import PublicSubmit from './pages/PublicSubmit'
 import SurveyApp from './pages/SurveyApp'
 import DashboardApp from './pages/DashboardApp'
+import DashboardReports from './pages/DashboardReports'
 import NotFound from './pages/NotFound'
 
 export default function App() {
@@ -52,12 +53,20 @@ export default function App() {
             outside WorkspaceLayout — it renders its own complete top bar,
             so it must not be nested under the Portal's blue AppHeader too. */}
         <Route path="/design/surveys/:surveyId" element={<SurveyDesigner />} />
+        {/* Same reasoning as the Survey Designer above — the Dashboard
+            builder (sidebar + canvas) is a genuinely standalone,
+            full-screen experience, not nested inside the Portal/Project
+            tab chrome. See pages/DashboardDetail.jsx — it derives
+            organisation_id/project_id from the dashboard itself now,
+            so it doesn't need an ancestor route to hand those down. */}
+        <Route path="/design/dashboards/:dashboardId" element={<DashboardDetail />} />
 
         {/* App Launcher destinations — branded entry points into the same
             underlying project data, the way Survey123/Dashboards feel like
             distinct apps on top of one ArcGIS Online organisation. */}
         <Route path="/apps/survey" element={<SurveyApp />} />
         <Route path="/apps/dashboard" element={<DashboardApp />} />
+        <Route path="/apps/dashboard/reports" element={<DashboardReports homePath="/apps/dashboard" />} />
 
         <Route path="/workspace" element={<WorkspaceLayout />}>
           <Route index element={<Dashboard />} />
@@ -74,7 +83,10 @@ export default function App() {
               Records/Map/Attachments/Dashboards/Reports are org-scoped —
               they read `orgId` off OrganisationDetail's outlet context and
               fetch from the org-scoped API directly (no `projectId` in
-              this branch). */}
+              this branch). The Dashboards tab here is a lightweight
+              list+create panel (ProjectDashboards) that links out to the
+              standalone builder above — it doesn't embed the builder
+              itself any more. */}
           <Route path="organisations/:orgId" element={<OrganisationDetail />}>
             <Route index element={<OrganisationOverview />} />
             <Route path="surveys" element={<SurveyList />} />
@@ -86,7 +98,6 @@ export default function App() {
             <Route path="map" element={<ProjectMap />} />
             <Route path="attachments" element={<ProjectAttachments />} />
             <Route path="dashboards" element={<ProjectDashboards />} />
-            <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />
             <Route path="reports" element={<ProjectReports />} />
           </Route>
 
@@ -106,7 +117,6 @@ export default function App() {
             <Route path="map" element={<ProjectMap />} />
             <Route path="attachments" element={<ProjectAttachments />} />
             <Route path="dashboards" element={<ProjectDashboards />} />
-            <Route path="dashboards/:dashboardId" element={<DashboardDetail />} />
             <Route path="reports" element={<ProjectReports />} />
           </Route>
         </Route>

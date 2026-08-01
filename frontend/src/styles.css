@@ -1330,7 +1330,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
    live theme's CSS variables, via inline style (see DashboardDetail.jsx).
 ================================================================= */
 
-.dashboard-builder { display: flex; height: 100%; min-height: calc(100vh - 64px); }
+.dashboard-builder { display: flex; height: 100vh; }
 
 .dashboard-sidebar {
   width: 168px;
@@ -1434,6 +1434,29 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   border-bottom: 1px solid var(--ws-border);
 }
 .dashboard-canvas-header h1 { font-size: 1.15rem; margin: 0; color: inherit; }
+.dashboard-header-back {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.75;
+  padding: 2px 4px;
+}
+.dashboard-header-back:hover { opacity: 1; }
+.dashboard-header-btn {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  opacity: 0.85;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dashboard-header-btn:hover { opacity: 1; }
 
 /* ---- Empty state ("Visualize, monitor, and share information") ---- */
 .dashboard-empty {
@@ -1620,6 +1643,9 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   display: flex;
   flex-direction: column;
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  font: inherit;
+  padding: 0;
+  width: 100%;
 }
 .survey-gallery-card:hover { border-color: var(--survey-accent); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); }
 .survey-gallery-thumb {
@@ -1672,3 +1698,15 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 }
 .survey-card-icon-btn:hover:not(:disabled) { background: var(--ws-bg); color: var(--survey-accent-dark); }
 .survey-card-icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+.ai-narrative-preview {
+  background: var(--ws-bg);
+  border: 1px solid var(--ws-border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--ws-text);
+  white-space: pre-wrap;
+}
