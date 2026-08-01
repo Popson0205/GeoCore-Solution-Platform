@@ -47,7 +47,7 @@ def create_organisation(
         counter += 1
         slug = f"{base_slug}-{counter}"
 
-    org = Organisation(name=payload.name, slug=slug)
+    org = Organisation(name=payload.name, slug=slug, plan=payload.plan)
     db.add(org)
     db.flush()
 
@@ -139,6 +139,14 @@ def add_member(
     current_user: User = Depends(get_current_user),
 ):
     require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if org and org.plan == "personal":
+        raise HTTPException(
+            status_code=403,
+            detail="This is a Personal-plan organisation — it can't have additional members. "
+            "Upgrade to an Organization plan to invite people.",
+        )
 
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:

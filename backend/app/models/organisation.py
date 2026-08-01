@@ -14,6 +14,14 @@ class Organisation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
+    # "personal" | "organization" — the two license tiers. A personal-plan
+    # organisation is a single-seat account: nobody can be invited to it
+    # (see routes/organisations.py's add_member), so the only way to
+    # "share" it is literally sharing that one login, which is the
+    # intended, licensed behavior for that tier — not a bug. Switching
+    # tiers is a billing operation, not exposed on the regular update
+    # endpoint (see OrganisationUpdate's docstring).
+    plan = Column(String, default="organization", nullable=False)
     # Branding for the organisation's home page (the ArcGIS-Online-style
     # hero + "About Us" + quick-link buttons — see pages/OrganisationOverview.jsx).
     # All optional: a brand-new organisation renders a sensible default

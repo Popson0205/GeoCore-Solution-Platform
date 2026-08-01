@@ -7,14 +7,29 @@ from pydantic import BaseModel, EmailStr, field_validator
 from backend.app.core.roles import ALL_ROLES
 
 
+PLANS = {"personal", "organization"}
+
+
 class OrganisationCreate(BaseModel):
     name: str
+    # "personal" (single-seat — see models/organisation.py's docstring) or
+    # "organization" (invite/roles enabled). Defaults to "organization" so
+    # existing integrations that don't send this keep today's behavior.
+    plan: str = "organization"
+
+    @field_validator("plan")
+    @classmethod
+    def validate_plan(cls, value: str) -> str:
+        if value not in PLANS:
+            raise ValueError(f"plan must be one of {sorted(PLANS)}")
+        return value
 
 
 class OrganisationOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    plan: str
     about_text: Optional[str] = None
     website_url: Optional[str] = None
     open_data_url: Optional[str] = None
