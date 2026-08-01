@@ -44,6 +44,22 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
 
+    # Licensing (see core/licensing.py) — this is the Ed25519 PUBLIC key,
+    # safe to bake into every deployment including on-prem/air-gapped
+    # ones. It can only verify license keys, never mint new ones; the
+    # matching private key stays with the vendor and is never distributed
+    # (see scripts/issue_license.py). Deployments ship a default GeoCore
+    # key pair for development; production deployments should generate
+    # their own via scripts/generate_license_keypair.py and set this to
+    # the resulting public key.
+    license_public_key: str | None = None
+    # "cloud" (multi-tenant, vendor-operated) or "on_prem" (customer-
+    # operated, possibly air-gapped). Purely informational/diagnostic
+    # today — license payloads carry their own deployment_mode that's
+    # checked against this if you want to prevent an on-prem key being
+    # used to unlock a cloud instance or vice versa.
+    deployment_mode: str = "cloud"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

@@ -30,6 +30,10 @@ class OrganisationOut(BaseModel):
     name: str
     slug: str
     plan: str
+    license_tier: Optional[str] = None
+    seat_limit: Optional[int] = None
+    license_expires_at: Optional[datetime] = None
+    has_license: bool = False
     about_text: Optional[str] = None
     website_url: Optional[str] = None
     open_data_url: Optional[str] = None
@@ -38,6 +42,21 @@ class OrganisationOut(BaseModel):
     my_role: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class LicenseApply(BaseModel):
+    license_key: str
+
+
+class LicenseStatus(BaseModel):
+    has_license: bool
+    plan: str
+    tier: Optional[str] = None
+    seat_limit: Optional[int] = None
+    seats_used: int
+    expires_at: Optional[datetime] = None
+    licensee_name: Optional[str] = None
+    deployment_mode: Optional[str] = None
 
 
 class OrganisationUpdate(BaseModel):

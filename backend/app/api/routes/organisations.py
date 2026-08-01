@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -10,7 +11,10 @@ from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, OWNER
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.user import User
+from backend.app.core import licensing
 from backend.app.schemas.organisation import (
+    LicenseApply,
+    LicenseStatus,
     MemberInvite,
     MemberOut,
     MemberRoleUpdate,
@@ -30,6 +34,7 @@ def _slugify(name: str) -> str:
 def _to_out(org: Organisation, my_role: str | None) -> OrganisationOut:
     out = OrganisationOut.model_validate(org)
     out.my_role = my_role
+    out.has_license = bool(org.license_key)
     return out
 
 
@@ -101,6 +106,92 @@ def update_organisation(
     return _to_out(org, membership.role)
 
 
+@router.get("/{organisation_id}/license", response_model=LicenseStatus)
+def get_license_status(
+    organisation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_org_role(db, organisation_id, current_user.id, "viewer")
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    seats_used = (
+        db.query(OrganisationMember).filter(OrganisationMember.organisation_id == organisation_id).count()
+    )
+
+    licensee_name = None
+    deployment_mode = None
+    if org.license_key:
+        try:
+            payload = licensing.verify_license(org.license_key)
+            licensee_name = payload.get("licensee_name")
+            deployment_mode = payload.get("deployment_mode")
+        except licensing.LicenseError:
+            pass  # Fall through with whatever denormalized fields we last stored.
+
+    return LicenseStatus(
+        has_license=bool(org.license_key),
+        plan=org.plan,
+        tier=org.license_tier,
+        seat_limit=org.seat_limit if org.license_key else licensing.default_seat_limit(org.plan),
+        seats_used=seats_used,
+        expires_at=org.license_expires_at,
+        licensee_name=licensee_name,
+        deployment_mode=deployment_mode,
+    )
+
+
+@router.post("/{organisation_id}/license", response_model=LicenseStatus)
+def apply_license(
+    organisation_id: uuid.UUID,
+    payload: LicenseApply,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply a license key issued by the vendor after a manually-invoiced
+    payment (see backend/scripts/issue_license.py) — this is the entire
+    "billing integration" for GeoCore today: no card capture, no
+    subscription webhooks, just a signed key someone pastes in here.
+    Verification is fully offline (see core/licensing.py), so this works
+    identically for a cloud-hosted organisation and an air-gapped on-prem
+    deployment.
+    """
+    require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    try:
+        claims = licensing.verify_license(payload.license_key)
+    except licensing.LicenseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    org.license_key = payload.license_key
+    org.plan = claims["plan"]
+    org.license_tier = claims.get("tier")
+    org.seat_limit = claims.get("seat_limit")
+    org.license_expires_at = (
+        datetime.fromisoformat(claims["expires_at"]) if claims.get("expires_at") else None
+    )
+    db.commit()
+
+    seats_used = (
+        db.query(OrganisationMember).filter(OrganisationMember.organisation_id == organisation_id).count()
+    )
+    return LicenseStatus(
+        has_license=True,
+        plan=org.plan,
+        tier=org.license_tier,
+        seat_limit=org.seat_limit,
+        seats_used=seats_used,
+        expires_at=org.license_expires_at,
+        licensee_name=claims.get("licensee_name"),
+        deployment_mode=claims.get("deployment_mode"),
+    )
+
+
 @router.get("/{organisation_id}/members", response_model=list[MemberOut])
 def list_members(
     organisation_id: uuid.UUID,
@@ -147,6 +238,22 @@ def add_member(
             detail="This is a Personal-plan organisation — it can't have additional members. "
             "Upgrade to an Organization plan to invite people.",
         )
+
+    if org:
+        seat_limit = org.seat_limit if org.license_key else licensing.default_seat_limit(org.plan)
+        if seat_limit is not None:
+            current_seats = (
+                db.query(OrganisationMember)
+                .filter(OrganisationMember.organisation_id == organisation_id)
+                .count()
+            )
+            if current_seats >= seat_limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"This organisation's license allows {seat_limit} seat"
+                    f"{'s' if seat_limit != 1 else ''}, and all of them are in use. "
+                    "Apply a higher-seat license in Organization settings to add more people.",
+                )
 
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -22,6 +22,19 @@ class Organisation(Base):
     # tiers is a billing operation, not exposed on the regular update
     # endpoint (see OrganisationUpdate's docstring).
     plan = Column(String, default="organization", nullable=False)
+    # The raw signed license key, if one's been applied (see
+    # core/licensing.py and routes/organisations.py's apply_license). NULL
+    # means "no license on file yet" — a brand-new organisation defaults
+    # to a single seat (core.licensing.default_seat_limit) regardless of
+    # which `plan` was picked at signup, until a real license from the
+    # vendor is applied. license_tier/seat_limit/license_expires_at are
+    # denormalized from the verified key's payload purely so every
+    # request doesn't need to re-verify a signature just to check a seat
+    # count — re-verified in full whenever the key is (re-)applied.
+    license_key = Column(Text, nullable=True)
+    license_tier = Column(String, nullable=True)
+    seat_limit = Column(Integer, nullable=True)  # NULL = unlimited
+    license_expires_at = Column(DateTime(timezone=True), nullable=True)
     # Branding for the organisation's home page (the ArcGIS-Online-style
     # hero + "About Us" + quick-link buttons — see pages/OrganisationOverview.jsx).
     # All optional: a brand-new organisation renders a sensible default
