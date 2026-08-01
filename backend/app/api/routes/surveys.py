@@ -7,7 +7,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_membership, require_org_role, require_survey_role
+from backend.app.api.deps_project import (
+    get_membership,
+    require_active_license,
+    require_org_role,
+    require_survey_role,
+)
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
@@ -179,6 +184,7 @@ def create_survey(
     # Same bar as creating a Project — Project Manager and above only
     # (blueprint section 13).
     require_org_role(db, organisation_id, current_user.id, PROJECT_MANAGER)
+    require_active_license(db, organisation_id)
     _validate_project(db, organisation_id, payload.project_id)
     survey = Survey(
         organisation_id=organisation_id,
@@ -485,6 +491,7 @@ async def import_xlsform(
     or guessed at.
     """
     require_org_role(db, organisation_id, current_user.id, PROJECT_MANAGER)
+    require_active_license(db, organisation_id)
     _validate_project(db, organisation_id, project_id)
 
     if not (file.filename or "").lower().endswith((".xlsx", ".xls")):

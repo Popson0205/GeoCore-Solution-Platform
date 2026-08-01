@@ -3,11 +3,52 @@ import uuid
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from backend.app.core import licensing
 from backend.app.core.roles import DATA_COLLECTOR, has_min_role
+from backend.app.models.customer import License as LicenseRecord
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.project import Project
 from backend.app.models.survey import Survey
 from backend.app.models.survey_assignment import SurveyAssignment
+
+
+def require_active_license(db: Session, organisation_id: uuid.UUID) -> None:
+    """The license gate: every content-creation endpoint (Project, Survey,
+    Record, Dashboard, Widget, Report, Attachment — including public
+    submissions) calls this first. An organisation can exist with no
+    license (so there's somewhere to *apply* one), but it can't create
+    anything until a currently-valid, non-revoked license is on file.
+
+    Reading/browsing existing content, and inviting members (already
+    separately gated by seat_limit in routes/organisations.py), aren't
+    affected — this only blocks bringing new content into existence.
+    """
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    if not org.license_key:
+        raise HTTPException(
+            status_code=402,
+            detail="This organisation has no license applied yet. Apply one in "
+            "Organization → Settings → License before creating anything.",
+        )
+
+    try:
+        licensing.verify_license(org.license_key)
+    except licensing.LicenseError as exc:
+        raise HTTPException(
+            status_code=402,
+            detail=f"This organisation's license is no longer valid ({exc}). "
+            "Apply a current license in Organization → Settings → License.",
+        )
+
+    record = db.query(LicenseRecord).filter(LicenseRecord.license_key == org.license_key).first()
+    if record and record.status == "revoked":
+        raise HTTPException(
+            status_code=402,
+            detail="This organisation's license has been revoked. Contact GeoCore for a new one.",
+        )
 
 
 def get_membership(

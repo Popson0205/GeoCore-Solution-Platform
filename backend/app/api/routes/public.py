@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
+from backend.app.api.deps_project import require_active_license
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.models.project import Project
@@ -158,6 +159,7 @@ def public_submit_schema(token: str, db: Session = Depends(get_db)):
 @router.post("/submit/{token}", response_model=PublicSubmitReceipt, status_code=201)
 def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session = Depends(get_db)):
     survey = _get_survey_for_submission(db, token)
+    require_active_license(db, survey.organisation_id)
 
     if survey.submission_access == "assigned":
         email = (payload.submitter_email or "").strip().lower()

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import require_org_role, require_project_role
+from backend.app.api.deps_project import require_active_license, require_org_role, require_project_role
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.models.project import Project
@@ -32,6 +32,7 @@ def create_project(
     # Data Collector / Analyst / Viewer shouldn't be able to spin up new
     # projects — that's a Project Manager+ action (blueprint section 13).
     require_org_role(db, organisation_id, current_user.id, PROJECT_MANAGER)
+    require_active_license(db, organisation_id)
     project = Project(
         organisation_id=organisation_id, name=payload.name, description=payload.description
     )

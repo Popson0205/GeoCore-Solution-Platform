@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
-from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member
+from backend.app.api.deps_project import get_organisation_for_member, get_project_for_member, require_active_license
 from backend.app.core import geoai
 from backend.app.core.dashboard_engine import compute_widget
 from backend.app.core.database import get_db
@@ -154,6 +154,7 @@ def generate_report_for_organisation(
     for.
     """
     organisation = get_organisation_for_member(db, organisation_id, current_user.id)
+    require_active_license(db, organisation_id)
     surveys = (
         db.query(Survey)
         .options(selectinload(Survey.field_definitions))
@@ -236,6 +237,7 @@ def generate_report(
     to just this project's surveys.
     """
     project = get_project_for_member(db, project_id, current_user.id)
+    require_active_license(db, project.organisation_id)
     response.headers["Deprecation"] = "true"
     logger.warning(
         "Deprecated route called: POST /projects/%s/reports "

@@ -9,6 +9,7 @@ from backend.app.api.deps_project import (
     get_organisation_for_member,
     get_project_for_member,
     get_survey_for_member,
+    require_active_license,
     require_project_role,
     require_survey_role,
 )
@@ -50,6 +51,7 @@ def create_record_for_survey(
     # Collecting data is the Data Collector role's whole job — Analyst and
     # Viewer stay read-only (blueprint section 13).
     survey, _ = require_survey_role(db, survey_id, current_user.id, DATA_COLLECTOR)
+    require_active_license(db, survey.organisation_id)
 
     # Authoritative pass: evaluates skip logic, recomputes calculated
     # fields server-side, and validates — never persist raw client
@@ -286,6 +288,7 @@ async def import_records(
     )
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found in this project")
+    require_active_license(db, survey.organisation_id)
 
     content = await file.read()
     field_keys = {f.field_key for f in survey.field_definitions}

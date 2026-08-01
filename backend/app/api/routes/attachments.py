@@ -8,6 +8,7 @@ from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import (
     get_organisation_for_member,
     get_survey_for_member,
+    require_active_license,
     require_survey_role,
 )
 from backend.app.core.database import get_db
@@ -90,6 +91,7 @@ async def upload_attachment(
     current_user: User = Depends(get_current_user),
 ):
     record = _get_record_for_role(db, record_id, current_user, DATA_COLLECTOR)
+    require_active_license(db, record.organisation_id)
 
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:

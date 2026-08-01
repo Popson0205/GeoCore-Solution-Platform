@@ -10,6 +10,7 @@ from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import (
     get_organisation_for_member,
     get_project_for_member,
+    require_active_license,
     require_org_role,
     require_project_role,
 )
@@ -83,6 +84,7 @@ def create_dashboard_for_organisation(
     # — Analyst and above (blueprint section 13's "Analyst: view, filter,
     # analyse and export data").
     require_org_role(db, organisation_id, current_user.id, ANALYST)
+    require_active_license(db, organisation_id)
 
     project_id = payload.project_id
     if project_id is not None:
@@ -156,6 +158,7 @@ def create_dashboard(
     with `project_id` as an optional folder tag in the payload instead.
     """
     project, _ = require_project_role(db, project_id, current_user.id, ANALYST)
+    require_active_license(db, project.organisation_id)
     response.headers["Deprecation"] = "true"
     logger.warning(
         "Deprecated route called: POST /projects/%s/dashboards "
@@ -288,6 +291,7 @@ def add_widget(
     current_user: User = Depends(get_current_user),
 ):
     dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
+    require_active_license(db, dashboard.organisation_id)
     _validate_widget_survey(db, dashboard, payload.config)
     widget = DashboardWidget(
         dashboard_id=dashboard.id,
