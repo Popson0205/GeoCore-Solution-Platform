@@ -235,7 +235,21 @@ export default function OrganisationSettings() {
         </section>
       )}
 
-      {manage && (
+      {manage && org.plan === 'personal' && (
+        <section className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-head">
+            <h2>Members</h2>
+          </div>
+          <p className="ws-muted">
+            This is a <strong>Personal</strong>-plan organisation — a single-seat account. It
+            can't have additional members; to share access, share this login directly. Upgrading
+            to an Organization plan (contact your administrator) enables inviting people with
+            their own accounts and roles.
+          </p>
+        </section>
+      )}
+
+      {manage && org.plan !== 'personal' && (
         <section className="panel" style={{ marginBottom: 20 }}>
           <div className="panel-head">
             <h2>Add a member</h2>

@@ -1,37 +1,48 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+const PLAN_OPTIONS = [
+  {
+    value: 'organization',
+    label: 'Organization',
+    description: 'Invite people, assign roles, collaborate on projects together.',
+  },
+  {
+    value: 'personal',
+    label: 'Personal',
+    description: 'A single-seat account. To share it, you share this login — no invites.',
+  },
+]
+
+/**
+ * The top-level "choose or create an organisation" hub — deliberately
+ * neutral. It never renders a specific organisation's identity (name,
+ * branding, projects), because that would make "New organisation" look
+ * like an action you take *from inside* an existing organisation, which
+ * it isn't. Once you pick or open one, you land in OrganisationDetail's
+ * own Home tab (the ArcGIS-Online-style hero page) — a completely
+ * separate context from this picker.
+ */
 export default function Dashboard() {
-  const { authedFetch, user } = useAuth()
+  const { authedFetch } = useAuth()
+  const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
   const [orgName, setOrgName] = useState('')
-  const [activeOrg, setActiveOrg] = useState(null)
-  const [projects, setProjects] = useState([])
-  const [projectName, setProjectName] = useState('')
+  const [orgPlan, setOrgPlan] = useState('organization')
   const [error, setError] = useState('')
   const [loadingOrgs, setLoadingOrgs] = useState(true)
   const [showNewOrg, setShowNewOrg] = useState(false)
-  const [showNewProject, setShowNewProject] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   async function loadOrgs() {
     try {
       const data = await authedFetch('/api/organisations/')
       setOrgs(data)
-      if (!activeOrg && data.length) setActiveOrg(data[0])
     } catch (err) {
       setError(err.message)
     } finally {
       setLoadingOrgs(false)
-    }
-  }
-
-  async function loadProjects(orgId) {
-    try {
-      const data = await authedFetch(`/api/organisations/${orgId}/projects`)
-      setProjects(data)
-    } catch (err) {
-      setError(err.message)
     }
   }
 
@@ -40,211 +51,119 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    if (activeOrg) loadProjects(activeOrg.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeOrg])
-
   async function createOrg(e) {
     e.preventDefault()
     if (!orgName.trim()) return
     setError('')
+    setCreating(true)
     try {
-      await authedFetch('/api/organisations/', {
+      const org = await authedFetch('/api/organisations/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: orgName }),
+        body: JSON.stringify({ name: orgName, plan: orgPlan }),
       })
       setOrgName('')
+      setOrgPlan('organization')
       setShowNewOrg(false)
-      await loadOrgs()
+      navigate(`/workspace/organisations/${org.id}`)
     } catch (err) {
       setError(err.message)
+    } finally {
+      setCreating(false)
     }
   }
-
-  async function createProject(e) {
-    e.preventDefault()
-    if (!activeOrg || !projectName.trim()) return
-    setError('')
-    try {
-      await authedFetch(`/api/organisations/${activeOrg.id}/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: projectName }),
-      })
-      setProjectName('')
-      setShowNewProject(false)
-      await loadProjects(activeOrg.id)
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const heroName = activeOrg?.name || 'GeoCore'
-  const heroInitials = heroName
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
 
   return (
-    <div>
-      <section className="org-hero">
-        <div className="org-hero-inner">
-          <span className="org-hero-logo">{heroInitials}</span>
-          <div>
-            <p className="org-hero-eyebrow">{activeOrg ? 'Organisation' : 'Welcome'}</p>
-            <h1>{heroName}</h1>
+    <div className="ws-page" style={{ paddingTop: 32 }}>
+      <div className="ws-page-head">
+        <p className="card-eyebrow">Welcome</p>
+        <h1>Your organisations</h1>
+        <p className="ws-page-sub">
+          Pick an organisation to open its Home page, or create a new one below. Use the app
+          launcher (top right) to jump into <strong>GeoCore Survey</strong> to build and collect
+          forms, or <strong>GeoCore Dashboard</strong> for KPIs, charts and maps.
+        </p>
+      </div>
+
+      {error && <p className="hint">{error}</p>}
+
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div className="panel-head">
+          <h2>Organisations</h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="panel-count">{orgs.length}</span>
+            <button className="btn-secondary" onClick={() => setShowNewOrg((v) => !v)}>
+              {showNewOrg ? 'Cancel' : '+ New organisation'}
+            </button>
           </div>
         </div>
-        <div className="org-hero-actions">
-          <button className="hero-btn" onClick={() => setShowNewOrg(!showNewOrg)}>
-            {showNewOrg ? 'Cancel' : 'New organisation'}
-          </button>
-          {activeOrg && (
-            <Link to={`/workspace/organisations/${activeOrg.id}`} className="hero-btn">
-              Open organisation
-            </Link>
-          )}
-          {activeOrg && (
-            <Link to={`/workspace/organisations/${activeOrg.id}/settings`} className="hero-btn">
-              Organisation settings
-            </Link>
-          )}
-        </div>
-      </section>
 
-      <div className="ws-page">
         {showNewOrg && (
-          <section className="panel" style={{ marginBottom: 20 }}>
-            <div className="panel-head">
-              <h2>New organisation</h2>
-            </div>
-            <form onSubmit={createOrg} className="form-row">
+          <form onSubmit={createOrg} className="stacked-form" style={{ marginBottom: 20 }}>
+            <label className="form-label">
+              Organisation name
               <input
                 placeholder="Organisation name"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
-                style={{ flex: 1 }}
                 autoFocus
               />
-              <button type="submit" className="btn-primary">
-                Create
+            </label>
+            <div>
+              <p className="builder-hint">Plan</p>
+              <div className="plan-choice-group">
+                {PLAN_OPTIONS.map((p) => (
+                  <label key={p.value} className={`plan-choice${orgPlan === p.value ? ' is-selected' : ''}`}>
+                    <input
+                      type="radio"
+                      name="org-plan"
+                      value={p.value}
+                      checked={orgPlan === p.value}
+                      onChange={() => setOrgPlan(p.value)}
+                    />
+                    <span className="plan-choice-label">{p.label}</span>
+                    <span className="plan-choice-desc">{p.description}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-row">
+              <button type="submit" className="btn-primary" disabled={creating}>
+                {creating ? 'Creating…' : 'Create organisation'}
               </button>
-            </form>
-          </section>
+            </div>
+          </form>
         )}
 
-        {error && <p className="hint">{error}</p>}
-
-        <div className="ws-page-head">
-          <p className="card-eyebrow">About</p>
-          <p className="ws-page-sub">
-            GeoCore is your organisation's shared geospatial platform — build once, configure it for
-            every project. Use the app launcher (top right) to jump into <strong>GeoCore Survey</strong>{' '}
-            to build and collect forms, or <strong>GeoCore Dashboard</strong> to turn those records into
-            KPIs, charts and maps.
-          </p>
-        </div>
-
-        <section className="panel" style={{ marginBottom: 20 }}>
-          <div className="panel-head">
-            <h2>Your organisations</h2>
-            <span className="panel-count">{orgs.length}</span>
+        {loadingOrgs ? (
+          <p className="ws-muted">Loading organisations…</p>
+        ) : orgs.length === 0 ? (
+          <div className="empty-state">
+            <p>No organisations yet.</p>
+            <span>Create one above to get started.</span>
           </div>
-          {loadingOrgs ? (
-            <p className="ws-muted">Loading organisations…</p>
-          ) : orgs.length === 0 ? (
-            <div className="empty-state">
-              <p>No organisations yet.</p>
-              <span>Create one above to start adding projects.</span>
-            </div>
-          ) : (
-            <div className="gallery-grid">
-              {orgs.map((org) => (
-                <button
-                  key={org.id}
-                  className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
-                  onClick={() => setActiveOrg(org)}
-                >
-                  <span className="gallery-card-thumb" style={{ background: '#0079c1' }}>
-                    {org.name.slice(0, 2).toUpperCase()}
+        ) : (
+          <div className="gallery-grid">
+            {orgs.map((org) => (
+              <button
+                key={org.id}
+                className="gallery-card is-link"
+                onClick={() => navigate(`/workspace/organisations/${org.id}`)}
+              >
+                <span className="gallery-card-thumb" style={{ background: '#0079c1' }}>
+                  {org.name.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="gallery-card-body">
+                  <strong>{org.name}</strong>
+                  <span className="ws-muted">
+                    {org.my_role} · {org.plan === 'personal' ? 'Personal' : 'Organization'}
                   </span>
-                  <span className="gallery-card-body">
-                    <strong>{org.name}</strong>
-                    <span className="ws-muted">{org.my_role}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel">
-          <div className="panel-head">
-            <h2>{activeOrg ? `${activeOrg.name} — projects` : 'Projects'}</h2>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {activeOrg && <span className="panel-count">{projects.length}</span>}
-              {activeOrg && (
-                <button className="btn-secondary" onClick={() => setShowNewProject(!showNewProject)}>
-                  {showNewProject ? 'Cancel' : '+ New project'}
-                </button>
-              )}
-            </div>
+                </span>
+              </button>
+            ))}
           </div>
-
-          {!activeOrg ? (
-            <div className="empty-state">
-              <p>Select an organisation above.</p>
-              <span>Its projects will appear here.</span>
-            </div>
-          ) : (
-            <>
-              {showNewProject && (
-                <form onSubmit={createProject} className="inline-form">
-                  <input
-                    placeholder="New project name"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    autoFocus
-                  />
-                  <button type="submit" className="btn-secondary">
-                    Create
-                  </button>
-                </form>
-              )}
-
-              {projects.length === 0 ? (
-                <div className="empty-state">
-                  <p>No projects in {activeOrg.name} yet.</p>
-                  <span>Create one above to get field teams started.</span>
-                </div>
-              ) : (
-                <div className="gallery-grid">
-                  {projects.map((p) => (
-                    <Link
-                      key={p.id}
-                      to={`/workspace/organisations/${activeOrg.id}/projects/${p.id}`}
-                      className="gallery-card is-link"
-                    >
-                      <span className="gallery-card-thumb" style={{ background: '#046566' }}>
-                        {p.name.slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="gallery-card-body">
-                        <strong>{p.name}</strong>
-                        <span className="ws-muted">{p.description || 'Project workspace'}</span>
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      </div>
+        )}
+      </section>
     </div>
   )
 }

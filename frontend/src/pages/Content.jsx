@@ -37,6 +37,8 @@ export default function Content() {
   const [activeFolder, setActiveFolder] = useState('all')
   const [typeFilters, setTypeFilters] = useState(new Set(['survey', 'dashboard', 'report']))
   const [showNewMenu, setShowNewMenu] = useState(false)
+  const [showNewFolder, setShowNewFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
 
   async function load() {
     setLoading(true)
@@ -120,10 +122,53 @@ export default function Content() {
     }
   }
 
+  async function createFolder(e) {
+    e.preventDefault()
+    if (!newFolderName.trim()) return
+    try {
+      await authedFetch(`/api/organisations/${orgId}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName.trim() }),
+      })
+      setNewFolderName('')
+      setShowNewFolder(false)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="content-page">
       <aside className="content-sidebar">
-        <p className="content-sidebar-heading">Folders</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p className="content-sidebar-heading" style={{ marginBottom: 0 }}>
+            Folders
+          </p>
+          {canCreate && (
+            <button
+              className="content-folder-add"
+              title="New folder"
+              onClick={() => setShowNewFolder((v) => !v)}
+            >
+              {showNewFolder ? '×' : '+'}
+            </button>
+          )}
+        </div>
+        {showNewFolder && (
+          <form onSubmit={createFolder} className="content-new-folder-form">
+            <input
+              placeholder="Folder name"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" className="btn-secondary">
+              Create
+            </button>
+          </form>
+        )}
         <button
           className={`content-folder-item${activeFolder === 'all' ? ' is-active' : ''}`}
           onClick={() => setActiveFolder('all')}
