@@ -48,6 +48,41 @@ export default function OrganisationSettings() {
   const [savingBranding, setSavingBranding] = useState(false)
   const [brandingSaved, setBrandingSaved] = useState(false)
 
+  const [license, setLicense] = useState(null)
+  const [licenseKeyInput, setLicenseKeyInput] = useState('')
+  const [applyingLicense, setApplyingLicense] = useState(false)
+  const [licenseError, setLicenseError] = useState('')
+
+  async function loadLicense() {
+    try {
+      const data = await authedFetch(`/api/organisations/${orgId}/license`)
+      setLicense(data)
+    } catch (err) {
+      setLicenseError(err.message)
+    }
+  }
+
+  async function handleApplyLicense(e) {
+    e.preventDefault()
+    if (!licenseKeyInput.trim()) return
+    setApplyingLicense(true)
+    setLicenseError('')
+    try {
+      const data = await authedFetch(`/api/organisations/${orgId}/license`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: licenseKeyInput.trim() }),
+      })
+      setLicense(data)
+      setLicenseKeyInput('')
+      await load()
+    } catch (err) {
+      setLicenseError(err.message)
+    } finally {
+      setApplyingLicense(false)
+    }
+  }
+
   async function load() {
     setLoading(true)
     setError('')
@@ -72,6 +107,7 @@ export default function OrganisationSettings() {
 
   useEffect(() => {
     load()
+    loadLicense()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
 
@@ -188,6 +224,58 @@ export default function OrganisationSettings() {
       </div>
 
       {error && <p className="hint">{error}</p>}
+
+      {manage && (
+        <section className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-head">
+            <h2>License</h2>
+          </div>
+          {licenseError && <p className="hint">{licenseError}</p>}
+          {license && (
+            <div className="license-status-grid">
+              <div>
+                <span className="ws-muted">Plan</span>
+                <strong>
+                  {license.plan === 'personal' ? 'Personal' : 'Organization'}
+                  {license.tier ? ` · ${license.tier}` : ''}
+                </strong>
+              </div>
+              <div>
+                <span className="ws-muted">Seats</span>
+                <strong>
+                  {license.seats_used} / {license.seat_limit === null ? 'Unlimited' : license.seat_limit}
+                </strong>
+              </div>
+              <div>
+                <span className="ws-muted">Expires</span>
+                <strong>
+                  {license.expires_at ? new Date(license.expires_at).toLocaleDateString() : 'Never'}
+                </strong>
+              </div>
+              <div>
+                <span className="ws-muted">Status</span>
+                <strong>{license.has_license ? 'Licensed' : 'No license on file (default: 1 seat)'}</strong>
+              </div>
+            </div>
+          )}
+          <p className="ws-muted" style={{ marginTop: 14, marginBottom: 8 }}>
+            After your invoice is paid, GeoCore will send you a signed license key — paste it
+            below to apply it. This works identically for cloud and on-prem/air-gapped
+            deployments; applying a key never requires internet access on our end.
+          </p>
+          <form onSubmit={handleApplyLicense} className="form-row">
+            <input
+              placeholder="Paste your license key"
+              value={licenseKeyInput}
+              onChange={(e) => setLicenseKeyInput(e.target.value)}
+              style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}
+            />
+            <button type="submit" className="btn-primary" disabled={applyingLicense}>
+              {applyingLicense ? 'Applying…' : 'Apply license'}
+            </button>
+          </form>
+        </section>
+      )}
 
       {manage && (
         <section className="panel" style={{ marginBottom: 20 }}>

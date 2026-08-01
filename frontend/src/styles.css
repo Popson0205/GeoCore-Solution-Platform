@@ -1901,3 +1901,12 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .plan-choice.is-selected { border-color: var(--brand); background: var(--brand-soft); }
 .plan-choice-label { font-weight: 600; font-size: 0.9rem; grid-column: 2; }
 .plan-choice-desc { grid-column: 2; font-size: 0.82rem; color: var(--ws-text-muted); }
+
+.license-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.license-status-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.license-status-grid span { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.license-status-grid strong { font-size: 0.94rem; color: var(--ws-text); }
