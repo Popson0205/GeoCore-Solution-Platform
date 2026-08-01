@@ -15,11 +15,28 @@ class OrganisationOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    about_text: Optional[str] = None
+    website_url: Optional[str] = None
+    open_data_url: Optional[str] = None
     # The requesting user's role in this organisation. Populated per-request
     # in routes/organisations.py — not a DB column on Organisation itself.
     my_role: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class OrganisationUpdate(BaseModel):
+    """Organization settings — the ArcGIS-Online-style home page's "About
+    Us" text and its two quick-link buttons (see
+    pages/OrganisationOverview.jsx). Renaming the organisation itself isn't
+    included here on purpose: `slug` is derived from `name` at creation and
+    used in URLs/tokens elsewhere, so changing it is a bigger operation
+    than this settings form is meant for.
+    """
+
+    about_text: Optional[str] = None
+    website_url: Optional[str] = None
+    open_data_url: Optional[str] = None
 
 
 class MemberOut(BaseModel):

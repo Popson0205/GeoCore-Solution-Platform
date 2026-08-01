@@ -16,6 +16,7 @@ from backend.app.schemas.organisation import (
     MemberRoleUpdate,
     OrganisationCreate,
     OrganisationOut,
+    OrganisationUpdate,
 )
 
 router = APIRouter()
@@ -70,6 +71,34 @@ def list_organisations(
         .all()
     )
     return [_to_out(org, role) for org, role in rows]
+
+
+@router.patch("/{organisation_id}", response_model=OrganisationOut)
+def update_organisation(
+    organisation_id: uuid.UUID,
+    payload: OrganisationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Organization settings — the home page's About Us text and its two
+    quick-link buttons (Visit website / Access Open Data). Reserved for
+    administrator+, the same bar as managing members.
+    """
+    membership = require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    if payload.about_text is not None:
+        org.about_text = payload.about_text or None
+    if payload.website_url is not None:
+        org.website_url = payload.website_url or None
+    if payload.open_data_url is not None:
+        org.open_data_url = payload.open_data_url or None
+
+    db.commit()
+    db.refresh(org)
+    return _to_out(org, membership.role)
 
 
 @router.get("/{organisation_id}/members", response_model=list[MemberOut])
