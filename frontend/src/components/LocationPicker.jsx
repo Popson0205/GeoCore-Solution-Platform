@@ -113,10 +113,10 @@ export default function LocationPicker({ geometryType, initialGeometry, onChange
     })
 
     if (geometryType === 'line' && vertices.length > 1) {
-      L.polyline(vertices, { color: '#0079c1', weight: 3 }).addTo(layerRef.current)
+      L.polyline(vertices, { color: '#d4551a', weight: 3 }).addTo(layerRef.current)
     }
     if (geometryType === 'polygon' && vertices.length > 2) {
-      L.polygon(vertices, { color: '#0079c1', fillColor: '#0079c1', fillOpacity: 0.2 }).addTo(layerRef.current)
+      L.polygon(vertices, { color: '#d4551a', fillColor: '#d4551a', fillOpacity: 0.2 }).addTo(layerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vertices])

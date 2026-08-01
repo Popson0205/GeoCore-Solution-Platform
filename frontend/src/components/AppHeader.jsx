@@ -20,7 +20,7 @@ const APPS = [
     to: '/workspace',
     name: 'GeoCore Portal',
     tagline: 'Organisations & projects',
-    color: '#0079c1',
+    color: '#d4551a',
     icon: 'grid',
   },
   {
@@ -28,7 +28,7 @@ const APPS = [
     external: true,
     name: 'GeoCore Survey',
     tagline: 'Build & collect forms',
-    color: '#058b8c',
+    color: '#3f7a5c',
     icon: 'clip',
   },
   {
@@ -36,7 +36,7 @@ const APPS = [
     external: true,
     name: 'GeoCore Dashboard',
     tagline: 'KPIs, charts & maps',
-    color: '#7a2e8e',
+    color: '#5b4b8a',
     icon: 'chart',
   },
 ]
@@ -89,8 +89,8 @@ function AppLauncher() {
           {APPS.map((app) => {
             const tileBody = (
               <>
-                <span className="app-launcher-tile-icon" style={{ background: app.color }}>
-                  <Icon name={app.icon} size={20} />
+                <span className="app-launcher-tile-icon">
+                  <BenchmarkMark accent={app.color} size={30} />
                 </span>
                 <span>
                   <strong>{app.name}</strong>
@@ -169,20 +169,35 @@ function UserMenu() {
   )
 }
 
+function BenchmarkMark({ accent, size = 28 }) {
+  // A geodetic benchmark disc — the small brass/aluminium markers survey
+  // crews set into bedrock or concrete to record a fixed reference point.
+  // Same shape everywhere GeoCore appears; the ring color is the one thing
+  // that changes per app, the way a real disc's stamp varies by agency.
+  return (
+    <svg viewBox="0 0 28 28" width={size} height={size} aria-hidden="true">
+      <circle cx="14" cy="14" r="13" fill={accent} />
+      <circle cx="14" cy="14" r="13" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1" />
+      <circle cx="14" cy="14" r="8.5" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1" />
+      <path d="M14 8.5 L16.4 13.2 L11.6 13.2 Z" fill="#fff" />
+      <circle cx="14" cy="17" r="1.3" fill="#fff" />
+    </svg>
+  )
+}
+
 /**
  * Shared ArcGIS-Online-style top chrome. `appName`/`accent` brand it per
  * "app" (GeoCore Portal / GeoCore Survey / GeoCore Dashboard) — same chrome
- * component, different identity, matching how Esri's own apps share a
- * header pattern but each carry their own name and accent color.
+ * component, same benchmark mark, different identity color, matching how
+ * Esri's own apps share a header pattern but each carry their own name and
+ * accent.
  */
-export default function AppHeader({ appName = 'GeoCore', accent = '#0079c1', navItems = [], homeTo = '/workspace' }) {
+export default function AppHeader({ appName = 'GeoCore', accent = '#d4551a', navItems = [], homeTo = '/workspace' }) {
   return (
-    <header className="app-header">
+    <header className="app-header" style={{ borderBottomColor: accent }}>
       <div className="app-header-left">
         <Link to={homeTo} className="app-header-brand">
-          <span className="app-header-brand-mark" style={{ background: accent }}>
-            GC
-          </span>
+          <BenchmarkMark accent={accent} />
           <span className="app-header-brand-name">{appName}</span>
         </Link>
         <nav className="app-header-nav">

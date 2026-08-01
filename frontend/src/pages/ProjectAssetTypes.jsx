@@ -177,7 +177,7 @@ function NewAssetTypeForm({ onCreated }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [geometryType, setGeometryType] = useState('point')
-  const [color, setColor] = useState('#0079c1')
+  const [color, setColor] = useState('#d4551a')
   const [sections, setSections] = useState(() => [emptySection('General')])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')

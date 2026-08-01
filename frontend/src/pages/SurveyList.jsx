@@ -117,7 +117,7 @@ export default function SurveyList() {
               <button key={s.id} className="gallery-card is-link" onClick={() => navigate(s.id)}>
                 <span
                   className="gallery-card-thumb"
-                  style={{ background: s.status === 'archived' ? '#6b7280' : '#0079c1' }}
+                  style={{ background: s.status === 'archived' ? '#6b7280' : '#d4551a' }}
                 >
                   {s.title.slice(0, 2).toUpperCase()}
                 </span>

@@ -69,14 +69,14 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
     <div className="portal-shell">
       <AppHeader
         appName="GeoCore Survey"
-        accent="#058b8c"
+        accent="#3f7a5c"
         navItems={[{ to: homePath, label: 'Home', end: true }]}
         homeTo={homePath}
       />
       <main className="portal-content">
-        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #058b8c, #046566)' }}>
+        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #3f7a5c, #2e5c45)' }}>
           <div className="org-hero-inner">
-            <span className="org-hero-logo" style={{ background: '#058b8c' }}>
+            <span className="org-hero-logo" style={{ background: '#3f7a5c' }}>
               GS
             </span>
             <div>
@@ -115,7 +115,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                     className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
                     onClick={() => setActiveOrg(org)}
                   >
-                    <span className="gallery-card-thumb" style={{ background: '#058b8c' }}>
+                    <span className="gallery-card-thumb" style={{ background: '#3f7a5c' }}>
                       {org.name.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="gallery-card-body">
@@ -163,7 +163,7 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
                     >
                       <span
                         className="gallery-card-thumb"
-                        style={{ background: s.status === 'archived' ? '#6b7280' : '#046566' }}
+                        style={{ background: s.status === 'archived' ? '#6b7280' : '#2e5c45' }}
                       >
                         {s.title.slice(0, 2).toUpperCase()}
                       </span>

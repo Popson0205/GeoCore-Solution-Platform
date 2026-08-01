@@ -22,8 +22,8 @@ export default function NetworkBackground() {
     let t = 0
 
     const LINK_DIST = 150
-    const NODE_COLOR = '64, 168, 222'
-    const BEACON_COLOR = '217, 144, 0'
+    const NODE_COLOR = '110, 168, 140'
+    const BEACON_COLOR = '212, 85, 26'
 
     function resize() {
       width = canvas.clientWidth

@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const COLORS = ['#0079c1', '#16a34a', '#f59e0b', '#dc2626', '#7a2e8e', '#0891b2', '#db2777', '#65a30d']
+const COLORS = ['#d4551a', '#16a34a', '#f59e0b', '#dc2626', '#5b4b8a', '#0891b2', '#db2777', '#65a30d']
 
 export function GaugeChart({ value, maxValue, percent }) {
   if (percent === null || percent === undefined) {
@@ -98,7 +98,7 @@ export function MapWidget({ features, colorByAssetType = {} }) {
     ;(features || []).forEach((f) => {
       const geometry = f.geometry
       if (!geometry) return
-      const color = colorByAssetType[f.asset_type_id] || '#0079c1'
+      const color = colorByAssetType[f.asset_type_id] || '#d4551a'
       if (geometry.type === 'Point') {
         const [lng, lat] = geometry.coordinates
         L.circleMarker([lat, lng], { radius: 6, color, fillColor: color, fillOpacity: 0.85, weight: 2 }).addTo(
@@ -131,7 +131,7 @@ const KPI_ICONS = {
   max: '↑',
 }
 
-export function KpiCard({ value, label, accent = '#0079c1' }) {
+export function KpiCard({ value, label, accent = '#d4551a' }) {
   const display =
     value === null || value === undefined
       ? '—'
@@ -254,10 +254,10 @@ export function LineChart({ rows }) {
         y2={height - padding}
         stroke="var(--ws-border)"
       />
-      <path d={path} fill="none" stroke="#0079c1" strokeWidth="2" />
+      <path d={path} fill="none" stroke="#d4551a" strokeWidth="2" />
       {points.map((p) => (
         <g key={p.period}>
-          <circle cx={p.x} cy={p.y} r={3} fill="#0079c1" />
+          <circle cx={p.x} cy={p.y} r={3} fill="#d4551a" />
         </g>
       ))}
       {points.map((p, i) =>

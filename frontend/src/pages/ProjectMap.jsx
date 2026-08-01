@@ -75,7 +75,7 @@ export default function ProjectMap() {
     const bounds = []
     records.forEach((record) => {
       const assetType = assetTypes.find((at) => at.id === record.asset_type_id)
-      const color = assetType?.color || '#0079c1'
+      const color = assetType?.color || '#d4551a'
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
 

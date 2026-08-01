@@ -68,14 +68,14 @@ export default function DashboardApp({ homePath = '/apps/dashboard' }) {
     <div className="portal-shell dashboard-dark">
       <AppHeader
         appName="GeoCore Dashboard"
-        accent="#7a2e8e"
+        accent="#5b4b8a"
         navItems={[{ to: homePath, label: 'Home', end: true }]}
         homeTo={homePath}
       />
       <main className="portal-content">
-        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #7a2e8e, #4f1f66)' }}>
+        <section className="org-hero" style={{ background: 'linear-gradient(120deg, #5b4b8a, #3a2f66)' }}>
           <div className="org-hero-inner">
-            <span className="org-hero-logo" style={{ background: '#7a2e8e' }}>
+            <span className="org-hero-logo" style={{ background: '#5b4b8a' }}>
               GD
             </span>
             <div>
@@ -114,7 +114,7 @@ export default function DashboardApp({ homePath = '/apps/dashboard' }) {
                     className={`gallery-card${activeOrg?.id === org.id ? ' is-active' : ''}`}
                     onClick={() => setActiveOrg(org)}
                   >
-                    <span className="gallery-card-thumb" style={{ background: '#7a2e8e' }}>
+                    <span className="gallery-card-thumb" style={{ background: '#5b4b8a' }}>
                       {org.name.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="gallery-card-body">
@@ -148,7 +148,7 @@ export default function DashboardApp({ homePath = '/apps/dashboard' }) {
                         navigate(`/workspace/organisations/${activeOrg.id}/projects/${p.id}/dashboards`)
                       }
                     >
-                      <span className="gallery-card-thumb" style={{ background: '#4f1f66' }}>
+                      <span className="gallery-card-thumb" style={{ background: '#3a2f66' }}>
                         {p.name.slice(0, 2).toUpperCase()}
                       </span>
                       <span className="gallery-card-body">
