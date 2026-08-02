@@ -607,6 +607,60 @@ const SIDEBAR_ITEMS = [
   { key: 'time', label: 'Time and region', icon: '\u25F7' },
 ]
 
+const DASHBOARD_VISIBILITY_OPTIONS = [
+  { value: 'private', label: 'Private', desc: 'Only you (and Administrators) can see this dashboard.' },
+  { value: 'organization', label: 'Organization', desc: 'Everyone in this organisation can see it.' },
+  { value: 'public', label: 'Public', desc: 'Reserved for a future viewer — not yet reachable by a link.' },
+]
+
+function VisibilitySettingsPanel({ dashboard, canEdit, onSaveDetails }) {
+  const [visibility, setVisibility] = useState(dashboard.visibility || 'organization')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleChange(next) {
+    setVisibility(next)
+    setSaving(true)
+    setError('')
+    try {
+      await onSaveDetails({ visibility: next })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <p className="builder-hint" style={{ marginBottom: 12 }}>
+        Who can see this dashboard — separate from who can see the underlying feature layers its
+        widgets are built on (managed from each layer's own page in Content).
+      </p>
+      {error && <p className="hint">{error}</p>}
+      {!canEdit ? (
+        <p className="ws-muted">Only an Analyst or above can change this.</p>
+      ) : (
+        <div className="plan-choice-group">
+          {DASHBOARD_VISIBILITY_OPTIONS.map((opt) => (
+            <label key={opt.value} className={`plan-choice${visibility === opt.value ? ' is-selected' : ''}`}>
+              <input
+                type="radio"
+                name="dashboard-visibility"
+                checked={visibility === opt.value}
+                onChange={() => handleChange(opt.value)}
+                disabled={saving}
+              />
+              <span className="plan-choice-label">{opt.label}</span>
+              <span className="plan-choice-desc">{opt.desc}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget }) {
   const [tab, setTab] = useState('body')
   const [name, setName] = useState(dashboard.name)
@@ -694,10 +748,7 @@ function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget 
         )}
 
         {tab === 'settings' && (
-          <div className="empty-state">
-            <p>Additional settings are coming soon.</p>
-            <span>Renaming and describing this dashboard live under the Header tab for now.</span>
-          </div>
+          <VisibilitySettingsPanel dashboard={dashboard} canEdit={canEdit} onSaveDetails={onSaveDetails} />
         )}
       </div>
     </div>
