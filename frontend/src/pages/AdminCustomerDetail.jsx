@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Navigate, Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const TIER_OPTIONS = [
@@ -142,8 +142,91 @@ function IssueLicenseForm({ customerId, onIssued }) {
   )
 }
 
+function CustomerInfoPanel({ customer, onSaved }) {
+  const { authedFetch } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(customer.name)
+  const [email, setEmail] = useState(customer.email)
+  const [phone, setPhone] = useState(customer.phone || '')
+  const [notes, setNotes] = useState(customer.notes || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const updated = await authedFetch(`/api/admin/customers/${customer.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone: phone || null, notes: notes || null }),
+      })
+      onSaved(updated)
+      setEditing(false)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="ws-page-head" style={{ position: 'relative' }}>
+        <p className="card-eyebrow">
+          {customer.customer_number} ·{' '}
+          <span className={`pill admin-customer-status-pill status-${customer.status}`}>{customer.status}</span>
+        </p>
+        <h1>{customer.name}</h1>
+        <p className="ws-page-sub">
+          {customer.email}
+          {customer.phone ? ` · ${customer.phone}` : ''}
+        </p>
+        {customer.notes && <p className="ws-muted">{customer.notes}</p>}
+        {(customer.requested_plan || customer.desired_domain) && (
+          <p className="ws-muted" style={{ fontSize: '0.85rem' }}>
+            Requested on signup: {customer.requested_plan}
+            {customer.requested_tier ? ` (${customer.requested_tier})` : ''}
+            {customer.requested_seats ? `, ${customer.requested_seats} seats` : ''}
+            {customer.desired_domain ? ` · wants domain: ${customer.desired_domain}` : ''}
+          </p>
+        )}
+        <button className="btn-secondary" style={{ marginTop: 10 }} onClick={() => setEditing(true)}>
+          Edit details
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <section className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h2>Edit customer</h2>
+      </div>
+      <form onSubmit={handleSave} className="stacked-form">
+        <div className="form-row">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" style={{ flex: 1 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={{ flex: 1 }} />
+        </div>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" />
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional)" />
+        <div className="form-row">
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </div>
+        {error && <p className="hint">{error}</p>}
+      </form>
+    </section>
+  )
+}
+
 export default function AdminCustomerDetail() {
-  const { status, user, authedFetch } = useAuth()
+  const { authedFetch } = useAuth()
   const { customerId } = useParams()
   const [customer, setCustomer] = useState(null)
   const [licenses, setLicenses] = useState([])
@@ -168,9 +251,9 @@ export default function AdminCustomerDetail() {
   }
 
   useEffect(() => {
-    if (status === 'authed') load()
+    load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, customerId])
+  }, [customerId])
 
   async function handleRevoke(licenseId) {
     try {
@@ -181,19 +264,8 @@ export default function AdminCustomerDetail() {
     }
   }
 
-  if (status === 'checking') {
-    return (
-      <div className="ws-loading">
-        <span className="ws-loading-spinner" />
-        Loading…
-      </div>
-    )
-  }
-  if (status === 'guest') return <Navigate to="/login" replace />
-  if (user && !user.is_platform_admin) return <Navigate to="/workspace" replace />
-
   return (
-    <div className="ws-page" style={{ paddingTop: 32 }}>
+    <div>
       <Link to="/admin/customers" className="ws-breadcrumb">
         &larr; Customers
       </Link>
@@ -207,15 +279,7 @@ export default function AdminCustomerDetail() {
         </div>
       ) : (
         <>
-          <div className="ws-page-head">
-            <p className="card-eyebrow">{customer.customer_number}</p>
-            <h1>{customer.name}</h1>
-            <p className="ws-page-sub">
-              {customer.email}
-              {customer.phone ? ` · ${customer.phone}` : ''}
-            </p>
-            {customer.notes && <p className="ws-muted">{customer.notes}</p>}
-          </div>
+          <CustomerInfoPanel customer={customer} onSaved={setCustomer} />
 
           {error && <p className="hint">{error}</p>}
 

@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react'
-import { Navigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+const STATUS_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'lead', label: 'Leads' },
+  { value: 'licensed', label: 'Licensed' },
+]
+
 export default function AdminCustomers() {
-  const { status, user, authedFetch } = useAuth()
+  const { authedFetch } = useAuth()
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -17,7 +25,11 @@ export default function AdminCustomers() {
   async function load() {
     setLoading(true)
     try {
-      const data = await authedFetch('/api/admin/customers')
+      const params = new URLSearchParams()
+      if (search.trim()) params.set('search', search.trim())
+      if (statusFilter) params.set('status', statusFilter)
+      const query = params.toString()
+      const data = await authedFetch(`/api/admin/customers${query ? `?${query}` : ''}`)
       setCustomers(data)
     } catch (err) {
       setError(err.message)
@@ -27,9 +39,10 @@ export default function AdminCustomers() {
   }
 
   useEffect(() => {
-    if (status === 'authed') load()
+    const timer = setTimeout(load, 250)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status])
+  }, [search, statusFilter])
 
   async function createCustomer(e) {
     e.preventDefault()
@@ -55,30 +68,8 @@ export default function AdminCustomers() {
     }
   }
 
-  if (status === 'checking') {
-    return (
-      <div className="ws-loading">
-        <span className="ws-loading-spinner" />
-        Loading…
-      </div>
-    )
-  }
-  if (status === 'guest') return <Navigate to="/login" replace />
-  if (user && !user.is_platform_admin) return <Navigate to="/workspace" replace />
-
   return (
-    <div className="ws-page" style={{ paddingTop: 32 }}>
-      <div className="ws-page-head">
-        <p className="card-eyebrow">GeoCore Admin</p>
-        <h1>Customers</h1>
-        <p className="ws-page-sub">
-          Internal-only — manage the customers behind license purchases and issue license keys.
-          Nothing on this page is reachable by a regular GeoCore user.
-        </p>
-      </div>
-
-      {error && <p className="hint">{error}</p>}
-
+    <div>
       <section className="panel">
         <div className="panel-head">
           <h2>Customers</h2>
@@ -87,6 +78,27 @@ export default function AdminCustomers() {
             <button className="btn-secondary" onClick={() => setShowNew((v) => !v)}>
               {showNew ? 'Cancel' : '+ New customer'}
             </button>
+          </div>
+        </div>
+
+        <div className="admin-search-bar">
+          <input
+            className="content-search"
+            placeholder="Search by customer number, name, or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ maxWidth: 360 }}
+          />
+          <div className="admin-status-filter">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                className={`admin-status-pill${statusFilter === f.value ? ' is-active' : ''}`}
+                onClick={() => setStatusFilter(f.value)}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -106,12 +118,14 @@ export default function AdminCustomers() {
           </form>
         )}
 
+        {error && <p className="hint">{error}</p>}
+
         {loading ? (
           <p className="ws-muted">Loading customers…</p>
         ) : customers.length === 0 ? (
           <div className="empty-state">
-            <p>No customers yet.</p>
-            <span>Create one above when a sales conversation starts.</span>
+            <p>No customers match.</p>
+            <span>Try a different search, or create one above.</span>
           </div>
         ) : (
           <ul className="entity-list">
@@ -120,9 +134,11 @@ export default function AdminCustomers() {
                 <div style={{ flex: 1 }}>
                   <strong>{c.name}</strong>
                   <div className="ws-muted">
-                    {c.customer_number} · {c.email}
+                    {c.customer_number} · {c.email} · {c.license_count} license
+                    {c.license_count === 1 ? '' : 's'}
                   </div>
                 </div>
+                <span className={`pill admin-customer-status-pill status-${c.status}`}>{c.status}</span>
                 <Link to={`/admin/customers/${c.id}`} className="btn-ghost">
                   Open
                 </Link>

@@ -17,6 +17,27 @@ class CustomerCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class CustomerUpdate(BaseModel):
+    """Editing an existing CRM record. `email` is intentionally editable
+    too (people's addresses change) — it's just used for de-duping a
+    public purchase-request submission against an existing lead, not as
+    an immutable identifier anywhere.
+    """
+
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"lead", "licensed"}:
+            raise ValueError("status must be 'lead' or 'licensed'")
+        return value
+
+
 class CustomerOut(BaseModel):
     id: uuid.UUID
     customer_number: str
@@ -31,6 +52,10 @@ class CustomerOut(BaseModel):
     requested_organisation_name: Optional[str] = None
     desired_domain: Optional[str] = None
     created_at: datetime
+    # Populated in routes/admin.py at read time — how many licenses this
+    # customer has, so the Customers list can show it without a second
+    # round-trip per row.
+    license_count: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -93,3 +118,63 @@ class LicenseRecordOut(BaseModel):
     email_error: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class LicenseWithCustomerOut(LicenseRecordOut):
+    """Same shape as LicenseRecordOut, plus enough of the parent customer
+    to render a useful row in the platform-wide Licenses view without a
+    second lookup per row.
+    """
+
+    customer_number: str
+    customer_name: str
+    applied_organisation_name: Optional[str] = None
+
+
+class AdminStats(BaseModel):
+    """The Admin Portal's Overview tab — a snapshot of the whole
+    business, not any one customer.
+    """
+
+    total_customers: int
+    leads: int
+    licensed_customers: int
+    total_licenses_issued: int
+    active_licenses: int
+    expiring_within_30_days: int
+    revoked_licenses: int
+    total_organisations: int
+    organisations_with_license: int
+    total_seats_licensed: int  # sum of finite seat_limits across active licenses; unlimited licenses don't add a finite number here
+
+
+class OrganisationAdminOut(BaseModel):
+    """One row in the Admin Portal's Organisations view — every
+    organisation on the platform, regardless of which customer (if any)
+    it's tied to. Useful for "who is actually running on this instance
+    right now" oversight, distinct from the Customers view (which is
+    about billing relationships, not live usage).
+    """
+
+    id: uuid.UUID
+    name: str
+    plan: str
+    license_tier: Optional[str] = None
+    seat_limit: Optional[int] = None
+    seats_used: int
+    license_expires_at: Optional[datetime] = None
+    has_license: bool
+    member_count: int
+    created_at: datetime
+
+
+class PlatformAdminOut(BaseModel):
+    """Read-only visibility into who currently has Admin Portal access.
+    There is deliberately no endpoint to grant/revoke this here — see
+    models/user.py's is_platform_admin docstring for why that stays a
+    direct-database action.
+    """
+
+    id: uuid.UUID
+    email: str
+    full_name: Optional[str] = None

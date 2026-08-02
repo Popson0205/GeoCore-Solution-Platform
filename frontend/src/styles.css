@@ -1949,3 +1949,52 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   border-radius: 8px;
   padding: 28px;
 }
+
+/* =================================================================
+   Admin Portal (comprehensive): shared shell, search/filter bars,
+   status pills for customers/licenses, stats grid.
+================================================================= */
+
+.admin-shell-head { margin-bottom: 4px; }
+
+.admin-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.admin-status-filter { display: flex; gap: 6px; }
+.admin-status-pill {
+  background: transparent;
+  border: 1px solid var(--ws-border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  color: var(--ws-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.admin-status-pill.is-active { background: var(--brand-soft); border-color: var(--brand); color: var(--brand-dark); font-weight: 600; }
+
+.admin-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.admin-filter-row select {
+  padding: 7px 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.admin-customer-status-pill { font-family: var(--font-body); text-transform: none; letter-spacing: normal; }
+.admin-customer-status-pill.status-lead { color: var(--amber, #b8862c); border-color: var(--amber, #b8862c); }
+.admin-customer-status-pill.status-licensed { color: #2e8540; border-color: #2e8540; }
+
+.admin-stats-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.stat-card-warn { border-color: var(--coral); }
+.stat-card-warn .stat-value { color: var(--coral); }
