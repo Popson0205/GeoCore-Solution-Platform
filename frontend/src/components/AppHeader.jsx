@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { portalPath } from '../config'
+import BrandMark from './BrandMark'
 
 // The "apps" GeoCore ships alongside the main Portal. Each is really just
 // a branded entry point into functionality that already exists (the form
@@ -185,8 +186,8 @@ export default function AppHeader({ appName = 'GeoCore', accent = '#0079c1', nav
     <header className="app-header">
       <div className="app-header-left">
         <Link to={homeTo} className="app-header-brand">
-          <span className="app-header-brand-mark" style={{ background: accent }}>
-            GC
+          <span className="app-header-brand-mark">
+            <BrandMark accent={accent} />
           </span>
           <span className="app-header-brand-name">{appName}</span>
         </Link>
