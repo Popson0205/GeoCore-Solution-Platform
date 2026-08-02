@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
@@ -13,9 +13,11 @@ from backend.app.api.deps_project import (
     require_project_role,
     require_survey_role,
 )
+from backend.app.core.audit import log_action
 from backend.app.core.data_import import ImportError_, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
+from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.roles import DATA_COLLECTOR, PROJECT_MANAGER
 from backend.app.models.record import Record
 from backend.app.models.survey import Survey
@@ -244,6 +246,7 @@ def update_record(
 @router.delete("/records/{record_id}", status_code=204)
 def delete_record(
     record_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -251,6 +254,16 @@ def delete_record(
     # so a field worker can't accidentally wipe collected data — they can
     # still fix mistakes via PATCH above.
     record = _get_record_for_role(db, record_id, current_user, PROJECT_MANAGER)
+    log_action(
+        db,
+        action="record.deleted",
+        organisation_id=record.organisation_id,
+        user_id=current_user.id,
+        target_type="record",
+        target_id=record.id,
+        details={"survey_id": str(record.survey_id), "feature_layer_id": str(record.feature_layer_id)},
+        ip_address=get_client_ip(request),
+    )
     db.delete(record)
     db.commit()
     return None

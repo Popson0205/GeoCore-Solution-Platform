@@ -29,6 +29,77 @@ function canManageMembers(myRole) {
   return RANK[myRole] >= RANK.administrator
 }
 
+const ACTION_LABEL = {
+  'member.added': 'Member added',
+  'member.role_changed': 'Member role changed',
+  'member.removed': 'Member removed',
+  'license.applied': 'License applied',
+  'survey.visibility_changed': 'Survey visibility changed',
+  'feature_layer.visibility_changed': 'Feature layer visibility changed',
+  'dashboard.visibility_changed': 'Dashboard visibility changed',
+  'record.deleted': 'Record deleted',
+}
+
+function AuditLogPanel({ orgId }) {
+  const { authedFetch } = useAuth()
+  const [entries, setEntries] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    authedFetch(`/api/organisations/${orgId}/audit-log`)
+      .then(setEntries)
+      .catch((err) => setError(err.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId])
+
+  function describeDetails(entry) {
+    const d = entry.details || {}
+    if (entry.action === 'member.added') return `${d.email} as ${d.role}`
+    if (entry.action === 'member.role_changed') return `${d.old_role} → ${d.new_role}`
+    if (entry.action === 'member.removed') return `was ${d.role}`
+    if (entry.action === 'license.applied') return `${d.plan}${d.tier ? ` (${d.tier})` : ''}`
+    if (entry.action.endsWith('.visibility_changed')) return `${d.old_visibility} → ${d.new_visibility}`
+    return ''
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Activity log</h2>
+        {entries && <span className="panel-count">{entries.length}</span>}
+      </div>
+      <p className="ws-muted" style={{ marginBottom: 14 }}>
+        Security and access-relevant actions in this organisation — member changes, license
+        operations, visibility changes, record deletion. Not a full change history of everything.
+      </p>
+      {error && <p className="hint">{error}</p>}
+      {!entries ? (
+        <p className="ws-muted">Loading…</p>
+      ) : entries.length === 0 ? (
+        <div className="empty-state">
+          <p>Nothing logged yet.</p>
+        </div>
+      ) : (
+        <ul className="entity-list">
+          {entries.map((e) => (
+            <li key={e.id} className="record-row">
+              <div style={{ flex: 1 }}>
+                <strong>{ACTION_LABEL[e.action] || e.action}</strong>
+                <div className="ws-muted">
+                  {e.user_email || 'System'} · {describeDetails(e)}
+                </div>
+              </div>
+              <span className="ws-muted" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                {new Date(e.created_at).toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 export default function OrganisationSettings() {
   const { orgId } = useParams()
   const { authedFetch, user } = useAuth()
@@ -468,6 +539,12 @@ export default function OrganisationSettings() {
           })}
         </ul>
       </section>
+
+      {manage && (
+        <section style={{ marginTop: 20 }}>
+          <AuditLogPanel orgId={orgId} />
+        </section>
+      )}
     </div>
   )
 }

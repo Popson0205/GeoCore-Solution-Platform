@@ -2,7 +2,7 @@ import logging
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +14,8 @@ from backend.app.api.deps_project import (
     require_survey_role,
 )
 from backend.app.core import content_visibility
+from backend.app.core.audit import log_action
+from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
@@ -283,6 +285,7 @@ def get_survey(
 def update_survey(
     survey_id: uuid.UUID,
     payload: SurveyUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -302,7 +305,19 @@ def update_survey(
     if payload.color is not None:
         survey.color = payload.color
     if payload.visibility is not None:
+        old_visibility = survey.visibility
         survey.visibility = payload.visibility
+        if old_visibility != payload.visibility:
+            log_action(
+                db,
+                action="survey.visibility_changed",
+                organisation_id=survey.organisation_id,
+                user_id=current_user.id,
+                target_type="survey",
+                target_id=survey.id,
+                details={"old_visibility": old_visibility, "new_visibility": payload.visibility},
+                ip_address=get_client_ip(request),
+            )
     if payload.project_id is not None:
         _validate_project(db, survey.organisation_id, payload.project_id)
         survey.project_id = payload.project_id

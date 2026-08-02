@@ -2,19 +2,23 @@ import re
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_membership, require_org_role
 from backend.app.core import licensing
+from backend.app.core.audit import log_action
 from backend.app.core.database import get_db
+from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.roles import ADMINISTRATOR, OWNER
 from backend.app.core.storage import resolve_upload, save_upload
+from backend.app.models.audit_log import AuditLog
 from backend.app.models.customer import Customer, License as LicenseRecord
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.user import User
+from backend.app.schemas.audit import AuditLogOut
 from backend.app.schemas.organisation import (
     ActivateLicenseRequest,
     LicenseApply,
@@ -282,6 +286,7 @@ def get_license_status(
 def apply_license(
     organisation_id: uuid.UUID,
     payload: LicenseApply,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -322,6 +327,15 @@ def apply_license(
     if record and record.status != "revoked":
         record.status = "applied"
         record.applied_organisation_id = org.id
+    log_action(
+        db,
+        action="license.applied",
+        organisation_id=organisation_id,
+        user_id=current_user.id,
+        target_type="license",
+        details={"plan": claims["plan"], "tier": claims.get("tier"), "seat_limit": claims.get("seat_limit")},
+        ip_address=get_client_ip(request),
+    )
     db.commit()
 
     seats_used = (
@@ -373,6 +387,7 @@ def list_members(
 def add_member(
     organisation_id: uuid.UUID,
     payload: MemberInvite,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -420,6 +435,16 @@ def add_member(
         organisation_id=organisation_id, user_id=user.id, role=payload.role
     )
     db.add(member)
+    log_action(
+        db,
+        action="member.added",
+        organisation_id=organisation_id,
+        user_id=current_user.id,
+        target_type="member",
+        target_id=user.id,
+        details={"email": user.email, "role": payload.role},
+        ip_address=get_client_ip(request),
+    )
     db.commit()
     db.refresh(member)
     return MemberOut(
@@ -437,6 +462,7 @@ def update_member_role(
     organisation_id: uuid.UUID,
     member_id: uuid.UUID,
     payload: MemberRoleUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -456,7 +482,18 @@ def update_member_role(
     if member.role == OWNER and payload.role != OWNER:
         _guard_last_owner(db, organisation_id, member.id)
 
+    old_role = member.role
     member.role = payload.role
+    log_action(
+        db,
+        action="member.role_changed",
+        organisation_id=organisation_id,
+        user_id=current_user.id,
+        target_type="member",
+        target_id=member.user_id,
+        details={"old_role": old_role, "new_role": payload.role},
+        ip_address=get_client_ip(request),
+    )
     db.commit()
     db.refresh(member)
     user = db.query(User).filter(User.id == member.user_id).first()
@@ -474,6 +511,7 @@ def update_member_role(
 def remove_member(
     organisation_id: uuid.UUID,
     member_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -493,6 +531,16 @@ def remove_member(
     if member.role == OWNER:
         _guard_last_owner(db, organisation_id, member.id)
 
+    log_action(
+        db,
+        action="member.removed",
+        organisation_id=organisation_id,
+        user_id=current_user.id,
+        target_type="member",
+        target_id=member.user_id,
+        details={"role": member.role},
+        ip_address=get_client_ip(request),
+    )
     db.delete(member)
     db.commit()
     return None
@@ -518,3 +566,38 @@ def _guard_last_owner(db: Session, organisation_id: uuid.UUID, member_id: uuid.U
             status_code=400,
             detail="Cannot remove or demote the last owner of an organisation",
         )
+
+
+@router.get("/{organisation_id}/audit-log", response_model=list[AuditLogOut])
+def list_audit_log(
+    organisation_id: uuid.UUID,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Who did what, when — scoped to security/access-relevant actions
+    (member changes, license operations, visibility changes, record
+    deletion — see models/audit_log.py for exactly which). Administrator+
+    only, the same bar as managing members. `limit` is capped at 500 so
+    this can't be used to pull the entire history in one request.
+    """
+    require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    limit = min(max(limit, 1), 500)
+
+    entries = (
+        db.query(AuditLog)
+        .filter(AuditLog.organisation_id == organisation_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    user_ids = {e.user_id for e in entries if e.user_id}
+    emails = dict(db.query(User.id, User.email).filter(User.id.in_(user_ids)).all()) if user_ids else {}
+
+    out = []
+    for e in entries:
+        row = AuditLogOut.model_validate(e)
+        row.user_email = emails.get(e.user_id)
+        out.append(row)
+    return out

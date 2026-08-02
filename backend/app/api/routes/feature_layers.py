@@ -2,7 +2,7 @@ import json
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +14,8 @@ from backend.app.api.deps_project import (
     require_org_role,
 )
 from backend.app.core import content_visibility
+from backend.app.core.audit import log_action
+from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.auto_dashboard import build_widget_plan
 from backend.app.core.data_import import (
     ImportError_,
@@ -143,6 +145,7 @@ def get_feature_layer(
 def update_feature_layer(
     feature_layer_id: uuid.UUID,
     payload: FeatureLayerUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -163,9 +166,21 @@ def update_feature_layer(
     if payload.color is not None:
         layer.color = payload.color
     if payload.visibility is not None:
+        old_visibility = layer.visibility
         layer.visibility = payload.visibility
         if payload.visibility == "public" and not layer.share_token:
             layer.share_token = secrets.token_urlsafe(24)
+        if old_visibility != payload.visibility:
+            log_action(
+                db,
+                action="feature_layer.visibility_changed",
+                organisation_id=layer.organisation_id,
+                user_id=current_user.id,
+                target_type="feature_layer",
+                target_id=layer.id,
+                details={"old_visibility": old_visibility, "new_visibility": payload.visibility},
+                ip_address=get_client_ip(request),
+            )
     db.commit()
     db.refresh(layer)
     return _layer_out(layer, db)

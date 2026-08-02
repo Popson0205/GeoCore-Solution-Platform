@@ -16,3 +16,5 @@ from backend.app.models.attachment import Attachment  # noqa: F401
 from backend.app.models.report import Report  # noqa: F401
 from backend.app.models.dashboard import Dashboard, DashboardWidget  # noqa: F401
 from backend.app.models.customer import Customer, License  # noqa: F401
+from backend.app.models.login_attempt import LoginAttempt  # noqa: F401
+from backend.app.models.audit_log import AuditLog  # noqa: F401

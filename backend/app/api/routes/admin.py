@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.core import email as email_module
 from backend.app.core import licensing
+from backend.app.core.audit import log_action
 from backend.app.core.database import get_db
 from backend.app.models.customer import Customer, License
 from backend.app.models.organisation import Organisation, OrganisationMember
@@ -300,10 +301,24 @@ def issue_license(
         issued_by=current_user.id,
     )
     db.add(lic)
+    log_action(
+        db,
+        action="license.issued",
+        user_id=current_user.id,
+        target_type="license",
+        target_id=lic.id,
+        details={
+            "customer_id": str(customer.id),
+            "customer_name": customer.name,
+            "plan": payload.plan,
+            "tier": payload.tier,
+            "seat_limit": seat_limit,
+            "duration_type": payload.duration_type,
+            "deployment_mode": payload.deployment_mode,
+        },
+    )
     db.commit()
     db.refresh(lic)
-
-    email_sent = False
     email_error = None
     if payload.send_email:
         try:
@@ -378,12 +393,20 @@ def list_all_licenses(
 def revoke_license(
     license_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_platform_admin),
 ):
     lic = db.query(License).filter(License.id == license_id).first()
     if not lic:
         raise HTTPException(status_code=404, detail="License not found")
     lic.status = "revoked"
+    log_action(
+        db,
+        action="license.revoked",
+        user_id=current_user.id,
+        target_type="license",
+        target_id=lic.id,
+        details={"customer_id": str(lic.customer_id)},
+    )
     db.commit()
     db.refresh(lic)
     return _license_out(lic)

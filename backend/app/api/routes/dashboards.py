@@ -2,7 +2,7 @@ import logging
 import uuid
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
@@ -13,6 +13,8 @@ from backend.app.api.deps_project import (
     require_project_role,
 )
 from backend.app.core import content_visibility
+from backend.app.core.audit import log_action
+from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.dashboard_engine import apply_time_filter, compute_widget
 from backend.app.core.database import get_db
 from backend.app.core.roles import ANALYST
@@ -238,6 +240,7 @@ def get_dashboard(
 def update_dashboard(
     dashboard_id: uuid.UUID,
     payload: DashboardUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -249,7 +252,19 @@ def update_dashboard(
     if payload.theme is not None:
         dashboard.theme = payload.theme
     if payload.visibility is not None:
+        old_visibility = dashboard.visibility
         dashboard.visibility = payload.visibility
+        if old_visibility != payload.visibility:
+            log_action(
+                db,
+                action="dashboard.visibility_changed",
+                organisation_id=dashboard.organisation_id,
+                user_id=current_user.id,
+                target_type="dashboard",
+                target_id=dashboard.id,
+                details={"old_visibility": old_visibility, "new_visibility": payload.visibility},
+                ip_address=get_client_ip(request),
+            )
     if payload.time_filter is not None:
         dashboard.time_filter = payload.time_filter
     db.commit()
