@@ -66,6 +66,21 @@ class ImportRowError(BaseModel):
     message: str
 
 
+class ImportPreviewOut(BaseModel):
+    """The 'detect columns, then match them to fields' step before an
+    actual import — see routes/feature_layers.py's preview_import. A
+    user picks which detected column maps to which of the layer's real
+    fields, so a genuine name mismatch (not just a formatting
+    difference slugifying already handles) doesn't silently land the
+    data under an untracked key.
+    """
+
+    columns: list[str]
+    sample_rows: list[dict]
+    fields: list[dict]
+    suggested_mapping: dict[str, str]
+
+
 class ImportSummary(BaseModel):
     """Result of POST /projects/{id}/records/import — a bulk import never
     aborts on the first bad row (blueprint section 2: this is meant to be

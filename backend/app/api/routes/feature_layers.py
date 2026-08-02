@@ -1,7 +1,8 @@
+import json
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,7 +15,13 @@ from backend.app.api.deps_project import (
 )
 from backend.app.core import content_visibility
 from backend.app.core.auto_dashboard import build_widget_plan
-from backend.app.core.data_import import ImportError_, parse_import_file
+from backend.app.core.data_import import (
+    ImportError_,
+    detect_columns,
+    parse_import_file,
+    sample_raw_rows,
+    suggest_column_mapping,
+)
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.core.roles import ADMINISTRATOR, ANALYST, DATA_COLLECTOR, VIEWER
@@ -31,7 +38,7 @@ from backend.app.schemas.feature_layer import (
     FeatureLayerUpdate,
     FeatureLayerUsageOut,
 )
-from backend.app.schemas.record import ImportSummary, RecordOut
+from backend.app.schemas.record import ImportPreviewOut, ImportSummary, RecordOut
 
 router = APIRouter()
 
@@ -316,10 +323,47 @@ def list_layer_records(
     )
 
 
+@router.post("/feature-layers/{feature_layer_id}/records/import/preview", response_model=ImportPreviewOut)
+async def preview_import(
+    feature_layer_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Step one of importing data: detect the file's columns and the
+    layer's real fields, and suggest a best-effort mapping between them
+    (see core/data_import.py's suggest_column_mapping) — the person
+    confirms or fixes that mapping before anything is actually imported.
+    This is what makes a genuine naming mismatch (not just a formatting
+    difference) fixable instead of silently landing the data under an
+    untracked key.
+    """
+    layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, DATA_COLLECTOR)
+    survey = layer.survey
+    fields = [{"field_key": f.field_key, "label": f.label, "field_type": f.field_type} for f in survey.field_definitions]
+
+    content = await file.read()
+    try:
+        columns = detect_columns(file.filename, content)
+        sample_rows = sample_raw_rows(file.filename, content)
+    except (ImportError_, UnicodeDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    suggested = suggest_column_mapping(columns, fields)
+
+    return ImportPreviewOut(
+        columns=columns,
+        sample_rows=sample_rows,
+        fields=fields,
+        suggested_mapping=suggested,
+    )
+
+
 @router.post("/feature-layers/{feature_layer_id}/records/import", response_model=ImportSummary)
 async def import_records(
     feature_layer_id: uuid.UUID,
     file: UploadFile = File(...),
+    column_mapping: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -329,6 +373,12 @@ async def import_records(
     same process_submission() engine a normal record uses — no reduced
     validation for bulk data. A bad row is reported and skipped; the
     whole file is never aborted on one mistake.
+
+    `column_mapping` (a JSON-encoded {field_key: source_column} object,
+    matching what preview_import above suggested/the person confirmed)
+    is optional — omit it and columns are matched the old way (exact,
+    then case-insensitive, then slugified). Pass it to fix a genuine
+    naming mismatch that isn't just a formatting difference.
     """
     layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, DATA_COLLECTOR)
     require_active_license(db, layer.organisation_id)
@@ -337,8 +387,15 @@ async def import_records(
     content = await file.read()
     field_keys = {f.field_key for f in survey.field_definitions}
 
+    mapping = None
+    if column_mapping:
+        try:
+            mapping = json.loads(column_mapping)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=422, detail="column_mapping must be valid JSON")
+
     try:
-        rows = parse_import_file(file.filename, content, layer.geometry_type, field_keys)
+        rows = parse_import_file(file.filename, content, layer.geometry_type, field_keys, mapping)
     except (ImportError_, UnicodeDecodeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 

@@ -141,11 +141,137 @@ function OverviewTab({ layer, records, onGoTo }) {
   )
 }
 
+function ColumnMappingWizard({ layerId, preview, pendingFile, onImported, onCancel }) {
+  const { authedFetch } = useAuth()
+  const [mapping, setMapping] = useState(preview.suggested_mapping || {})
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [summary, setSummary] = useState(null)
+
+  const NOT_MAPPED = ''
+
+  function sampleFor(column) {
+    const value = (preview.sample_rows[0] || {})[column]
+    return value === undefined || value === null || value === '' ? null : String(value)
+  }
+
+  async function handleConfirm() {
+    setUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', pendingFile)
+      // Only send entries where a real column was picked — an unmapped
+      // field just falls through to the existing best-effort matching
+      // on the backend, same as before this wizard existed.
+      const cleaned = Object.fromEntries(Object.entries(mapping).filter(([, v]) => v))
+      form.append('column_mapping', JSON.stringify(cleaned))
+      const result = await authedFetch(`/api/feature-layers/${layerId}/records/import`, {
+        method: 'POST',
+        body: form,
+      })
+      setSummary(result)
+      await onImported()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (summary) {
+    return (
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div className="panel-head">
+          <h2>Import complete</h2>
+        </div>
+        <p className="ws-muted">
+          {summary.created} of {summary.total_rows} row{summary.total_rows === 1 ? '' : 's'} imported.
+          {summary.skipped > 0 && ` ${summary.skipped} skipped.`}
+        </p>
+        {summary.errors.length > 0 && (
+          <ul className="hint" style={{ paddingLeft: 18, margin: '8px 0 0', maxHeight: 160, overflowY: 'auto' }}>
+            {summary.errors.map((err, i) => (
+              <li key={i}>
+                Row {err.line}: {err.message}
+              </li>
+            ))}
+          </ul>
+        )}
+        <button className="btn-secondary" onClick={onCancel} style={{ marginTop: 12 }}>
+          Done
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h2>Match your columns to this layer's fields</h2>
+      </div>
+      <p className="ws-muted" style={{ marginBottom: 14 }}>
+        We matched what we could automatically — check each one, and fix anything that isn't
+        right before importing. A field left "Not mapped" won't be filled in from this file.
+      </p>
+      {error && <p className="hint">{error}</p>}
+
+      <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+        <table className="content-table">
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Matched column</th>
+              <th>Example value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {preview.fields.map((f) => (
+              <tr key={f.field_key}>
+                <td>
+                  <strong>{f.label}</strong>
+                  <div className="ws-muted" style={{ fontSize: '0.78rem' }}>{f.field_key}</div>
+                </td>
+                <td>
+                  <select
+                    value={mapping[f.field_key] ?? NOT_MAPPED}
+                    onChange={(e) => setMapping((m) => ({ ...m, [f.field_key]: e.target.value }))}
+                  >
+                    <option value={NOT_MAPPED}>Not mapped</option>
+                    {preview.columns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="ws-muted">
+                  {mapping[f.field_key] ? sampleFor(mapping[f.field_key]) ?? '(empty)' : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="form-row">
+        <button className="btn-primary" onClick={handleConfirm} disabled={uploading}>
+          {uploading ? 'Importing…' : 'Confirm & upload'}
+        </button>
+        <button className="btn-ghost" onClick={onCancel} disabled={uploading}>
+          Cancel
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function DataTab({ layer, survey, records, canEdit, canDelete, onEdit, onDelete, onImported }) {
   const { authedFetch } = useAuth()
-  const [uploading, setUploading] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const [pendingFile, setPendingFile] = useState(null)
   const [importError, setImportError] = useState('')
-  const [summary, setSummary] = useState(null)
 
   const fieldKeys = (survey?.field_definitions || []).map((f) => f.field_key)
   const fieldLabels = Object.fromEntries((survey?.field_definitions || []).map((f) => [f.field_key, f.label]))
@@ -154,23 +280,27 @@ function DataTab({ layer, survey, records, canEdit, canDelete, onEdit, onDelete,
     const file = e.target.files?.[0]
     if (!file) return
     setImportError('')
-    setSummary(null)
-    setUploading(true)
+    setPreviewing(true)
     try {
       const form = new FormData()
       form.append('file', file)
-      const result = await authedFetch(`/api/feature-layers/${layer.id}/records/import`, {
+      const result = await authedFetch(`/api/feature-layers/${layer.id}/records/import/preview`, {
         method: 'POST',
         body: form,
       })
-      setSummary(result)
-      await onImported()
+      setPreview(result)
+      setPendingFile(file)
     } catch (err) {
       setImportError(err.message)
     } finally {
-      setUploading(false)
+      setPreviewing(false)
       e.target.value = ''
     }
+  }
+
+  function handleCancelWizard() {
+    setPreview(null)
+    setPendingFile(null)
   }
 
   return (
@@ -179,14 +309,14 @@ function DataTab({ layer, survey, records, canEdit, canDelete, onEdit, onDelete,
         <h2>Data</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className="panel-count">{records.length}</span>
-          {canEdit && (
+          {canEdit && !preview && (
             <label className="btn-secondary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
-              {uploading ? 'Importing…' : '📁 Upload data'}
+              {previewing ? 'Reading file…' : '📁 Upload data'}
               <input
                 type="file"
                 accept=".csv,.json,.geojson"
                 onChange={handleFile}
-                disabled={uploading}
+                disabled={previewing}
                 style={{ display: 'none' }}
               />
             </label>
@@ -194,48 +324,46 @@ function DataTab({ layer, survey, records, canEdit, canDelete, onEdit, onDelete,
         </div>
       </div>
       <p className="builder-hint" style={{ marginBottom: 14 }}>
-        Upload a .csv, .json, or .geojson file to bring in existing data — every row runs through
+        Upload a .csv, .json, or .geojson file to bring in existing data — you'll match its
+        columns to this layer's fields before anything is imported, and every row runs through
         the same validation the form does; bad rows are skipped and listed, not silently dropped.
       </p>
       {importError && <p className="hint">{importError}</p>}
-      {summary && (
-        <div style={{ marginBottom: 14 }}>
-          <p className="ws-muted">
-            {summary.created} of {summary.total_rows} row{summary.total_rows === 1 ? '' : 's'} imported.
-            {summary.skipped > 0 && ` ${summary.skipped} skipped.`}
-          </p>
-          {summary.errors.length > 0 && (
-            <ul className="hint" style={{ paddingLeft: 18, margin: 0, maxHeight: 160, overflowY: 'auto' }}>
-              {summary.errors.map((err, i) => (
-                <li key={i}>
-                  Row {err.line}: {err.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+
+      {preview && pendingFile && (
+        <ColumnMappingWizard
+          layerId={layer.id}
+          preview={preview}
+          pendingFile={pendingFile}
+          onImported={onImported}
+          onCancel={handleCancelWizard}
+        />
       )}
 
-      {records.length === 0 ? (
-        <div className="empty-state">
-          <p>No records yet.</p>
-          <span>Collect some through the survey's form, or upload a file above.</span>
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="content-table">
-            <thead>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="content-table">
+          <thead>
+            <tr>
+              <th>Location</th>
+              {fieldKeys.map((key) => (
+                <th key={key}>{fieldLabels[key] || key}</th>
+              ))}
+              <th>Submitted</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.length === 0 ? (
               <tr>
-                <th>Location</th>
-                {fieldKeys.map((key) => (
-                  <th key={key}>{fieldLabels[key] || key}</th>
-                ))}
-                <th>Submitted</th>
-                <th></th>
+                <td colSpan={fieldKeys.length + 3}>
+                  <div className="empty-state" style={{ border: 'none', padding: '20px 0' }}>
+                    <p>No records yet.</p>
+                    <span>Collect some through the survey's form, or upload a file above.</span>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {records.map((record) => (
+            ) : (
+              records.map((record) => (
                 <tr key={record.id}>
                   <td className="ws-muted">{geometrySummary(record.geometry)}</td>
                   {fieldKeys.map((key) => {
@@ -258,11 +386,12 @@ function DataTab({ layer, survey, records, canEdit, canDelete, onEdit, onDelete,
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
     </section>
   )
 }
