@@ -62,3 +62,15 @@ class FeatureLayerShareStatus(BaseModel):
     enabled: bool
     token: Optional[str] = None
     public_path: Optional[str] = None
+
+
+class FeatureLayerUsageOut(BaseModel):
+    """One Dashboard using this layer — the "what depends on this data"
+    view (see routes/feature_layers.py's get_usage). Only dashboards the
+    caller can actually see are included, same visibility rule as
+    everywhere else.
+    """
+
+    dashboard_id: uuid.UUID
+    dashboard_name: str
+    widget_count: int

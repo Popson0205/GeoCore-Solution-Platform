@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import (
@@ -17,6 +17,7 @@ from backend.app.core.data_import import ImportError_, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.core.roles import ADMINISTRATOR, DATA_COLLECTOR, VIEWER
+from backend.app.models.dashboard import Dashboard
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
@@ -26,6 +27,7 @@ from backend.app.schemas.feature_layer import (
     FeatureLayerOut,
     FeatureLayerShareStatus,
     FeatureLayerUpdate,
+    FeatureLayerUsageOut,
 )
 from backend.app.schemas.record import ImportSummary, RecordOut
 
@@ -195,6 +197,47 @@ def rotate_share_link(
     db.commit()
     db.refresh(layer)
     return FeatureLayerShareStatus(enabled=True, token=layer.share_token, public_path=f"/layers/{layer.share_token}")
+
+
+@router.get("/feature-layers/{feature_layer_id}/usage", response_model=list[FeatureLayerUsageOut])
+def get_usage(
+    feature_layer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Every Dashboard with at least one widget bound to this layer — the
+    "what depends on this data" view, so deleting a Survey/changing a
+    layer's settings isn't a guessing game about what else might break.
+    Dashboards the caller can't see (private, someone else's) are left
+    out, same visibility rule as the Dashboards list itself.
+    """
+    layer, membership = require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    creator = layer.survey.created_by if layer.survey else None
+    if not content_visibility.can_view(layer.visibility, creator, current_user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Feature layer not found")
+
+    dashboards = (
+        db.query(Dashboard)
+        .options(selectinload(Dashboard.widgets))
+        .filter(Dashboard.organisation_id == layer.organisation_id)
+        .all()
+    )
+    out = []
+    for dashboard in dashboards:
+        if not content_visibility.can_view(
+            dashboard.visibility, dashboard.created_by, current_user.id, membership.role
+        ):
+            continue
+        matching = [
+            w for w in dashboard.widgets if w.config.get("feature_layer_id") == str(feature_layer_id)
+        ]
+        if matching:
+            out.append(
+                FeatureLayerUsageOut(
+                    dashboard_id=dashboard.id, dashboard_name=dashboard.name, widget_count=len(matching)
+                )
+            )
+    return out
 
 
 @router.get("/feature-layers/{feature_layer_id}/records", response_model=list[RecordOut])
