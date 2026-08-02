@@ -99,18 +99,20 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
           &larr; Organisations
         </Link>
 
-        <nav className="project-tabs">
-          {tabs.map((tab) => (
-            <NavLink
-              key={tab.to || 'overview'}
-              to={tab.to}
-              end={tab.end}
-              className={({ isActive }) => `project-tab${isActive ? ' is-active' : ''}`}
-            >
-              {tab.label}
-            </NavLink>
-          ))}
-        </nav>
+        {tabs.length > 0 && (
+          <nav className="project-tabs">
+            {tabs.map((tab) => (
+              <NavLink
+                key={tab.to || 'overview'}
+                to={tab.to}
+                end={tab.end}
+                className={({ isActive }) => `project-tab${isActive ? ' is-active' : ''}`}
+              >
+                {tab.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
 
         {error && <p className="hint">{error}</p>}
       </div>

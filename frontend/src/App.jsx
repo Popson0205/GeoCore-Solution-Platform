@@ -18,7 +18,6 @@ import AdminCustomers from './pages/AdminCustomers'
 import AdminCustomerDetail from './pages/AdminCustomerDetail'
 import AdminLicenses from './pages/AdminLicenses'
 import AdminOrganisations from './pages/AdminOrganisations'
-import SurveyList from './pages/SurveyList'
 import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
@@ -109,7 +108,6 @@ export default function App() {
           <Route path="organisations/:orgId" element={<OrganisationDetail />}>
             <Route index element={<OrganisationOverview />} />
             <Route path="content" element={<Content />} />
-            <Route path="surveys" element={<SurveyList />} />
             <Route path="surveys/new" element={<SurveyNew />} />
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>
               <Route index element={<SurveyOverview />} />

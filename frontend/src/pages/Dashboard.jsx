@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 /**
@@ -9,10 +9,19 @@ import { useAuth } from '../context/AuthContext'
  * license key (see the form below and routes/organisations.py's
  * activate_license) — the front door is the public "Purchase a license"
  * page, not a button in here.
+ *
+ * When someone has exactly one organisation, this page skips itself
+ * entirely and drops them straight into that organisation's Home page —
+ * there's no reason to make a single-org user pick from a list of one.
+ * The "Switch organisation" item in the account menu (see
+ * components/AppHeader.jsx) is the way back here (?picker=1), for
+ * activating a second license or just browsing the list again.
  */
 export default function Dashboard() {
   const { authedFetch } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const forcePicker = searchParams.get('picker') === '1'
   const [orgs, setOrgs] = useState([])
   const [error, setError] = useState('')
   const [loadingOrgs, setLoadingOrgs] = useState(true)
@@ -26,6 +35,9 @@ export default function Dashboard() {
     try {
       const data = await authedFetch('/api/organisations/')
       setOrgs(data)
+      if (!forcePicker && data.length === 1) {
+        navigate(`/workspace/organisations/${data[0].id}`, { replace: true })
+      }
     } catch (err) {
       setError(err.message)
     } finally {

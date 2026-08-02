@@ -8,7 +8,6 @@ import Register from './pages/Register'
 import SurveyApp from './pages/SurveyApp'
 import PublicSubmit from './pages/PublicSubmit'
 import OrganisationDetail from './pages/OrganisationDetail'
-import SurveyList from './pages/SurveyList'
 import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
@@ -20,11 +19,13 @@ import ProjectAttachments from './pages/ProjectAttachments'
 import NotFound from './pages/NotFound'
 import './styles.css'
 
-// This bundle's own narrow tab strip for the org shell — just Surveys,
-// not the full Records/Map/Attachments/Dashboards/Reports set the main
-// Portal bundle shows (see OrganisationDetail's DEFAULT_TABS), matching
-// this app's "no dashboard builder, no org settings" scope below.
-const SURVEY_APP_ORG_TABS = [{ to: 'surveys', label: 'Surveys', end: true }]
+// This bundle's own narrow tab strip for the org shell — just "New
+// survey" creation and a single survey's own overview are still reached
+// through here; the "Surveys" list tab was retired (see below) since
+// SurveyApp.jsx's own gallery is the primary place to browse surveys in
+// this app, and the main Portal's Content page already lists every
+// survey (form + feature layer) org-wide too.
+const SURVEY_APP_ORG_TABS = []
 
 /**
  * Standalone entry point for GeoCore Survey — a genuinely separate Vite
@@ -70,8 +71,7 @@ function SurveyStandaloneApp() {
           path="/workspace/organisations/:orgId"
           element={<OrganisationDetail tabs={SURVEY_APP_ORG_TABS} />}
         >
-          <Route index element={<Navigate to="surveys" replace />} />
-          <Route path="surveys" element={<SurveyList />} />
+          <Route index element={<Navigate to="/apps/survey" replace />} />
           <Route path="surveys/new" element={<SurveyNew />} />
           <Route path="surveys/:surveyId" element={<SurveyDetail />}>
             <Route index element={<SurveyOverview />} />

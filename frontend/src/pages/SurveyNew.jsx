@@ -137,7 +137,7 @@ export default function SurveyNew() {
 
   return (
     <div className="new-survey-screen">
-      <button className="new-survey-back" onClick={() => navigate('..')}>
+      <button className="new-survey-back" onClick={() => navigate(-1)}>
         &larr;
       </button>
       <h1>New survey</h1>

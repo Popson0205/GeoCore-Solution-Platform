@@ -118,7 +118,7 @@ function AppLauncher() {
   )
 }
 
-function UserMenu() {
+function UserMenu({ isPortal }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -148,6 +148,17 @@ function UserMenu() {
             <strong>{user?.full_name || 'Signed in'}</strong>
             <span>{user?.email}</span>
           </div>
+          {isPortal && (
+            <button
+              className="user-menu-item"
+              onClick={() => {
+                setOpen(false)
+                navigate('/workspace?picker=1')
+              }}
+            >
+              Switch organisation
+            </button>
+          )}
           <button
             className="user-menu-item"
             onClick={() => {
@@ -200,7 +211,7 @@ export default function AppHeader({ appName = 'GeoCore', accent = '#0079c1', nav
           <Icon name="bell" size={18} />
         </button>
         <AppLauncher />
-        <UserMenu />
+        <UserMenu isPortal={homeTo === '/workspace'} />
       </div>
     </header>
   )
