@@ -33,6 +33,7 @@ import ProjectDashboards from './pages/ProjectDashboards'
 import DashboardDetail from './pages/DashboardDetail'
 import ProjectReports from './pages/ProjectReports'
 import PublicShare from './pages/PublicShare'
+import PublicFeatureLayer from './pages/PublicFeatureLayer'
 import PublicSubmit from './pages/PublicSubmit'
 import SurveyApp from './pages/SurveyApp'
 import DashboardApp from './pages/DashboardApp'
@@ -53,6 +54,7 @@ export default function App() {
         {/* Unauthenticated, read-only view of a project's shareable link —
             deliberately outside WorkspaceLayout's auth gate. */}
         <Route path="/share/:token" element={<PublicShare />} />
+        <Route path="/layers/:token" element={<PublicFeatureLayer />} />
         {/* Unauthenticated data-collection form for a survey's
             submission link — a field officer's entire world. */}
         <Route path="/submit/:token" element={<PublicSubmit />} />

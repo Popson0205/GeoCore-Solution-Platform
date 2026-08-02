@@ -16,7 +16,8 @@ class FeatureLayerOut(BaseModel):
     description: Optional[str] = None
     geometry_type: str
     color: str
-    share_enabled: bool
+    # "private" | "organization" | "public" — see core/content_visibility.py.
+    visibility: str = "organization"
     share_token: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -35,6 +36,7 @@ class FeatureLayerUpdate(BaseModel):
     description: Optional[str] = None
     geometry_type: Optional[str] = None
     color: Optional[str] = None
+    visibility: Optional[str] = None
 
     @field_validator("geometry_type")
     @classmethod
@@ -43,8 +45,20 @@ class FeatureLayerUpdate(BaseModel):
             raise ValueError(f"geometry_type must be one of {sorted(GEOMETRY_TYPES)}")
         return value
 
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"private", "organization", "public"}:
+            raise ValueError("visibility must be one of ['private', 'organization', 'public']")
+        return value
+
 
 class FeatureLayerShareStatus(BaseModel):
+    """The public-link half of "public" visibility — a layer can be
+    visibility="public" and still have no share_token generated yet
+    (that only happens once someone actually turns the link on).
+    """
+
     enabled: bool
     token: Optional[str] = None
     public_path: Optional[str] = None

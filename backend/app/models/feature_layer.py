@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -40,11 +40,14 @@ class FeatureLayer(Base):
     description = Column(Text, nullable=True)
     geometry_type = Column(String, default="point", nullable=False)
     color = Column(String, default="#0079c1", nullable=False)
-    # A separate, read-only sharing mechanism from the Survey's own
-    # *submission* link (which lets someone add data). This one lets
-    # someone view/export the collected data itself — mirrors Project's
-    # existing share_token/share_enabled pattern (see routes/projects.py).
-    share_enabled = Column(Boolean, default=False, nullable=False)
+    # "private" (only the Survey's creator, plus Administrator+) |
+    # "organization" (every org member — the default) | "public" (anyone
+    # with the link, no login — served via share_token below). This
+    # replaced a plain share_enabled boolean: "private" is a real third
+    # state now, not just "org-wide or public", matching how a form's
+    # *data* might need to stay private even when the form itself is
+    # open to everyone in the org. See core/visibility.py.
+    visibility = Column(String, default="organization", nullable=False)
     share_token = Column(String, unique=True, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(

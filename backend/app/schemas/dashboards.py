@@ -40,6 +40,15 @@ class DashboardUpdate(BaseModel):
     # {"preset": "dark", "overrides": {...}} or None to reset to default.
     # See models/dashboard.py's `theme` column docstring for the shape.
     theme: Optional[dict[str, Any]] = None
+    # "private" | "organization" | "public" — see core/content_visibility.py.
+    visibility: Optional[str] = None
+
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"private", "organization", "public"}:
+            raise ValueError("visibility must be one of ['private', 'organization', 'public']")
+        return value
 
 
 class WidgetLayout(BaseModel):
@@ -92,6 +101,8 @@ class DashboardOut(BaseModel):
     name: str
     description: Optional[str] = None
     theme: Optional[dict[str, Any]] = None
+    visibility: str = "organization"
+    created_by: Optional[uuid.UUID] = None
     updated_at: datetime
     widgets: list[WidgetOut] = []
 
@@ -106,5 +117,6 @@ class DashboardSummaryOut(BaseModel):
     id: uuid.UUID
     name: str
     description: Optional[str] = None
+    visibility: str = "organization"
     updated_at: datetime
     widget_count: int

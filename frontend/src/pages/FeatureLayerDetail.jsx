@@ -88,14 +88,21 @@ function SettingsPanel({ layer, onSaved }) {
   )
 }
 
-function SharePanel({ layerId, canManage }) {
+const VISIBILITY_OPTIONS = [
+  { value: 'private', label: 'Private', desc: 'Only you (and Administrators) can see this layer and its data.' },
+  { value: 'organization', label: 'Organization', desc: 'Everyone in this organisation can see it.' },
+  { value: 'public', label: 'Public', desc: 'Anyone with the link can view the data — no login needed.' },
+]
+
+function SharePanel({ layerId, visibility, onVisibilityChange, canManage }) {
   const { authedFetch } = useAuth()
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
-  async function load() {
+  async function loadStatus() {
     setLoading(true)
     try {
       const data = await authedFetch(`/api/feature-layers/${layerId}/share`)
@@ -108,28 +115,33 @@ function SharePanel({ layerId, canManage }) {
   }
 
   useEffect(() => {
-    load()
+    loadStatus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layerId])
+  }, [layerId, visibility])
 
-  async function handleEnable(rotate) {
+  async function handleChange(nextVisibility) {
+    setSaving(true)
     setError('')
     try {
-      const data = await authedFetch(`/api/feature-layers/${layerId}/share?rotate=${rotate}`, {
-        method: 'POST',
+      const updated = await authedFetch(`/api/feature-layers/${layerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility: nextVisibility }),
       })
-      setStatus(data)
-      setCopied(false)
+      onVisibilityChange(updated.visibility)
     } catch (err) {
       setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function handleDisable() {
+  async function handleRotate() {
     setError('')
     try {
-      const data = await authedFetch(`/api/feature-layers/${layerId}/share`, { method: 'DELETE' })
+      const data = await authedFetch(`/api/feature-layers/${layerId}/share/rotate`, { method: 'POST' })
       setStatus(data)
+      setCopied(false)
     } catch (err) {
       setError(err.message)
     }
@@ -142,38 +154,47 @@ function SharePanel({ layerId, canManage }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading) return null
-
   return (
     <section className="panel" style={{ marginBottom: 20 }}>
       <div className="panel-head">
-        <h2>Share this data</h2>
-        {status?.enabled && <span className="pill">Link active</span>}
+        <h2>Who can see this</h2>
       </div>
-      <p className="ws-muted">
-        A read-only public link to view this layer's data — separate from the Survey's own
-        submission link, which lets people add data rather than view it.
+      <p className="ws-muted" style={{ marginBottom: 12 }}>
+        Controls both the form and the data collected through it. Separate from a Survey's own
+        submission link, which is about who can *add* data, not who can *see* it.
       </p>
       {error && <p className="hint">{error}</p>}
       {!canManage ? (
-        <p className="ws-muted">Only an Administrator or Owner can manage sharing.</p>
-      ) : status?.enabled ? (
-        <div className="form-row">
+        <p className="ws-muted">Only an Administrator or Owner can change this.</p>
+      ) : (
+        <div className="plan-choice-group">
+          {VISIBILITY_OPTIONS.map((opt) => (
+            <label key={opt.value} className={`plan-choice${visibility === opt.value ? ' is-selected' : ''}`}>
+              <input
+                type="radio"
+                name="layer-visibility"
+                value={opt.value}
+                checked={visibility === opt.value}
+                onChange={() => handleChange(opt.value)}
+                disabled={saving}
+              />
+              <span className="plan-choice-label">{opt.label}</span>
+              <span className="plan-choice-desc">{opt.desc}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {canManage && !loading && visibility === 'public' && status?.public_path && (
+        <div className="form-row" style={{ marginTop: 14 }}>
           <input readOnly value={`${window.location.origin}${status.public_path}`} style={{ flex: 1 }} />
           <button className="btn-secondary" onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy link'}
           </button>
-          <button className="btn-ghost" onClick={() => handleEnable(true)}>
+          <button className="btn-ghost" onClick={handleRotate}>
             Rotate link
           </button>
-          <button className="btn-ghost" onClick={handleDisable}>
-            Disable
-          </button>
         </div>
-      ) : (
-        <button className="btn-primary" onClick={() => handleEnable(false)}>
-          Enable sharing
-        </button>
       )}
     </section>
   )
@@ -387,7 +408,14 @@ export default function FeatureLayerDetail() {
 
       {canManage && <SettingsPanel layer={layer} onSaved={setLayer} />}
       {canEdit && <ImportPanel layerId={layerId} onImported={load} />}
-      {canManage && <SharePanel layerId={layerId} canManage={canManage} />}
+      {canManage && (
+        <SharePanel
+          layerId={layerId}
+          visibility={layer.visibility}
+          onVisibilityChange={(v) => setLayer((prev) => ({ ...prev, visibility: v }))}
+          canManage={canManage}
+        />
+      )}
 
       <section className="panel">
         <div className="panel-head">

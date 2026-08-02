@@ -259,6 +259,10 @@ class SurveyUpdate(BaseModel):
     status: Optional[str] = None
     geometry_type: Optional[str] = None
     color: Optional[str] = None
+    # "private" | "organization" | "public" — see core/content_visibility.py.
+    # Distinct from submission_access, which governs who can *submit* data
+    # via this survey's form link, not who can *see/open* the survey itself.
+    visibility: Optional[str] = None
     # None = leave the form untouched; a list (even empty) = replace it.
     sections: Optional[list[FormSectionCreate]] = None
     fields: Optional[list[FieldDefinitionCreate]] = None
@@ -284,6 +288,13 @@ class SurveyUpdate(BaseModel):
             raise ValueError(f"geometry_type must be one of {sorted(GEOMETRY_TYPES)}")
         return value
 
+    @field_validator("visibility")
+    @classmethod
+    def validate_visibility(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"private", "organization", "public"}:
+            raise ValueError("visibility must be one of ['private', 'organization', 'public']")
+        return value
+
 
 class SurveyOut(BaseModel):
     id: uuid.UUID
@@ -294,6 +305,8 @@ class SurveyOut(BaseModel):
     status: str
     geometry_type: str
     color: str
+    visibility: str = "organization"
+    created_by: Optional[uuid.UUID] = None
     # The token itself is a credential and is only ever exposed through a
     # dedicated submission-link endpoint (mirrors ProjectShareOut), never in
     # the general read model.

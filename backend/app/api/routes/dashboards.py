@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import (
-    get_organisation_for_member,
     get_project_for_member,
     require_active_license,
     require_org_role,
     require_project_role,
 )
+from backend.app.core import content_visibility
 from backend.app.core.dashboard_engine import compute_widget
 from backend.app.core.database import get_db
 from backend.app.core.roles import ANALYST
@@ -51,7 +51,9 @@ def _get_dashboard_for_member(db: Session, dashboard_id: uuid.UUID, user: User) 
     dashboard = _get_dashboard(db, dashboard_id)
     # Resolved through organisation_id, not the now-optional project_id
     # folder tag.
-    get_organisation_for_member(db, dashboard.organisation_id, user.id)
+    membership = require_org_role(db, dashboard.organisation_id, user.id, "viewer")
+    if not content_visibility.can_view(dashboard.visibility, dashboard.created_by, user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Dashboard not found")
     return dashboard
 
 
@@ -97,6 +99,7 @@ def create_dashboard_for_organisation(
         project_id=project_id,
         name=payload.name,
         description=payload.description,
+        created_by=current_user.id,
     )
     db.add(dashboard)
     db.commit()
@@ -112,7 +115,7 @@ def list_dashboards_for_organisation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    get_organisation_for_member(db, organisation_id, current_user.id)
+    membership = require_org_role(db, organisation_id, current_user.id, "viewer")
     dashboards = (
         db.query(Dashboard)
         .options(selectinload(Dashboard.widgets))
@@ -120,11 +123,17 @@ def list_dashboards_for_organisation(
         .order_by(Dashboard.created_at)
         .all()
     )
+    dashboards = [
+        d
+        for d in dashboards
+        if content_visibility.can_view(d.visibility, d.created_by, current_user.id, membership.role)
+    ]
     return [
         DashboardSummaryOut(
             id=d.id,
             name=d.name,
             description=d.description,
+            visibility=d.visibility,
             updated_at=d.updated_at,
             widget_count=len(d.widgets),
         )
@@ -239,6 +248,8 @@ def update_dashboard(
         dashboard.description = payload.description
     if payload.theme is not None:
         dashboard.theme = payload.theme
+    if payload.visibility is not None:
+        dashboard.visibility = payload.visibility
     db.commit()
     db.refresh(dashboard)
     return dashboard

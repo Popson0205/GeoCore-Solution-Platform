@@ -13,6 +13,7 @@ from backend.app.api.deps_project import (
     require_org_role,
     require_survey_role,
 )
+from backend.app.core import content_visibility
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
@@ -238,13 +239,18 @@ def list_surveys(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_org_role(db, organisation_id, current_user.id, VIEWER)
+    membership = require_org_role(db, organisation_id, current_user.id, VIEWER)
     surveys = (
         db.query(Survey)
         .options(*_LOAD_OPTIONS)
         .filter(Survey.organisation_id == organisation_id)
         .all()
     )
+    surveys = [
+        s
+        for s in surveys
+        if content_visibility.can_view(s.visibility, s.created_by, current_user.id, membership.role)
+    ]
     counts = dict(
         db.query(Record.survey_id, func.count(Record.id))
         .filter(Record.organisation_id == organisation_id)
@@ -264,7 +270,9 @@ def get_survey(
 ):
     # Any organisation member may read; require_survey_role with VIEWER is the
     # membership + minimum-role check in one.
-    require_survey_role(db, survey_id, current_user.id, VIEWER)
+    survey, membership = require_survey_role(db, survey_id, current_user.id, VIEWER)
+    if not content_visibility.can_view(survey.visibility, survey.created_by, current_user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Survey not found")
     survey = _survey_with_form(db, survey_id)
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found")
@@ -293,6 +301,8 @@ def update_survey(
         survey.geometry_type = payload.geometry_type
     if payload.color is not None:
         survey.color = payload.color
+    if payload.visibility is not None:
+        survey.visibility = payload.visibility
     if payload.project_id is not None:
         _validate_project(db, survey.organisation_id, payload.project_id)
         survey.project_id = payload.project_id

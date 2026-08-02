@@ -12,6 +12,7 @@ from backend.app.api.deps_project import (
     require_feature_layer_role,
     require_org_role,
 )
+from backend.app.core import content_visibility
 from backend.app.core.data_import import ImportError_, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
@@ -46,18 +47,31 @@ def list_feature_layers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Every feature layer in the organisation — the real, table-backed
-    version of what used to be a computed view over Survey. This is what
-    the Content page lists as a distinct item alongside its Survey, and
-    what a Dashboard widget's "layer" picker binds to.
+    """Every feature layer in the organisation this caller can see — the
+    real, table-backed version of what used to be a computed view over
+    Survey. This is what the Content page lists as a distinct item
+    alongside its Survey, and what a Dashboard widget's "layer" picker
+    binds to. A layer whose visibility is "private" is left out unless
+    the caller created its Survey or is an Administrator+ — see
+    core/content_visibility.py.
     """
-    require_org_role(db, organisation_id, current_user.id, VIEWER)
+    membership = require_org_role(db, organisation_id, current_user.id, VIEWER)
     layers = (
         db.query(FeatureLayer)
         .filter(FeatureLayer.organisation_id == organisation_id)
         .order_by(FeatureLayer.created_at.desc())
         .all()
     )
+    survey_creators = dict(
+        db.query(Survey.id, Survey.created_by).filter(Survey.organisation_id == organisation_id).all()
+    )
+    layers = [
+        layer
+        for layer in layers
+        if content_visibility.can_view(
+            layer.visibility, survey_creators.get(layer.survey_id), current_user.id, membership.role
+        )
+    ]
     counts = dict(
         db.query(Record.feature_layer_id, func.count(Record.id))
         .filter(Record.organisation_id == organisation_id)
@@ -80,13 +94,37 @@ def list_feature_layers(
     return out
 
 
+@router.get("/feature-layers/by-survey/{survey_id}", response_model=FeatureLayerOut)
+def get_feature_layer_by_survey(
+    survey_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Convenience lookup for the Survey Designer, which knows its own
+    survey_id but not the twin FeatureLayer's id — geometry_type/color/
+    visibility for the *data* all live on the FeatureLayer now, not the
+    Survey's own (legacy, unused) columns of the same name.
+    """
+    layer = db.query(FeatureLayer).filter(FeatureLayer.survey_id == survey_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="This survey has no feature layer")
+    layer, membership = require_feature_layer_role(db, layer.id, current_user.id, VIEWER)
+    creator = layer.survey.created_by if layer.survey else None
+    if not content_visibility.can_view(layer.visibility, creator, current_user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Feature layer not found")
+    return _layer_out(layer, db)
+
+
 @router.get("/feature-layers/{feature_layer_id}", response_model=FeatureLayerOut)
 def get_feature_layer(
     feature_layer_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    layer, membership = require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    creator = layer.survey.created_by if layer.survey else None
+    if not content_visibility.can_view(layer.visibility, creator, current_user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Feature layer not found")
     return _layer_out(layer, db)
 
 
@@ -97,10 +135,12 @@ def update_feature_layer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Settings — rename, restyle, or change geometry type. Reserved for
-    Administrator+ (same bar as Project settings), since this affects
-    every widget/map already bound to this layer, not just this layer's
-    own view.
+    """Settings — rename, restyle, change geometry type, or change who can
+    see it (visibility). Reserved for Administrator+ (same bar as Project
+    settings), since this affects every widget/map already bound to this
+    layer, not just this layer's own view. Switching visibility to
+    "public" generates a share_token automatically if one doesn't exist
+    yet — no separate "enable sharing" step needed.
     """
     layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, ADMINISTRATOR)
     if payload.name is not None:
@@ -111,6 +151,10 @@ def update_feature_layer(
         layer.geometry_type = payload.geometry_type
     if payload.color is not None:
         layer.color = payload.color
+    if payload.visibility is not None:
+        layer.visibility = payload.visibility
+        if payload.visibility == "public" and not layer.share_token:
+            layer.share_token = secrets.token_urlsafe(24)
     db.commit()
     db.refresh(layer)
     return _layer_out(layer, db)
@@ -123,46 +167,34 @@ def get_share_status(
     current_user: User = Depends(get_current_user),
 ):
     layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, ADMINISTRATOR)
+    enabled = layer.visibility == "public"
     return FeatureLayerShareStatus(
-        enabled=layer.share_enabled,
-        token=layer.share_token if layer.share_enabled else None,
-        public_path=f"/layers/{layer.share_token}" if (layer.share_enabled and layer.share_token) else None,
+        enabled=enabled,
+        token=layer.share_token if enabled else None,
+        public_path=f"/layers/{layer.share_token}" if (enabled and layer.share_token) else None,
     )
 
 
-@router.post("/feature-layers/{feature_layer_id}/share", response_model=FeatureLayerShareStatus)
-def enable_share(
+@router.post("/feature-layers/{feature_layer_id}/share/rotate", response_model=FeatureLayerShareStatus)
+def rotate_share_link(
     feature_layer_id: uuid.UUID,
-    rotate: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Read-only public viewing of this layer's data — distinct from the
-    Survey's own *submission* link (which lets someone add data). Mirrors
-    Project's existing share_token/share_enabled pattern.
+    """Invalidates the current public link and issues a new one — only
+    meaningful once visibility is already "public" (see
+    update_feature_layer above for how a layer gets there in the first
+    place).
     """
     layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, ADMINISTRATOR)
-    if not layer.share_token or rotate:
-        layer.share_token = secrets.token_urlsafe(24)
-    layer.share_enabled = True
+    if layer.visibility != "public":
+        raise HTTPException(
+            status_code=422, detail="Set this layer's visibility to Public before rotating its link."
+        )
+    layer.share_token = secrets.token_urlsafe(24)
     db.commit()
     db.refresh(layer)
-    return FeatureLayerShareStatus(
-        enabled=True, token=layer.share_token, public_path=f"/layers/{layer.share_token}"
-    )
-
-
-@router.delete("/feature-layers/{feature_layer_id}/share", response_model=FeatureLayerShareStatus)
-def disable_share(
-    feature_layer_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    layer, _ = require_feature_layer_role(db, feature_layer_id, current_user.id, ADMINISTRATOR)
-    layer.share_enabled = False
-    db.commit()
-    db.refresh(layer)
-    return FeatureLayerShareStatus(enabled=False, token=None, public_path=None)
+    return FeatureLayerShareStatus(enabled=True, token=layer.share_token, public_path=f"/layers/{layer.share_token}")
 
 
 @router.get("/feature-layers/{feature_layer_id}/records", response_model=list[RecordOut])
@@ -171,7 +203,10 @@ def list_layer_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    layer, membership = require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    creator = layer.survey.created_by if layer.survey else None
+    if not content_visibility.can_view(layer.visibility, creator, current_user.id, membership.role):
+        raise HTTPException(status_code=404, detail="Feature layer not found")
     return (
         db.query(Record)
         .filter(Record.feature_layer_id == feature_layer_id)

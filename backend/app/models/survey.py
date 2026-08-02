@@ -60,6 +60,13 @@ class Survey(Base):
     submission_token = Column(String, unique=True, nullable=True, index=True)
     submission_enabled = Column(Boolean, default=False, nullable=False)
     submission_access = Column(String, default="org", nullable=False)
+    # "private" (only the creator, plus Administrator+) | "organization"
+    # (every member — the long-standing default, unchanged) | "public"
+    # (anyone with a link can view the *form itself*, no login — distinct
+    # from submission_access above, which is about *submitting data*, not
+    # viewing/opening the survey). See core/visibility.py for the shared
+    # enforcement helper used across Survey/FeatureLayer/Dashboard.
+    visibility = Column(String, default="organization", nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

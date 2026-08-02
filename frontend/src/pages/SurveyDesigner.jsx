@@ -66,7 +66,7 @@ function ComingSoon({ label }) {
   )
 }
 
-function OverviewPanel({ survey }) {
+function OverviewPanel({ survey, featureLayer }) {
   return (
     <div className="designer-tab-panel">
       <div className="ws-grid" style={{ marginBottom: 20 }}>
@@ -79,7 +79,7 @@ function OverviewPanel({ survey }) {
         <div className="panel stat-card">
           <span className="stat-label">Geometry</span>
           <span className="stat-value" style={{ fontSize: '1.1rem', textTransform: 'capitalize' }}>
-            {survey.geometry_type}
+            {featureLayer?.geometry_type || survey.geometry_type}
           </span>
         </div>
         <div className="panel stat-card">
@@ -104,8 +104,7 @@ function OverviewPanel({ survey }) {
 function SettingsPanel({ survey, onSaveDetails }) {
   const [title, setTitle] = useState(survey.title)
   const [description, setDescription] = useState(survey.description || '')
-  const [geometryType, setGeometryType] = useState(survey.geometry_type)
-  const [color, setColor] = useState(survey.color)
+  const [visibility, setVisibility] = useState(survey.visibility || 'organization')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -115,7 +114,7 @@ function SettingsPanel({ survey, onSaveDetails }) {
     setSaving(true)
     setError('')
     try {
-      await onSaveDetails({ title, description: description || null, geometry_type: geometryType, color })
+      await onSaveDetails({ title, description: description || null })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -123,32 +122,28 @@ function SettingsPanel({ survey, onSaveDetails }) {
     }
   }
 
+  async function handleVisibilityChange(next) {
+    setVisibility(next)
+    try {
+      await onSaveDetails({ visibility: next })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="designer-tab-panel">
-      <section className="panel" style={{ maxWidth: 560 }}>
+      <section className="panel" style={{ maxWidth: 560, marginBottom: 20 }}>
         <div className="panel-head">
           <h2>Survey details</h2>
         </div>
         <form onSubmit={handleSubmit} className="stacked-form">
-          <div className="form-row">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Survey title" style={{ flex: 1 }} />
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-          </div>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Survey title" />
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description (optional)"
           />
-          <label className="form-label">
-            Geometry — the shape every submission to this survey collects
-            <select value={geometryType} onChange={(e) => setGeometryType(e.target.value)}>
-              {GEOMETRY_TYPES.map((g) => (
-                <option key={g} value={g}>
-                  {g === 'none' ? 'none — no map location' : g}
-                </option>
-              ))}
-            </select>
-          </label>
           <div className="form-row">
             <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save details'}
@@ -156,6 +151,35 @@ function SettingsPanel({ survey, onSaveDetails }) {
           </div>
           {error && <p className="hint">{error}</p>}
         </form>
+      </section>
+
+      <section className="panel" style={{ maxWidth: 560 }}>
+        <div className="panel-head">
+          <h2>Who can see this form</h2>
+        </div>
+        <p className="ws-muted" style={{ marginBottom: 12 }}>
+          This is about who can open/see this survey and build on it — separate from who can
+          submit data through it (see the submission link below), and separate from who can view
+          the collected data itself (managed from the feature layer's own page in Content).
+        </p>
+        <div className="plan-choice-group">
+          {[
+            { value: 'private', label: 'Private', desc: 'Only you (and Administrators) can see this survey.' },
+            { value: 'organization', label: 'Organization', desc: 'Everyone in this organisation can see it.' },
+            { value: 'public', label: 'Public', desc: 'Anyone with the link can view the form.' },
+          ].map((opt) => (
+            <label key={opt.value} className={`plan-choice${visibility === opt.value ? ' is-selected' : ''}`}>
+              <input
+                type="radio"
+                name="survey-visibility"
+                checked={visibility === opt.value}
+                onChange={() => handleVisibilityChange(opt.value)}
+              />
+              <span className="plan-choice-label">{opt.label}</span>
+              <span className="plan-choice-desc">{opt.desc}</span>
+            </label>
+          ))}
+        </div>
       </section>
     </div>
   )
@@ -332,6 +356,7 @@ export default function SurveyDesigner() {
   const { status: authStatus, authedFetch } = useAuth()
 
   const [survey, setSurvey] = useState(null)
+  const [featureLayer, setFeatureLayer] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [activeTab, setActiveTab] = useState('design')
@@ -358,6 +383,12 @@ export default function SurveyDesigner() {
       futureRef.current = []
       setCanUndo(false)
       setCanRedo(false)
+      try {
+        const layer = await authedFetch(`/api/feature-layers/by-survey/${surveyId}`)
+        setFeatureLayer(layer)
+      } catch {
+        setFeatureLayer(null)
+      }
     } catch (err) {
       setLoadError(err.message)
     } finally {
@@ -456,6 +487,16 @@ export default function SurveyDesigner() {
       body: JSON.stringify(patch),
     })
     setSurvey(updated)
+  }
+
+  async function handleSaveLayerDetails(patch) {
+    if (!featureLayer) return
+    const updated = await authedFetch(`/api/feature-layers/${featureLayer.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    setFeatureLayer(updated)
   }
 
   async function togglePublish() {
@@ -579,7 +620,7 @@ export default function SurveyDesigner() {
         </div>
       </header>
 
-      {activeTab === 'overview' && <OverviewPanel survey={survey} />}
+      {activeTab === 'overview' && <OverviewPanel survey={survey} featureLayer={featureLayer} />}
       {activeTab === 'collaborate' && <ComingSoon label="Collaborate" />}
       {activeTab === 'analyze' && <ComingSoon label="Analyze" />}
       {activeTab === 'data' && <ComingSoon label="Data" />}
@@ -622,8 +663,8 @@ export default function SurveyDesigner() {
               </div>
               <div className="designer-canvas-body">
                 <p className="designer-geometry-note">
-                  📍 This survey collects a <strong>{survey.geometry_type}</strong> location per
-                  submission — change it in Settings.
+                  📍 This survey collects a <strong>{featureLayer?.geometry_type || survey.geometry_type}</strong> location
+                  per submission — change it in Settings.
                 </p>
                 {!hasQuestions ? (
                   <div className="designer-dropzone">
@@ -642,32 +683,38 @@ export default function SurveyDesigner() {
           </div>
 
           <aside className="designer-settings-panel">
-            <p className="designer-palette-heading">Survey settings</p>
-            <label className="form-label">
-              Geometry
-              <select
-                value={survey.geometry_type}
-                onChange={(e) => handleSaveDetails({ geometry_type: e.target.value })}
-              >
-                {GEOMETRY_TYPES.map((g) => (
-                  <option key={g} value={g}>
-                    {g === 'none' ? 'none' : g}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-label">
-              Color
-              <input
-                type="color"
-                value={survey.color}
-                onChange={(e) => handleSaveDetails({ color: e.target.value })}
-              />
-            </label>
-            <p className="ws-muted" style={{ fontSize: '0.82rem', marginTop: 12 }}>
-              This is the feature layer's styling — the map and dashboards use it to color this
-              survey's records.
-            </p>
+            <p className="designer-palette-heading">Feature layer settings</p>
+            {featureLayer ? (
+              <>
+                <label className="form-label">
+                  Geometry
+                  <select
+                    value={featureLayer.geometry_type}
+                    onChange={(e) => handleSaveLayerDetails({ geometry_type: e.target.value })}
+                  >
+                    {GEOMETRY_TYPES.map((g) => (
+                      <option key={g} value={g}>
+                        {g === 'none' ? 'none' : g}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-label">
+                  Color
+                  <input
+                    type="color"
+                    value={featureLayer.color}
+                    onChange={(e) => handleSaveLayerDetails({ color: e.target.value })}
+                  />
+                </label>
+                <p className="ws-muted" style={{ fontSize: '0.82rem', marginTop: 12 }}>
+                  This is the feature layer's own styling — the map and dashboards use it to color
+                  this survey's records. Manage sharing from Content &rarr; this layer's page.
+                </p>
+              </>
+            ) : (
+              <p className="ws-muted">Loading feature layer…</p>
+            )}
           </aside>
         </div>
       )}
