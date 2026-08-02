@@ -361,11 +361,14 @@ def list_all_licenses(
 
     out = []
     for lic, customer in rows:
-        row = LicenseWithCustomerOut.model_validate(lic)
-        row.customer_number = customer.customer_number
-        row.customer_name = customer.name
-        row.applied_organisation_name = (
-            org_names.get(lic.applied_organisation_id) if lic.applied_organisation_id else None
+        base = LicenseRecordOut.model_validate(lic).model_dump()
+        row = LicenseWithCustomerOut(
+            **base,
+            customer_number=customer.customer_number,
+            customer_name=customer.name,
+            applied_organisation_name=(
+                org_names.get(lic.applied_organisation_id) if lic.applied_organisation_id else None
+            ),
         )
         out.append(row)
     return out
