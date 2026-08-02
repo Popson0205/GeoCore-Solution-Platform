@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FormBuilder, { emptyField, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
 
@@ -330,7 +330,6 @@ function SubmissionLinkPanel({ surveyId }) {
 export default function SurveyDesigner() {
   const { surveyId } = useParams()
   const { status: authStatus, authedFetch } = useAuth()
-  const navigate = useNavigate()
 
   const [survey, setSurvey] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -509,8 +508,18 @@ export default function SurveyDesigner() {
         <div className="designer-topbar-left">
           <button
             className="designer-back-btn"
-            title="Back"
-            onClick={() => navigate(`/workspace/organisations/${survey.organisation_id}/surveys`)}
+            title="Back to GeoCore Survey"
+            onClick={() => {
+              // A hard navigation, not react-router's navigate() — the
+              // Designer is a top-level route reachable from both the
+              // main Portal and the standalone GeoCore Survey bundle
+              // (see mainSurvey.jsx / App.jsx), and each bundle only
+              // knows its own client-side routes. A real page load lets
+              // the backend's static-file fallback (see main.py) resolve
+              // /survey.html correctly no matter which bundle we're
+              // currently running in.
+              window.location.href = '/survey.html'
+            }}
           >
             &larr;
           </button>

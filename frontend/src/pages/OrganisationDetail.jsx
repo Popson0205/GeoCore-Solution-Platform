@@ -95,10 +95,6 @@ export default function OrganisationDetail({ tabs = DEFAULT_TABS }) {
   return (
     <div>
       <div className="ws-page ws-page-wide org-shell-topbar">
-        <Link to="/workspace" className="ws-breadcrumb">
-          &larr; Organisations
-        </Link>
-
         {tabs.length > 0 && (
           <nav className="project-tabs">
             {tabs.map((tab) => (
