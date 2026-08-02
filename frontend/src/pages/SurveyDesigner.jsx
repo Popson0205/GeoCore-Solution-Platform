@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FormBuilder, { emptyField, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
 
@@ -55,13 +55,128 @@ function totalFieldCount(sections) {
   return sections.reduce((sum, s) => sum + (s.fields?.length || 0), 0)
 }
 
-function ComingSoon({ label }) {
+function CollaboratePanel({ survey, surveyId }) {
+  const { authedFetch } = useAuth()
+  const [members, setMembers] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    setError('')
+    try {
+      const [memberList, assignmentList] = await Promise.all([
+        authedFetch(`/api/organisations/${survey.organisation_id}/members`),
+        authedFetch(`/api/surveys/${surveyId}/assignments`),
+      ])
+      setMembers(memberList)
+      setAssignments(assignmentList)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surveyId])
+
+  const assignedUserIds = new Set(assignments.map((a) => a.user_id))
+  const availableMembers = members.filter(
+    (m) => (m.role === 'data_collector' || m.role === 'analyst') && !assignedUserIds.has(m.user_id)
+  )
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    if (!selectedUserId) return
+    setAdding(true)
+    setError('')
+    try {
+      await authedFetch(`/api/surveys/${surveyId}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: selectedUserId }),
+      })
+      setSelectedUserId('')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  async function handleRemove(userId) {
+    try {
+      await authedFetch(`/api/surveys/${surveyId}/assignments/${userId}`, { method: 'DELETE' })
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="designer-tab-panel">
-      <div className="empty-state">
-        <p>{label} is coming soon.</p>
-        <span>This tab is a placeholder for now — Design and Settings are fully working.</span>
-      </div>
+      <section className="panel" style={{ maxWidth: 640 }}>
+        <div className="panel-head">
+          <h2>Who can collect data for this survey</h2>
+        </div>
+        <p className="ws-muted" style={{ marginBottom: 14 }}>
+          Optional — leave this empty and every Data Collector in the organisation can submit to
+          this form, same as today. Assign specific people here to narrow that down to just them
+          (Analysts can be assigned too, for review access, but Administrators/Owners/Project
+          Managers always retain full access regardless of this list).
+        </p>
+        {error && <p className="hint">{error}</p>}
+
+        <form onSubmit={handleAdd} className="form-row" style={{ marginBottom: 16 }}>
+          <select
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
+            style={{ flex: 1 }}
+            disabled={loading || availableMembers.length === 0}
+          >
+            <option value="">
+              {availableMembers.length === 0 ? 'No more members to add' : 'Choose a person…'}
+            </option>
+            {availableMembers.map((m) => (
+              <option key={m.user_id} value={m.user_id}>
+                {m.full_name || m.email} ({m.role})
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="btn-primary" disabled={!selectedUserId || adding}>
+            {adding ? 'Adding…' : 'Assign'}
+          </button>
+        </form>
+
+        {loading ? (
+          <p className="ws-muted">Loading…</p>
+        ) : assignments.length === 0 ? (
+          <div className="empty-state">
+            <p>Nobody's specifically assigned.</p>
+            <span>This form is open to every Data Collector in the organisation.</span>
+          </div>
+        ) : (
+          <ul className="entity-list">
+            {assignments.map((a) => (
+              <li key={a.user_id} className="record-row">
+                <div style={{ flex: 1 }}>
+                  <strong>{a.user_email}</strong>
+                </div>
+                <button className="btn-ghost" onClick={() => handleRemove(a.user_id)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }
@@ -478,7 +593,12 @@ export default function SurveyDesigner() {
   const [featureLayer, setFeatureLayer] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
-  const [activeTab, setActiveTab] = useState('design')
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = searchParams.get('tab')
+    const valid = ['overview', 'design', 'collaborate', 'analyze', 'data', 'settings']
+    return valid.includes(requested) ? requested : 'design'
+  })
 
   const [sections, setSections] = useState([])
   const historyRef = useRef([]) // stack of previous `sections` snapshots, for Undo
@@ -740,7 +860,7 @@ export default function SurveyDesigner() {
       </header>
 
       {activeTab === 'overview' && <OverviewPanel survey={survey} featureLayer={featureLayer} />}
-      {activeTab === 'collaborate' && <ComingSoon label="Collaborate" />}
+      {activeTab === 'collaborate' && <CollaboratePanel survey={survey} surveyId={surveyId} />}
       {activeTab === 'analyze' && <AnalyzePanel survey={survey} featureLayer={featureLayer} />}
       {activeTab === 'data' && <DataPanel survey={survey} featureLayer={featureLayer} />}
       {activeTab === 'settings' && (

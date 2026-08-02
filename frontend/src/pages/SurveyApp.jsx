@@ -32,12 +32,11 @@ function LinkGlyph() {
 }
 
 // The small action-icon row under each card, matching Survey123's own
-// gallery cards. Only Edit is wired to a real action right now —
-// Share/Analyze/Data mirror the reference visually but point at tabs
-// that are still placeholders inside the Designer (see
-// SurveyDesigner.jsx's Collaborate/Analyze/Data tabs), so they're
-// disabled with a "coming soon" tooltip rather than pretending to work,
-// the same pattern AppHeader already uses for Search/Notifications.
+// gallery cards. Collaborate/Analyze/Data now jump straight into the
+// Designer's corresponding tab (see SurveyDesigner.jsx, which reads
+// ?tab= to open directly to one) — only Favorite stays disabled, since
+// there's no favorites/starring feature built at all, unlike the other
+// three which just used to be stub tabs.
 function CardActionIcon({ title, disabled, onClick, children }) {
   return (
     <button
@@ -54,7 +53,7 @@ function CardActionIcon({ title, disabled, onClick, children }) {
   )
 }
 
-function SurveyCard({ survey, onOpen }) {
+function SurveyCard({ survey, onOpen, onOpenTab }) {
   return (
     <div className="survey-gallery-card" onClick={onOpen} role="button" tabIndex={0}>
       <div className="survey-gallery-thumb" style={{ color: survey.color || '#0079c1' }}>
@@ -72,13 +71,13 @@ function SurveyCard({ survey, onOpen }) {
         <CardActionIcon title="Edit" onClick={onOpen}>
           ✎
         </CardActionIcon>
-        <CardActionIcon title="Collaborate — coming soon from here" disabled>
+        <CardActionIcon title="Collaborate" onClick={() => onOpenTab('collaborate')}>
           ⇄
         </CardActionIcon>
-        <CardActionIcon title="Analyze — coming soon from here" disabled>
+        <CardActionIcon title="Analyze" onClick={() => onOpenTab('analyze')}>
           📊
         </CardActionIcon>
-        <CardActionIcon title="Data — coming soon from here" disabled>
+        <CardActionIcon title="Data" onClick={() => onOpenTab('data')}>
           📄
         </CardActionIcon>
         <CardActionIcon title="Favorite — coming soon" disabled>
@@ -205,7 +204,12 @@ export default function SurveyApp({ homePath = '/apps/survey' }) {
             ) : (
               <div className="survey-gallery-grid">
                 {surveys.map((s) => (
-                  <SurveyCard key={s.id} survey={s} onOpen={() => navigate(`/design/surveys/${s.id}`)} />
+                  <SurveyCard
+                    key={s.id}
+                    survey={s}
+                    onOpen={() => navigate(`/design/surveys/${s.id}`)}
+                    onOpenTab={(tab) => navigate(`/design/surveys/${s.id}?tab=${tab}`)}
+                  />
                 ))}
               </div>
             )}

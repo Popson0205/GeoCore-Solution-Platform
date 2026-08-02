@@ -1995,3 +1995,16 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .admin-stats-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .stat-card-warn { border-color: var(--coral); }
 .stat-card-warn .stat-value { color: var(--coral); }
+
+/* Dashboard sidebar region — a persistent narrow column alongside the
+   main widget grid, for widgets moved there via the View > Sidebar tab.
+   Deliberately simple (no drag/resize) — a lower-risk, separate render
+   path from the main grid's drag/resize system rather than extending it. */
+.dashboard-sidebar-region {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dashboard-sidebar-widget-card { width: 100%; }

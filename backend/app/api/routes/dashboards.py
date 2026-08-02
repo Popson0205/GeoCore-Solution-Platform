@@ -13,7 +13,7 @@ from backend.app.api.deps_project import (
     require_project_role,
 )
 from backend.app.core import content_visibility
-from backend.app.core.dashboard_engine import compute_widget
+from backend.app.core.dashboard_engine import apply_time_filter, compute_widget
 from backend.app.core.database import get_db
 from backend.app.core.roles import ANALYST
 from backend.app.models.dashboard import Dashboard, DashboardWidget
@@ -250,6 +250,8 @@ def update_dashboard(
         dashboard.theme = payload.theme
     if payload.visibility is not None:
         dashboard.visibility = payload.visibility
+    if payload.time_filter is not None:
+        dashboard.time_filter = payload.time_filter
     db.commit()
     db.refresh(dashboard)
     return dashboard
@@ -391,5 +393,11 @@ def get_dashboard_data(
     if needs_org_records:
         for r in db.query(Record).filter(Record.organisation_id == dashboard.organisation_id).all():
             records_by_layer[str(r.feature_layer_id)].append(r)
+
+    if dashboard.time_filter:
+        records_by_layer = {
+            layer_id: apply_time_filter(recs, dashboard.time_filter)
+            for layer_id, recs in records_by_layer.items()
+        }
 
     return {str(w.id): compute_widget(w, records_by_layer) for w in dashboard.widgets}

@@ -42,12 +42,30 @@ class DashboardUpdate(BaseModel):
     theme: Optional[dict[str, Any]] = None
     # "private" | "organization" | "public" — see core/content_visibility.py.
     visibility: Optional[str] = None
+    # {"preset": "all_time"|"last_7_days"|"last_30_days"|"last_90_days"|
+    # "last_year"|"custom", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"} —
+    # see models/dashboard.py's time_filter docstring. Pass {"preset":
+    # "all_time"} (not null) to explicitly clear a previously-set filter.
+    time_filter: Optional[dict[str, Any]] = None
 
     @field_validator("visibility")
     @classmethod
     def validate_visibility(cls, value: Optional[str]) -> Optional[str]:
         if value is not None and value not in {"private", "organization", "public"}:
             raise ValueError("visibility must be one of ['private', 'organization', 'public']")
+        return value
+
+    @field_validator("time_filter")
+    @classmethod
+    def validate_time_filter(cls, value: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        if value is None:
+            return value
+        preset = value.get("preset")
+        allowed = {"all_time", "last_7_days", "last_30_days", "last_90_days", "last_year", "custom"}
+        if preset not in allowed:
+            raise ValueError(f"time_filter.preset must be one of {sorted(allowed)}")
+        if preset == "custom" and (not value.get("start") or not value.get("end")):
+            raise ValueError("time_filter.preset 'custom' requires both 'start' and 'end'")
         return value
 
 
@@ -102,6 +120,7 @@ class DashboardOut(BaseModel):
     description: Optional[str] = None
     theme: Optional[dict[str, Any]] = None
     visibility: str = "organization"
+    time_filter: Optional[dict[str, Any]] = None
     created_by: Optional[uuid.UUID] = None
     updated_at: datetime
     widgets: list[WidgetOut] = []

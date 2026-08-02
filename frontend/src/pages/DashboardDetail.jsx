@@ -661,7 +661,7 @@ function VisibilitySettingsPanel({ dashboard, canEdit, onSaveDetails }) {
   )
 }
 
-function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget }) {
+function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget, onUpdateWidget }) {
   const [tab, setTab] = useState('body')
   const [name, setName] = useState(dashboard.name)
   const [description, setDescription] = useState(dashboard.description || '')
@@ -741,9 +741,43 @@ function ViewPanel({ dashboard, canEdit, onClose, onSaveDetails, onDeleteWidget 
           ))}
 
         {tab === 'sidebar' && (
-          <div className="empty-state">
-            <p>Sidebar layout is coming soon.</p>
-            <span>For now, every element lives in the main body grid.</span>
+          <div>
+            <p className="builder-hint" style={{ marginBottom: 12 }}>
+              Move any element into a persistent side column, separate from the main grid — useful
+              for a filter summary or a KPI you want visible no matter how someone scrolls the
+              rest of the dashboard.
+            </p>
+            {dashboard.widgets.length === 0 ? (
+              <div className="empty-state">
+                <p>No elements yet.</p>
+              </div>
+            ) : (
+              <ul className="entity-list">
+                {dashboard.widgets.map((w) => {
+                  const inSidebar = w.layout?.region === 'sidebar'
+                  return (
+                    <li key={w.id} className="record-row">
+                      <div style={{ flex: 1 }}>
+                        <strong>{w.title}</strong>
+                        <div className="ws-muted">{inSidebar ? 'In sidebar' : 'In main body'}</div>
+                      </div>
+                      {canEdit && (
+                        <button
+                          className="btn-ghost"
+                          onClick={() =>
+                            onUpdateWidget(w.id, {
+                              layout: { ...(w.layout || {}), region: inSidebar ? 'body' : 'sidebar' },
+                            })
+                          }
+                        >
+                          {inSidebar ? 'Move to body' : 'Move to sidebar'}
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </div>
         )}
 
@@ -798,6 +832,82 @@ function DataSourcesPanel({ orgId, projectId, onClose }) {
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  )
+}
+
+const TIME_PRESETS = [
+  { value: 'all_time', label: 'All time' },
+  { value: 'last_7_days', label: 'Last 7 days' },
+  { value: 'last_30_days', label: 'Last 30 days' },
+  { value: 'last_90_days', label: 'Last 90 days' },
+  { value: 'last_year', label: 'Last year' },
+  { value: 'custom', label: 'Custom range' },
+]
+
+function TimePanel({ dashboard, canEdit, onClose, onSaveTimeFilter }) {
+  const current = dashboard.time_filter || { preset: 'all_time' }
+  const [preset, setPreset] = useState(current.preset)
+  const [start, setStart] = useState(current.start || '')
+  const [end, setEnd] = useState(current.end || '')
+
+  function applyPreset(value) {
+    setPreset(value)
+    if (value !== 'custom') {
+      onSaveTimeFilter({ preset: value })
+    }
+  }
+
+  function applyCustom() {
+    if (!start || !end) return
+    onSaveTimeFilter({ preset: 'custom', start, end })
+  }
+
+  return (
+    <div className="dashboard-side-panel">
+      <div className="dashboard-side-panel-head">
+        <h3>Time and region</h3>
+        <button className="dashboard-panel-close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="dashboard-side-panel-body">
+        <p className="builder-hint">
+          Filters every widget on this dashboard to records submitted within a date range — on
+          top of each widget's own filters, not instead of them. Based on when data was
+          collected, not any particular field's value.
+        </p>
+        {!canEdit ? (
+          <p className="ws-muted">Only an Analyst or above can change this.</p>
+        ) : (
+          <>
+            <div className="theme-preset-list">
+              {TIME_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  className={`theme-preset-row${preset === p.value ? ' is-active' : ''}`}
+                  onClick={() => applyPreset(p.value)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {preset === 'custom' && (
+              <div className="form-row" style={{ marginTop: 12 }}>
+                <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+                <button className="btn-primary" onClick={applyCustom} disabled={!start || !end}>
+                  Apply
+                </button>
+              </div>
+            )}
+          </>
+        )}
+        <p className="ws-muted" style={{ marginTop: 16, fontSize: '0.82rem' }}>
+          There's no separate geographic "region" filter yet — nothing in the data model
+          standardizes a region/state field across every survey to filter by.
+        </p>
       </div>
     </div>
   )
@@ -1003,6 +1113,24 @@ export default function DashboardDetail() {
     }
   }
 
+  async function handleSaveTimeFilter(timeFilter) {
+    setDashboard((d) => ({ ...d, time_filter: timeFilter }))
+    try {
+      await authedFetch(`/api/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time_filter: timeFilter }),
+      })
+      // The filter changes what every widget actually shows, not just a
+      // display setting — refetch the computed data instead of only the
+      // theme-style instant local preview above.
+      const data = await authedFetch(`/api/dashboards/${dashboardId}/data`)
+      setWidgetData(data)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   function handleSaveClick() {
     setSaveFlash(true)
     load().finally(() => setTimeout(() => setSaveFlash(false), 1500))
@@ -1161,6 +1289,7 @@ export default function DashboardDetail() {
           onClose={() => setActivePanel(null)}
           onSaveDetails={handleSaveDetails}
           onDeleteWidget={handleDeleteWidget}
+          onUpdateWidget={handleUpdateWidget}
         />
       )}
       {activePanel === 'data' && (
@@ -1175,20 +1304,12 @@ export default function DashboardDetail() {
         />
       )}
       {activePanel === 'time' && (
-        <div className="dashboard-side-panel">
-          <div className="dashboard-side-panel-head">
-            <h3>Time and region</h3>
-            <button className="dashboard-panel-close" onClick={() => setActivePanel(null)}>
-              ×
-            </button>
-          </div>
-          <div className="dashboard-side-panel-body">
-            <div className="empty-state">
-              <p>Time and region settings are coming soon.</p>
-              <span>All data currently renders in your browser's local time zone.</span>
-            </div>
-          </div>
-        </div>
+        <TimePanel
+          dashboard={dashboard}
+          canEdit={canEdit}
+          onClose={() => setActivePanel(null)}
+          onSaveTimeFilter={handleSaveTimeFilter}
+        />
       )}
 
       <div className="dashboard-canvas-outer" style={themeVars}>
@@ -1231,8 +1352,9 @@ export default function DashboardDetail() {
         {dashboard.widgets.length === 0 && !addingType ? (
           <EmptyState canEdit={canEdit} onPick={setAddingType} onGoToPanel={togglePanel} />
         ) : (
-          <div className="dashboard-grid" ref={gridRef} style={{ margin: '0 20px 20px' }}>
-            {dashboard.widgets.map((widget) => {
+          <div style={{ display: 'flex', gap: 20, margin: '0 20px 20px', alignItems: 'flex-start' }}>
+          <div className="dashboard-grid" ref={gridRef} style={{ flex: 1, margin: 0 }}>
+            {dashboard.widgets.filter((w) => w.layout?.region !== 'sidebar').map((widget) => {
               const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
               return (
                 <div
@@ -1291,6 +1413,42 @@ export default function DashboardDetail() {
                 </div>
               )
             })}
+          </div>
+
+          {dashboard.widgets.some((w) => w.layout?.region === 'sidebar') && (
+            <div className="dashboard-sidebar-region">
+              {dashboard.widgets
+                .filter((w) => w.layout?.region === 'sidebar')
+                .map((widget) => (
+                  <div key={widget.id} className="widget-card dashboard-sidebar-widget-card">
+                    <div className="widget-card-head">
+                      <h3>{widget.title}</h3>
+                      {canEdit && (
+                        <>
+                          <button
+                            className="btn-ghost"
+                            onClick={() => {
+                              setAddingType(null)
+                              setEditingWidgetId(editingWidgetId === widget.id ? null : widget.id)
+                            }}
+                          >
+                            {editingWidgetId === widget.id ? 'Close' : 'Edit'}
+                          </button>
+                          <button className="btn-ghost" onClick={() => handleDeleteWidget(widget.id)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {editingWidgetId !== widget.id && (
+                      <div className="widget-body">
+                        <WidgetBody widget={widget} data={widgetData[widget.id]} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
           </div>
         )}
       </div>

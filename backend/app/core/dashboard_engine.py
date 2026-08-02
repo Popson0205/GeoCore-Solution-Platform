@@ -15,10 +15,44 @@ about — see docs/CHANGES_DASHBOARDS.md.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.app.core.visibility import matches_conditions
+
+
+def apply_time_filter(records: list[Any], time_filter: dict | None) -> list[Any]:
+    """The dashboard-wide "Time and region" filter (region isn't
+    implemented — see models/dashboard.py's time_filter docstring for
+    why). Filters by `Record.created_at` — when it was submitted, not any
+    particular field's value, so this works identically regardless of
+    what date fields a given survey happens to have. None/no preset/
+    "all_time" is a no-op.
+    """
+    if not time_filter:
+        return records
+    preset = time_filter.get("preset", "all_time")
+    if preset == "all_time":
+        return records
+
+    now = datetime.now(timezone.utc)
+    if preset == "custom":
+        start_str, end_str = time_filter.get("start"), time_filter.get("end")
+        if not start_str or not end_str:
+            return records
+        start = datetime.fromisoformat(start_str).replace(tzinfo=timezone.utc)
+        # Inclusive of the whole end day.
+        end = datetime.fromisoformat(end_str).replace(tzinfo=timezone.utc) + timedelta(days=1)
+    else:
+        days = {"last_7_days": 7, "last_30_days": 30, "last_90_days": 90, "last_year": 365}.get(preset)
+        if days is None:
+            return records
+        start, end = now - timedelta(days=days), now
+
+    def _aware(dt):
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    return [r for r in records if r.created_at and start <= _aware(r.created_at) <= end]
 
 
 def apply_filters(records: list[Any], filters: list[dict] | None) -> list[Any]:

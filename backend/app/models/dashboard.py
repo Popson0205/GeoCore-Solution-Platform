@@ -45,6 +45,17 @@ class Dashboard(Base):
     # actual public dashboard viewer; reserved for a future pass). See
     # core/visibility.py.
     visibility = Column(String, default="organization", nullable=False)
+    # {"preset": "all_time" | "last_7_days" | "last_30_days" | "last_90_days"
+    # | "last_year" | "custom", "start": "2026-01-01", "end": "2026-02-01"}
+    # (start/end only meaningful for "custom") — a dashboard-wide filter
+    # applied on top of each widget's own filters, based on Record.created_at
+    # (when it was submitted). NULL/absent = no filter, matching every
+    # dashboard's behavior before this existed. See core/dashboard_engine.py's
+    # apply_time_filter and routes/dashboards.py's get_dashboard_data. There
+    # is deliberately no geographic "region" filter here — nothing in the
+    # data model standardizes a region/state field across every survey to
+    # filter by, so only the time half of "Time and region" is real.
+    time_filter = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),
