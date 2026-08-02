@@ -44,31 +44,73 @@ function geometryToLatLngs(geometry) {
   return null
 }
 
+function AutoDashboardPanel({ layerId }) {
+  const { authedFetch } = useAuth()
+  const [building, setBuilding] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleBuild() {
+    setBuilding(true)
+    setError('')
+    try {
+      const dashboard = await authedFetch(`/api/feature-layers/${layerId}/auto-dashboard`, {
+        method: 'POST',
+      })
+      window.location.assign(`/design/dashboards/${dashboard.id}`)
+    } catch (err) {
+      setError(err.message)
+      setBuilding(false)
+    }
+  }
+
+  return (
+    <section className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h2>✨ Auto-build a dashboard</h2>
+      </div>
+      <p className="ws-muted" style={{ marginBottom: 12 }}>
+        Looks at this layer's actual fields — numeric fields become KPIs, categories become bar
+        charts, dates become a trend line, location becomes a map — and lays out a real starting
+        dashboard in one click. Nothing about the result is locked: edit, rearrange, or delete any
+        of it afterward exactly like a dashboard you built by hand, or skip this and start from a
+        blank one instead.
+      </p>
+      {error && <p className="hint">{error}</p>}
+      <button className="btn-primary" onClick={handleBuild} disabled={building}>
+        {building ? 'Building…' : '✨ Auto-build a dashboard'}
+      </button>
+    </section>
+  )
+}
+
 function OverviewTab({ layer, records, onGoTo }) {
   return (
     <div className="ws-grid" style={{ gridTemplateColumns: '2fr 1fr', alignItems: 'start', gap: 20 }}>
-      <section className="panel">
-        <div className="panel-head">
-          <h2>About this layer</h2>
-        </div>
-        <p className="ws-muted">
-          {layer.description || 'No description yet — add one from the Settings tab.'}
-        </p>
-        <div className="ws-grid admin-stats-grid" style={{ marginTop: 16 }}>
-          <div className="panel stat-card">
-            <span className="stat-label">Records</span>
-            <span className="stat-value">{records.length}</span>
+      <div>
+        <AutoDashboardPanel layerId={layer.id} />
+        <section className="panel">
+          <div className="panel-head">
+            <h2>About this layer</h2>
           </div>
-          <div className="panel stat-card">
-            <span className="stat-label">Geometry</span>
-            <span className="stat-value" style={{ textTransform: 'capitalize' }}>{layer.geometry_type}</span>
+          <p className="ws-muted">
+            {layer.description || 'No description yet — add one from the Settings tab.'}
+          </p>
+          <div className="ws-grid admin-stats-grid" style={{ marginTop: 16 }}>
+            <div className="panel stat-card">
+              <span className="stat-label">Records</span>
+              <span className="stat-value">{records.length}</span>
+            </div>
+            <div className="panel stat-card">
+              <span className="stat-label">Geometry</span>
+              <span className="stat-value" style={{ textTransform: 'capitalize' }}>{layer.geometry_type}</span>
+            </div>
+            <div className="panel stat-card">
+              <span className="stat-label">Visibility</span>
+              <span className="stat-value" style={{ textTransform: 'capitalize' }}>{layer.visibility}</span>
+            </div>
           </div>
-          <div className="panel stat-card">
-            <span className="stat-label">Visibility</span>
-            <span className="stat-value" style={{ textTransform: 'capitalize' }}>{layer.visibility}</span>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <section className="panel">
         <div className="panel-head">

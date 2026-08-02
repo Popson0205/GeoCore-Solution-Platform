@@ -13,16 +13,18 @@ from backend.app.api.deps_project import (
     require_org_role,
 )
 from backend.app.core import content_visibility
+from backend.app.core.auto_dashboard import build_widget_plan
 from backend.app.core.data_import import ImportError_, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
-from backend.app.core.roles import ADMINISTRATOR, DATA_COLLECTOR, VIEWER
-from backend.app.models.dashboard import Dashboard
+from backend.app.core.roles import ADMINISTRATOR, ANALYST, DATA_COLLECTOR, VIEWER
+from backend.app.models.dashboard import Dashboard, DashboardWidget
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
 from backend.app.models.survey import Survey
 from backend.app.models.user import User
+from backend.app.schemas.dashboards import DashboardOut
 from backend.app.schemas.feature_layer import (
     FeatureLayerOut,
     FeatureLayerShareStatus,
@@ -238,6 +240,62 @@ def get_usage(
                 )
             )
     return out
+
+
+@router.post("/feature-layers/{feature_layer_id}/auto-dashboard", response_model=DashboardOut, status_code=201)
+def auto_build_dashboard(
+    feature_layer_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """GeoAI Auto-Dashboard — reads this layer's actual field types and
+    geometry, and creates a brand-new Dashboard already populated with a
+    sensible starting set of widgets (see core/auto_dashboard.py for the
+    matching rules: numeric fields become KPIs, categorical fields become
+    bar charts, date fields become a trend line, geometry becomes a map,
+    plus a data table). Nothing about the result is special or "AI-
+    managed" afterward — every widget it creates can be edited, moved, or
+    deleted by hand exactly like one built manually from scratch. Same
+    bar as building a dashboard manually (Analyst+), and still requires
+    an active license, since this creates real content.
+    """
+    layer, membership = require_feature_layer_role(db, feature_layer_id, current_user.id, ANALYST)
+    require_active_license(db, layer.organisation_id)
+
+    survey = layer.survey
+    field_defs = [
+        {"field_key": f.field_key, "label": f.label, "field_type": f.field_type}
+        for f in survey.field_definitions
+    ]
+    plan = build_widget_plan(field_defs, layer.geometry_type)
+
+    dashboard = Dashboard(
+        organisation_id=layer.organisation_id,
+        project_id=layer.project_id,
+        name=f"{layer.name} — Auto-built dashboard",
+        description=f"Generated from {layer.name}'s field types — edit freely, nothing here is locked.",
+        created_by=current_user.id,
+    )
+    db.add(dashboard)
+    db.flush()
+
+    for i, spec in enumerate(plan):
+        config = dict(spec["config"])
+        config["feature_layer_id"] = str(feature_layer_id)
+        db.add(
+            DashboardWidget(
+                dashboard_id=dashboard.id,
+                widget_type=spec["widget_type"],
+                title=spec["title"],
+                config=config,
+                layout=spec["layout"],
+                sort_order=i,
+            )
+        )
+
+    db.commit()
+    db.refresh(dashboard)
+    return dashboard
 
 
 @router.get("/feature-layers/{feature_layer_id}/records", response_model=list[RecordOut])

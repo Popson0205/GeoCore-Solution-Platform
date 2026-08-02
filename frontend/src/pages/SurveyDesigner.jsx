@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FormBuilder, { emptyField, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
 
@@ -62,6 +62,125 @@ function ComingSoon({ label }) {
         <p>{label} is coming soon.</p>
         <span>This tab is a placeholder for now — Design and Settings are fully working.</span>
       </div>
+    </div>
+  )
+}
+
+function DataPanel({ survey, featureLayer }) {
+  if (!featureLayer) {
+    return (
+      <div className="designer-tab-panel">
+        <p className="ws-muted">Loading…</p>
+      </div>
+    )
+  }
+  return (
+    <div className="designer-tab-panel">
+      <section className="panel" style={{ maxWidth: 560 }}>
+        <div className="panel-head">
+          <h2>Where the collected data lives</h2>
+        </div>
+        <p className="ws-muted" style={{ marginBottom: 14 }}>
+          Every submission through this form is saved to its own Feature Layer — view, edit,
+          upload, or visualize it from there.
+        </p>
+        <Link
+          to={`/workspace/organisations/${survey.organisation_id}/feature-layers/${featureLayer.id}`}
+          className="btn-primary"
+          style={{ display: 'inline-flex' }}
+        >
+          Open {featureLayer.name}
+        </Link>
+      </section>
+    </div>
+  )
+}
+
+function AnalyzePanel({ survey, featureLayer }) {
+  const { authedFetch } = useAuth()
+  const [usage, setUsage] = useState(null)
+  const [building, setBuilding] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!featureLayer) return
+    authedFetch(`/api/feature-layers/${featureLayer.id}/usage`)
+      .then(setUsage)
+      .catch(() => setUsage([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [featureLayer])
+
+  async function handleAutoBuild() {
+    setBuilding(true)
+    setError('')
+    try {
+      const dashboard = await authedFetch(`/api/feature-layers/${featureLayer.id}/auto-dashboard`, {
+        method: 'POST',
+      })
+      window.location.assign(`/design/dashboards/${dashboard.id}`)
+    } catch (err) {
+      setError(err.message)
+      setBuilding(false)
+    }
+  }
+
+  if (!featureLayer) {
+    return (
+      <div className="designer-tab-panel">
+        <p className="ws-muted">Loading…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="designer-tab-panel">
+      <section className="panel" style={{ maxWidth: 640, marginBottom: 20 }}>
+        <div className="panel-head">
+          <h2>✨ Auto-build a dashboard</h2>
+        </div>
+        <p className="ws-muted" style={{ marginBottom: 12 }}>
+          Looks at this form's actual fields and lays out a real starting dashboard — KPIs for
+          numbers, bar charts for categories, a trend line for dates, a map if it collects
+          location. Fully editable afterward, or skip this and build one manually instead.
+        </p>
+        {error && <p className="hint">{error}</p>}
+        <button className="btn-primary" onClick={handleAutoBuild} disabled={building}>
+          {building ? 'Building…' : '✨ Auto-build a dashboard'}
+        </button>
+      </section>
+
+      <section className="panel" style={{ maxWidth: 640 }}>
+        <div className="panel-head">
+          <h2>Dashboards using this data</h2>
+          {usage && <span className="panel-count">{usage.length}</span>}
+        </div>
+        {!usage ? (
+          <p className="ws-muted">Loading…</p>
+        ) : usage.length === 0 ? (
+          <div className="empty-state">
+            <p>No dashboards use this data yet.</p>
+          </div>
+        ) : (
+          <ul className="entity-list">
+            {usage.map((u) => (
+              <li key={u.dashboard_id} className="record-row">
+                <div style={{ flex: 1 }}>
+                  <strong>{u.dashboard_name}</strong>
+                  <div className="ws-muted">
+                    {u.widget_count} element{u.widget_count === 1 ? '' : 's'} bound to this layer
+                  </div>
+                </div>
+                <button
+                  className="btn-ghost"
+                  onClick={() => window.location.assign(`/design/dashboards/${u.dashboard_id}`)}
+                >
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }
@@ -622,8 +741,8 @@ export default function SurveyDesigner() {
 
       {activeTab === 'overview' && <OverviewPanel survey={survey} featureLayer={featureLayer} />}
       {activeTab === 'collaborate' && <ComingSoon label="Collaborate" />}
-      {activeTab === 'analyze' && <ComingSoon label="Analyze" />}
-      {activeTab === 'data' && <ComingSoon label="Data" />}
+      {activeTab === 'analyze' && <AnalyzePanel survey={survey} featureLayer={featureLayer} />}
+      {activeTab === 'data' && <DataPanel survey={survey} featureLayer={featureLayer} />}
       {activeTab === 'settings' && (
         <div className="designer-tab-panel">
           <SettingsPanel survey={survey} onSaveDetails={handleSaveDetails} />
