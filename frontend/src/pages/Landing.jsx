@@ -21,7 +21,8 @@ export default function Landing() {
           collect spatial data once, and configure it for every project after.
         </p>
         <div className="hero-actions">
-          <Link to="/register" className="btn-primary">Create an account</Link>
+          <Link to="/purchase" className="btn-primary">Purchase a license</Link>
+          <Link to="/register" className="btn-ghost">Already have a license? Create your login</Link>
           <Link to="/login" className="btn-ghost">Sign in</Link>
         </div>
       </section>

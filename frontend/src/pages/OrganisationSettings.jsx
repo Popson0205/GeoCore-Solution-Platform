@@ -45,8 +45,11 @@ export default function OrganisationSettings() {
   const [aboutText, setAboutText] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [openDataUrl, setOpenDataUrl] = useState('')
+  const [customDomain, setCustomDomain] = useState('')
   const [savingBranding, setSavingBranding] = useState(false)
   const [brandingSaved, setBrandingSaved] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [bannerError, setBannerError] = useState('')
 
   const [license, setLicense] = useState(null)
   const [licenseKeyInput, setLicenseKeyInput] = useState('')
@@ -94,6 +97,7 @@ export default function OrganisationSettings() {
         setAboutText(matched.about_text || '')
         setWebsiteUrl(matched.website_url || '')
         setOpenDataUrl(matched.open_data_url || '')
+        setCustomDomain(matched.custom_domain || '')
       }
 
       const memberList = await authedFetch(`/api/organisations/${orgId}/members`)
@@ -123,6 +127,7 @@ export default function OrganisationSettings() {
           about_text: aboutText || null,
           website_url: websiteUrl || null,
           open_data_url: openDataUrl || null,
+          custom_domain: customDomain || null,
         }),
       })
       setOrg((prev) => ({ ...prev, ...updated }))
@@ -132,6 +137,27 @@ export default function OrganisationSettings() {
       setError(err.message)
     } finally {
       setSavingBranding(false)
+    }
+  }
+
+  async function handleBannerUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingBanner(true)
+    setBannerError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const updated = await authedFetch(`/api/organisations/${orgId}/branding/banner`, {
+        method: 'POST',
+        body: form,
+      })
+      setOrg((prev) => ({ ...prev, ...updated }))
+    } catch (err) {
+      setBannerError(err.message)
+    } finally {
+      setUploadingBanner(false)
+      e.target.value = ''
     }
   }
 
@@ -283,9 +309,29 @@ export default function OrganisationSettings() {
             <h2>Home page</h2>
           </div>
           <p className="ws-muted" style={{ marginBottom: 12 }}>
-            Shown on this organisation's Home tab — the "About Us" text and the two quick-link
-            buttons under the hero banner.
+            Shown on this organisation's Home tab — the hero background, "About Us" text, and the
+            two quick-link buttons under it.
           </p>
+
+          <div style={{ marginBottom: 18 }}>
+            <p className="builder-hint" style={{ marginBottom: 8 }}>Hero background image</p>
+            {org.banner_image_url && (
+              <img
+                src={org.banner_image_url}
+                alt="Current hero background"
+                style={{ width: '100%', maxWidth: 420, borderRadius: 6, marginBottom: 10, display: 'block' }}
+              />
+            )}
+            <label className="btn-secondary" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+              {uploadingBanner ? 'Uploading…' : org.banner_image_url ? 'Replace image' : 'Upload image'}
+              <input type="file" accept="image/*" onChange={handleBannerUpload} disabled={uploadingBanner} style={{ display: 'none' }} />
+            </label>
+            <p className="ws-muted" style={{ fontSize: '0.8rem', marginTop: 6 }}>
+              Without one, the Home page shows a generated pattern instead. Max 8 MB.
+            </p>
+            {bannerError && <p className="hint">{bannerError}</p>}
+          </div>
+
           <form onSubmit={handleSaveBranding} className="stacked-form">
             <label className="form-label">
               About Us
@@ -314,6 +360,19 @@ export default function OrganisationSettings() {
                 />
               </label>
             </div>
+            <label className="form-label">
+              Custom domain (optional)
+              <input
+                value={customDomain}
+                onChange={(e) => setCustomDomain(e.target.value)}
+                placeholder="gis.yourorganisation.gov"
+              />
+            </label>
+            <p className="ws-muted" style={{ fontSize: '0.8rem', marginTop: -8 }}>
+              Saving this records your request — actually serving GeoCore on your own domain
+              needs DNS and SSL configured on our side too. Contact GeoCore support once you've
+              saved this so we can finish setting it up.
+            </p>
             <div className="form-row">
               <button type="submit" className="btn-primary" disabled={savingBranding}>
                 {savingBranding ? 'Saving…' : brandingSaved ? 'Saved!' : 'Save'}

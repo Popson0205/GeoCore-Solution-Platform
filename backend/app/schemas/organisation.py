@@ -37,6 +37,8 @@ class OrganisationOut(BaseModel):
     about_text: Optional[str] = None
     website_url: Optional[str] = None
     open_data_url: Optional[str] = None
+    banner_image_url: Optional[str] = None
+    custom_domain: Optional[str] = None
     # The requesting user's role in this organisation. Populated per-request
     # in routes/organisations.py — not a DB column on Organisation itself.
     my_role: Optional[str] = None
@@ -59,6 +61,11 @@ class LicenseStatus(BaseModel):
     deployment_mode: Optional[str] = None
 
 
+class ActivateLicenseRequest(BaseModel):
+    license_key: str
+    organisation_name: str
+
+
 class OrganisationUpdate(BaseModel):
     """Organization settings — the ArcGIS-Online-style home page's "About
     Us" text and its two quick-link buttons (see
@@ -71,6 +78,10 @@ class OrganisationUpdate(BaseModel):
     about_text: Optional[str] = None
     website_url: Optional[str] = None
     open_data_url: Optional[str] = None
+    # Purely a request captured for your ops team to act on — see
+    # models/organisation.py's custom_domain docstring for why setting
+    # this doesn't make the site reachable there by itself.
+    custom_domain: Optional[str] = None
 
 
 class MemberOut(BaseModel):

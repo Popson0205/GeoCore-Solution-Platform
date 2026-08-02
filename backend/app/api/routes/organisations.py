@@ -2,18 +2,21 @@ import re
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_membership, require_org_role
+from backend.app.core import licensing
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, OWNER
+from backend.app.core.storage import resolve_upload, save_upload
+from backend.app.models.customer import Customer, License as LicenseRecord
 from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.user import User
-from backend.app.core import licensing
-from backend.app.models.customer import License as LicenseRecord
 from backend.app.schemas.organisation import (
+    ActivateLicenseRequest,
     LicenseApply,
     LicenseStatus,
     MemberInvite,
@@ -36,6 +39,7 @@ def _to_out(org: Organisation, my_role: str | None) -> OrganisationOut:
     out = OrganisationOut.model_validate(org)
     out.my_role = my_role
     out.has_license = bool(org.license_key)
+    out.banner_image_url = f"/api/organisations/{org.id}/branding/banner" if org.banner_image_path else None
     return out
 
 
@@ -45,6 +49,15 @@ def create_organisation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Creates an empty, unlicensed organisation — kept for admin tooling
+    and edge cases, but this is deliberately NOT the primary onboarding
+    path any more. A real customer's organisation now comes into
+    existence via `POST /activate-license` below, as a side effect of
+    activating a license key they were actually issued — there's no
+    "just click New organisation" self-serve flow on the frontend any
+    more. An org created here still can't create anything (see
+    deps_project.require_active_license) until a license is applied.
+    """
     # Guarantee a unique, URL-friendly slug even if names collide.
     base_slug = _slugify(payload.name)
     slug = base_slug
@@ -59,6 +72,73 @@ def create_organisation(
 
     # Creator becomes the organisation owner (see blueprint section 13: User Roles).
     db.add(OrganisationMember(organisation_id=org.id, user_id=current_user.id, role=OWNER))
+    db.commit()
+    db.refresh(org)
+    return _to_out(org, OWNER)
+
+
+@router.post("/activate-license", response_model=OrganisationOut, status_code=201)
+def activate_license(
+    payload: ActivateLicenseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The real onboarding front door: a customer who's received a
+    license key (via the public purchase-request form -> your team
+    confirming payment -> the Admin Portal emailing them the key) comes
+    here to redeem it. Creates a brand-new Organisation, makes the
+    current user its owner, and applies the license to it in one step —
+    there's no separate "create an organisation" click involved. Each
+    license key can only activate one organisation: once verify_license
+    succeeds here, the same checks routes/admin.py's revoke path relies
+    on (the licenses table) apply, so a key already tied to a different
+    organisation can't be reused to spin up a second one for free.
+    """
+    try:
+        claims = licensing.verify_license(payload.license_key)
+    except licensing.LicenseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    existing_org = db.query(Organisation).filter(Organisation.license_key == payload.license_key).first()
+    if existing_org:
+        raise HTTPException(
+            status_code=422,
+            detail="This license key has already been activated on another organisation.",
+        )
+
+    record = db.query(LicenseRecord).filter(LicenseRecord.license_key == payload.license_key).first()
+    if record and record.status == "revoked":
+        raise HTTPException(status_code=422, detail="This license key has been revoked.")
+
+    base_slug = _slugify(payload.organisation_name)
+    slug = base_slug
+    counter = 1
+    while db.query(Organisation).filter(Organisation.slug == slug).first():
+        counter += 1
+        slug = f"{base_slug}-{counter}"
+
+    org = Organisation(
+        name=payload.organisation_name,
+        slug=slug,
+        plan=claims["plan"],
+        license_key=payload.license_key,
+        license_tier=claims.get("tier"),
+        seat_limit=claims.get("seat_limit"),
+        license_expires_at=datetime.fromisoformat(claims["expires_at"]) if claims.get("expires_at") else None,
+    )
+    db.add(org)
+    db.flush()
+    db.add(OrganisationMember(organisation_id=org.id, user_id=current_user.id, role=OWNER))
+
+    if record:
+        record.status = "applied"
+        record.applied_organisation_id = org.id
+        # Link the CRM record too, so the Admin Portal shows this lead as
+        # onboarded rather than still sitting in the "lead" queue.
+        customer = db.query(Customer).filter(Customer.id == record.customer_id).first()
+        if customer:
+            customer.status = "licensed"
+
     db.commit()
     db.refresh(org)
     return _to_out(org, OWNER)
@@ -101,10 +181,64 @@ def update_organisation(
         org.website_url = payload.website_url or None
     if payload.open_data_url is not None:
         org.open_data_url = payload.open_data_url or None
+    if payload.custom_domain is not None:
+        org.custom_domain = payload.custom_domain or None
 
     db.commit()
     db.refresh(org)
     return _to_out(org, membership.role)
+
+
+@router.post("/{organisation_id}/branding/banner", response_model=OrganisationOut)
+async def upload_banner(
+    organisation_id: uuid.UUID,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The Home page's hero background image (see
+    pages/OrganisationOverview.jsx — falls back to a generated gradient
+    when this is unset). Reuses the same local-disk storage attachments
+    use; note the same caveat applies (see core/storage.py) — this
+    doesn't survive a redeploy on a platform with an ephemeral
+    filesystem, so swap for object storage before relying on this in
+    production.
+    """
+    membership = require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+
+    content = await file.read()
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image exceeds the 8 MB upload limit")
+
+    relative_path, _ = save_upload(organisation_id, file.filename or "banner", content)
+    org.banner_image_path = relative_path
+    db.commit()
+    db.refresh(org)
+    return _to_out(org, membership.role)
+
+
+@router.get("/{organisation_id}/branding/banner")
+def get_banner(organisation_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Deliberately unauthenticated. A branding image is loaded by the
+    browser via a plain `<img>` tag / CSS `background-image` — neither
+    can attach a Bearer token, so gating this behind login would just
+    make the banner silently fail to render everywhere it's used. The
+    content itself (a decorative background image) isn't sensitive in
+    the way the rest of an organisation's data is; this mirrors why the
+    public project-share endpoints in routes/public.py need no auth
+    either.
+    """
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org or not org.banner_image_path:
+        raise HTTPException(status_code=404, detail="No banner image set")
+
+    path = resolve_upload(org.banner_image_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Banner image is missing from storage")
+    return FileResponse(path)
 
 
 @router.get("/{organisation_id}/license", response_model=LicenseStatus)

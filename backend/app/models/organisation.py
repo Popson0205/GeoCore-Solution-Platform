@@ -43,6 +43,18 @@ class Organisation(Base):
     about_text = Column(Text, nullable=True)
     website_url = Column(String, nullable=True)
     open_data_url = Column(String, nullable=True)
+    # Uploaded hero background for the Home page (see
+    # routes/organisations.py's upload_banner) — a relative path under the
+    # same local-disk storage attachments already use, not a public URL.
+    # NULL falls back to the generated gradient in OrganisationOverview.jsx.
+    banner_image_path = Column(String, nullable=True)
+    # A customer-requested custom public domain (e.g. "gis.theirministry.gov.ng").
+    # Storing this does NOT make the app actually reachable there — DNS and
+    # reverse-proxy/SSL setup on the hosting side is a separate, manual ops
+    # step (see docs/CHANGES_ONBOARDING_AND_LICENSING.md). This field is
+    # just so the request isn't lost between "they asked for one" and
+    # "ops actually configures it".
+    custom_domain = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     members = relationship(

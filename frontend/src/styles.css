@@ -1739,6 +1739,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   overflow: hidden;
 }
 .org-hero-banner-texture { position: absolute; inset: 0; width: 100%; height: 100%; }
+.org-hero-banner-uploaded { background-size: cover; background-position: center; }
 .org-hero-banner-content {
   position: relative;
   z-index: 1;
@@ -1932,3 +1933,19 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .license-status-pill.status-issued { color: var(--brand-dark); border-color: var(--brand); }
 .license-status-pill.status-applied { color: #2e8540; border-color: #2e8540; }
 .license-status-pill.status-revoked { color: var(--coral); border-color: var(--coral); }
+
+/* Public "Purchase a license" form — the Landing page is dark-themed, so
+   wrap the form in its own light card (giving it --ws-text/--ws-surface
+   context) rather than trying to re-theme .stacked-form/.form-label for
+   dark backgrounds — same reasoning as the .panel color fix elsewhere. */
+.purchase-form-section {
+  max-width: 640px;
+  margin: 32px auto 60px;
+  padding: 0 24px;
+}
+.purchase-form {
+  background: var(--ws-surface, #ffffff);
+  color: var(--ws-text, #181818);
+  border-radius: 8px;
+  padding: 28px;
+}

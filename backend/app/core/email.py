@@ -18,6 +18,68 @@ class EmailUnavailable(Exception):
     """Raised when RESEND_API_KEY isn't configured, or the send itself fails."""
 
 
+def send_purchase_request_notification(
+    *,
+    customer_number: str,
+    name: str,
+    email: str,
+    phone: str | None,
+    organisation_name: str,
+    plan: str,
+    tier: str | None,
+    seats: str,
+    desired_domain: str | None,
+    message: str | None,
+) -> None:
+    """Notifies your sales/ops inbox that someone submitted the public
+    purchase form — separate from send_license_email, which goes the
+    other direction (you -> customer) once a license is actually issued.
+    A failure here is logged and swallowed, never raised: a lead that
+    fails to email you is still sitting safely in the Admin Portal's
+    customer list either way, so this can't be the reason a request gets
+    lost.
+    """
+    if not settings.resend_api_key or not settings.sales_notification_email:
+        return
+
+    resend.api_key = settings.resend_api_key
+
+    rows = "".join(
+        f'<tr><td style="padding:4px 12px 4px 0;color:#777;">{label}</td><td>{value}</td></tr>'
+        for label, value in [
+            ("Customer #", customer_number),
+            ("Name", name),
+            ("Email", email),
+            ("Phone", phone or "—"),
+            ("Organisation", organisation_name),
+            ("Plan", f"{plan}{f' ({tier})' if tier else ''}"),
+            ("Seats requested", seats),
+            ("Desired domain", desired_domain or "—"),
+        ]
+    )
+    html = f"""
+    <div style="font-family: -apple-system, Segoe UI, sans-serif; max-width: 560px; margin: 0 auto;">
+      <h2 style="color: #058b8c;">New license purchase request</h2>
+      <table style="font-size: 14px; color: #333;">{rows}</table>
+      {f'<p><strong>Message:</strong> {message}</p>' if message else ''}
+      <p style="margin-top: 20px; color: #777; font-size: 13px;">
+        Confirm payment, then issue their license from the Admin Portal.
+      </p>
+    </div>
+    """
+    try:
+        resend.Emails.send(
+            {
+                "from": settings.resend_from_email,
+                "to": [settings.sales_notification_email],
+                "subject": f"New license purchase request — {organisation_name}",
+                "html": html,
+            }
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to send purchase-request notification: %s", exc)
+
+
 def send_license_email(
     *,
     to_email: str,

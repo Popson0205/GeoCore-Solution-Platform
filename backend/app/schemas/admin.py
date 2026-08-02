@@ -24,6 +24,12 @@ class CustomerOut(BaseModel):
     email: str
     phone: Optional[str] = None
     notes: Optional[str] = None
+    status: str
+    requested_plan: Optional[str] = None
+    requested_tier: Optional[str] = None
+    requested_seats: Optional[str] = None
+    requested_organisation_name: Optional[str] = None
+    desired_domain: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

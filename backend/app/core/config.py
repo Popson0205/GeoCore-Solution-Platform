@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     # doesn't auto-send (see core/email.py).
     resend_api_key: str | None = None
     resend_from_email: str = "licensing@geocore.example"
+    # Where a notification lands when someone submits the public
+    # "Purchase a license" form (see routes/public.py's
+    # submit_purchase_request). Optional — the request is always visible
+    # in the Admin Portal's customer list regardless of whether this is
+    # set; this is just so your team doesn't have to remember to check.
+    sales_notification_email: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

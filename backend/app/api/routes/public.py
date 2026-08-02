@@ -22,12 +22,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps_project import require_active_license
+from backend.app.core import email as email_module
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
+from backend.app.models.customer import Customer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
 from backend.app.models.report import Report
 from backend.app.models.survey import FormSection, Survey, SubmissionAssignee
+from backend.app.schemas.public_purchase import PurchaseRequestCreate, PurchaseRequestReceipt
 from backend.app.schemas.project import ProjectOut
 from backend.app.schemas.record import Geometry, RecordOut
 from backend.app.schemas.report import ReportOut
@@ -205,3 +208,62 @@ def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session =
     db.commit()
     db.refresh(record)
     return PublicSubmitReceipt(id=record.id, submitted_at=record.created_at)
+
+
+# ---------------------------------------------------------------------------
+# Purchase requests — the public, unauthenticated "Purchase a license"
+# form on the marketing site. This is the front door of onboarding: no
+# self-serve organisation creation any more (see routes/organisations.py's
+# create_organisation and the Admin Portal's issue_license) — a real
+# Organisation only comes into existence once someone has an actual
+# license key to activate (see the /activate-license flow in
+# routes/organisations.py). This endpoint just gets the request in front
+# of your team; nothing here issues a license or creates an organisation.
+# ---------------------------------------------------------------------------
+
+
+def _next_customer_number(db: Session) -> str:
+    count = db.query(Customer).count()
+    return f"GC-{count + 1:06d}"
+
+
+@router.post("/purchase-requests", response_model=PurchaseRequestReceipt, status_code=201)
+def submit_purchase_request(payload: PurchaseRequestCreate, db: Session = Depends(get_db)):
+    # Match by email — someone re-submitting (e.g. to change their plan
+    # before payment) updates the same lead rather than creating a
+    # duplicate customer number every time.
+    customer = db.query(Customer).filter(Customer.email == payload.email.lower()).first()
+    if not customer:
+        customer = Customer(
+            customer_number=_next_customer_number(db),
+            name=payload.name,
+            email=payload.email.lower(),
+        )
+        db.add(customer)
+
+    customer.name = payload.name
+    customer.phone = payload.phone
+    customer.requested_plan = payload.plan
+    customer.requested_tier = payload.tier
+    customer.requested_seats = payload.seats
+    customer.requested_organisation_name = payload.organisation_name
+    customer.desired_domain = payload.desired_domain
+    if payload.message:
+        customer.notes = payload.message
+    db.commit()
+    db.refresh(customer)
+
+    email_module.send_purchase_request_notification(
+        customer_number=customer.customer_number,
+        name=payload.name,
+        email=payload.email,
+        phone=payload.phone,
+        organisation_name=payload.organisation_name,
+        plan=payload.plan,
+        tier=payload.tier,
+        seats=payload.seats,
+        desired_domain=payload.desired_domain,
+        message=payload.message,
+    )
+
+    return PurchaseRequestReceipt(customer_number=customer.customer_number)

@@ -1,39 +1,26 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-const PLAN_OPTIONS = [
-  {
-    value: 'organization',
-    label: 'Organization',
-    description: 'Invite people, assign roles, collaborate on projects together.',
-  },
-  {
-    value: 'personal',
-    label: 'Personal',
-    description: 'A single-seat account. To share it, you share this login — no invites.',
-  },
-]
-
 /**
- * The top-level "choose or create an organisation" hub — deliberately
- * neutral. It never renders a specific organisation's identity (name,
- * branding, projects), because that would make "New organisation" look
- * like an action you take *from inside* an existing organisation, which
- * it isn't. Once you pick or open one, you land in OrganisationDetail's
- * own Home tab (the ArcGIS-Online-style hero page) — a completely
- * separate context from this picker.
+ * The top-level "your organisations" hub — deliberately has no
+ * self-serve "+ New organisation" button any more. An organisation now
+ * only comes into existence as a side effect of activating a real
+ * license key (see the form below and routes/organisations.py's
+ * activate_license) — the front door is the public "Purchase a license"
+ * page, not a button in here.
  */
 export default function Dashboard() {
   const { authedFetch } = useAuth()
   const navigate = useNavigate()
   const [orgs, setOrgs] = useState([])
-  const [orgName, setOrgName] = useState('')
-  const [orgPlan, setOrgPlan] = useState('organization')
   const [error, setError] = useState('')
   const [loadingOrgs, setLoadingOrgs] = useState(true)
-  const [showNewOrg, setShowNewOrg] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [showActivate, setShowActivate] = useState(false)
+
+  const [licenseKey, setLicenseKey] = useState('')
+  const [organisationName, setOrganisationName] = useState('')
+  const [activating, setActivating] = useState(false)
 
   async function loadOrgs() {
     try {
@@ -51,25 +38,22 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function createOrg(e) {
+  async function handleActivate(e) {
     e.preventDefault()
-    if (!orgName.trim()) return
+    if (!licenseKey.trim() || !organisationName.trim()) return
     setError('')
-    setCreating(true)
+    setActivating(true)
     try {
-      const org = await authedFetch('/api/organisations/', {
+      const org = await authedFetch('/api/organisations/activate-license', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: orgName, plan: orgPlan }),
+        body: JSON.stringify({ license_key: licenseKey.trim(), organisation_name: organisationName }),
       })
-      setOrgName('')
-      setOrgPlan('organization')
-      setShowNewOrg(false)
       navigate(`/workspace/organisations/${org.id}`)
     } catch (err) {
       setError(err.message)
     } finally {
-      setCreating(false)
+      setActivating(false)
     }
   }
 
@@ -79,9 +63,9 @@ export default function Dashboard() {
         <p className="card-eyebrow">Welcome</p>
         <h1>Your organisations</h1>
         <p className="ws-page-sub">
-          Pick an organisation to open its Home page, or create a new one below. Use the app
-          launcher (top right) to jump into <strong>GeoCore Survey</strong> to build and collect
-          forms, or <strong>GeoCore Dashboard</strong> for KPIs, charts and maps.
+          Pick an organisation to open its Home page. Use the app launcher (top right) to jump
+          into <strong>GeoCore Survey</strong> to build and collect forms, or{' '}
+          <strong>GeoCore Dashboard</strong> for KPIs, charts and maps.
         </p>
       </div>
 
@@ -92,46 +76,44 @@ export default function Dashboard() {
           <h2>Organisations</h2>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span className="panel-count">{orgs.length}</span>
-            <button className="btn-secondary" onClick={() => setShowNewOrg((v) => !v)}>
-              {showNewOrg ? 'Cancel' : '+ New organisation'}
+            <button className="btn-secondary" onClick={() => setShowActivate((v) => !v)}>
+              {showActivate ? 'Cancel' : 'Activate a license'}
             </button>
           </div>
         </div>
 
-        {showNewOrg && (
-          <form onSubmit={createOrg} className="stacked-form" style={{ marginBottom: 20 }}>
+        {showActivate && (
+          <form onSubmit={handleActivate} className="stacked-form" style={{ marginBottom: 20 }}>
+            <p className="builder-hint">
+              Have a license key from GeoCore? Activating it creates your organisation
+              automatically — no separate "new organisation" step.
+            </p>
             <label className="form-label">
               Organisation name
               <input
-                placeholder="Organisation name"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                autoFocus
+                placeholder="Your organisation's name"
+                value={organisationName}
+                onChange={(e) => setOrganisationName(e.target.value)}
               />
             </label>
-            <div>
-              <p className="builder-hint">Plan</p>
-              <div className="plan-choice-group">
-                {PLAN_OPTIONS.map((p) => (
-                  <label key={p.value} className={`plan-choice${orgPlan === p.value ? ' is-selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="org-plan"
-                      value={p.value}
-                      checked={orgPlan === p.value}
-                      onChange={() => setOrgPlan(p.value)}
-                    />
-                    <span className="plan-choice-label">{p.label}</span>
-                    <span className="plan-choice-desc">{p.description}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <label className="form-label">
+              License key
+              <input
+                placeholder="Paste the key from your license email"
+                value={licenseKey}
+                onChange={(e) => setLicenseKey(e.target.value)}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}
+              />
+            </label>
             <div className="form-row">
-              <button type="submit" className="btn-primary" disabled={creating}>
-                {creating ? 'Creating…' : 'Create organisation'}
+              <button type="submit" className="btn-primary" disabled={activating}>
+                {activating ? 'Activating…' : 'Activate'}
               </button>
             </div>
+            <p className="ws-muted" style={{ fontSize: '0.85rem' }}>
+              Don't have a license yet? <Link to="/purchase">Purchase one</Link> — we'll email you
+              a key once payment is confirmed.
+            </p>
           </form>
         )}
 
@@ -140,7 +122,10 @@ export default function Dashboard() {
         ) : orgs.length === 0 ? (
           <div className="empty-state">
             <p>No organisations yet.</p>
-            <span>Create one above to get started.</span>
+            <span>
+              Activate a license above to create your first one, or{' '}
+              <Link to="/purchase">purchase one</Link> if you don't have a key yet.
+            </span>
           </div>
         ) : (
           <div className="gallery-grid">

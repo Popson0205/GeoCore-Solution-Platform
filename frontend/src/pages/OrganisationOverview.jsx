@@ -27,8 +27,26 @@ function OrgHeroBanner({ org }) {
     .join('')
     .toUpperCase()
 
+  if (org.banner_image_url) {
+    return (
+      <section
+        className="org-hero-banner org-hero-banner-uploaded"
+        style={{
+          backgroundImage: `linear-gradient(rgba(10,10,10,0.35), rgba(10,10,10,0.35)), url(${org.banner_image_url})`,
+        }}
+      >
+        <div className="org-hero-banner-content">
+          <span className="org-hero-banner-logo">{initials}</span>
+          <h1>{org.name}</h1>
+        </div>
+      </section>
+    )
+  }
+
   // A handful of soft translucent shapes scattered by the seed, evoking a
-  // stylized map/parcel texture without needing an actual tile image.
+  // stylized map/parcel texture without needing an actual tile image —
+  // this is the default until an organisation uploads its own banner in
+  // Organization settings.
   const shapes = Array.from({ length: 10 }, (_, i) => {
     const x = (seed * (i + 3)) % 100
     const y = (seed * (i + 7) * 3) % 100

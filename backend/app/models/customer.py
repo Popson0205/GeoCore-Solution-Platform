@@ -10,11 +10,10 @@ from backend.app.core.database import Base
 
 class Customer(Base):
     """The billing/contact entity behind one or more licenses — deliberately
-    separate from Organisation. A Customer exists the moment your team
-    starts a sales conversation, before any Organisation or license even
-    exists yet; one Customer can hold a history of licenses over time
-    (a yearly renewal, an upgrade from Personal to Organization, etc.)
-    without those being different customers.
+    separate from Organisation. A Customer exists the moment someone
+    submits the public "Purchase a license" form (see
+    routes/public.py's submit_purchase_request), before any payment has
+    been confirmed or any license issued — `status` tracks that.
     """
 
     __tablename__ = "customers"
@@ -29,6 +28,19 @@ class Customer(Base):
     email = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    # "lead" (submitted the public purchase form, nothing issued yet) |
+    # "licensed" (at least one license has been issued to them). Purely
+    # for your team's own triage in the Admin Portal — a lead with no
+    # license yet is exactly the queue of "confirm payment, then issue".
+    status = Column(String, default="lead", nullable=False)
+    # What they asked for on the public purchase form — your team's
+    # starting point when issuing the real license, not binding (you can
+    # issue something different if the conversation changes).
+    requested_plan = Column(String, nullable=True)  # "personal" | "organization"
+    requested_tier = Column(String, nullable=True)
+    requested_seats = Column(String, nullable=True)  # integer or "unlimited", as typed
+    requested_organisation_name = Column(String, nullable=True)
+    desired_domain = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     licenses = relationship(
