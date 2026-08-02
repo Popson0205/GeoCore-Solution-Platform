@@ -19,6 +19,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps_project import require_active_license
@@ -26,11 +27,13 @@ from backend.app.core import email as email_module
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.models.customer import Customer
+from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
 from backend.app.models.report import Report
 from backend.app.models.survey import FormSection, Survey, SubmissionAssignee
 from backend.app.schemas.public_purchase import PurchaseRequestCreate, PurchaseRequestReceipt
+from backend.app.schemas.feature_layer import FeatureLayerOut
 from backend.app.schemas.project import ProjectOut
 from backend.app.schemas.record import Geometry, RecordOut
 from backend.app.schemas.report import ReportOut
@@ -87,6 +90,46 @@ def public_records(token: str, db: Session = Depends(get_db)):
     return (
         db.query(Record)
         .filter(Record.survey_id.in_(survey_ids))
+        .order_by(Record.created_at.desc())
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Feature layer sharing — a separate, read-only public link from the
+# Project-wide share above. Toggled from Organization Settings/the
+# feature layer's own settings (see routes/feature_layers.py's
+# enable_share); this is the actual consumption side, keyed by the
+# layer's own share_token rather than a project's.
+# ---------------------------------------------------------------------------
+
+
+def _get_shared_feature_layer(db: Session, token: str) -> FeatureLayer:
+    layer = (
+        db.query(FeatureLayer)
+        .filter(FeatureLayer.share_token == token, FeatureLayer.share_enabled.is_(True))
+        .first()
+    )
+    if not layer:
+        raise HTTPException(status_code=404, detail="This share link is invalid or disabled")
+    return layer
+
+
+@router.get("/layers/{token}", response_model=FeatureLayerOut)
+def public_feature_layer(token: str, db: Session = Depends(get_db)):
+    layer = _get_shared_feature_layer(db, token)
+    out = FeatureLayerOut.model_validate(layer)
+    out.record_count = db.query(func.count(Record.id)).filter(Record.feature_layer_id == layer.id).scalar() or 0
+    out.survey_title = layer.survey.title if layer.survey else None
+    return out
+
+
+@router.get("/layers/{token}/records", response_model=list[RecordOut])
+def public_feature_layer_records(token: str, db: Session = Depends(get_db)):
+    layer = _get_shared_feature_layer(db, token)
+    return (
+        db.query(Record)
+        .filter(Record.feature_layer_id == layer.id)
         .order_by(Record.created_at.desc())
         .all()
     )
@@ -194,9 +237,16 @@ def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session =
     except FormValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors)
 
+    if not survey.feature_layer:
+        raise HTTPException(
+            status_code=500,
+            detail="This survey has no feature layer to write records into. Contact support.",
+        )
+
     record = Record(
         organisation_id=survey.organisation_id,
         survey_id=survey.id,
+        feature_layer_id=survey.feature_layer.id,
         project_id=survey.project_id,
         geometry=geometry.model_dump(),
         field_data=processed_field_data,

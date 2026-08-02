@@ -35,6 +35,13 @@ class Record(Base):
     survey_id = Column(
         UUID(as_uuid=True), ForeignKey("surveys.id"), nullable=False, index=True
     )
+    # The actual data-source scope going forward — see
+    # models/feature_layer.py. survey_id above is kept too, denormalized,
+    # purely as "which form produced this" traceability; every access
+    # check and dashboard/map binding should go through feature_layer_id.
+    feature_layer_id = Column(
+        UUID(as_uuid=True), ForeignKey("feature_layers.id"), nullable=False, index=True
+    )
     # Now just an optional folder tag, no longer the scope boundary — records
     # are scoped by organisation_id/survey_id instead (Portal redesign Phase 1).
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
@@ -56,6 +63,7 @@ class Record(Base):
 
     organisation = relationship("Organisation")
     survey = relationship("Survey")
+    feature_layer = relationship("FeatureLayer", back_populates="records")
     project = relationship("Project", backref="records")
     attachments = relationship(
         "Attachment", back_populates="record", cascade="all, delete-orphan"

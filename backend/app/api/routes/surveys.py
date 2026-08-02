@@ -16,6 +16,7 @@ from backend.app.api.deps_project import (
 from backend.app.core.database import get_db
 from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
+from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
 from backend.app.models.survey import FieldDefinition, FormSection, Survey, SubmissionAssignee
@@ -172,6 +173,26 @@ def _replace_form(
 # ---------------------------------------------------------------------------
 
 
+def _create_feature_layer_for_survey(db: Session, survey: Survey) -> FeatureLayer:
+    """Every Survey gets exactly one FeatureLayer, created in the same
+    transaction — the way ArcGIS Survey123 creates a Form item and a
+    Feature Layer item together. The Survey defines the questions; the
+    FeatureLayer is what Records actually belong to and what a
+    Dashboard/Map binds to as a data source (see models/feature_layer.py).
+    """
+    layer = FeatureLayer(
+        organisation_id=survey.organisation_id,
+        project_id=survey.project_id,
+        survey_id=survey.id,
+        name=survey.title,
+        geometry_type=survey.geometry_type,
+        color=survey.color,
+    )
+    db.add(layer)
+    db.flush()
+    return layer
+
+
 @router.post(
     "/organisations/{organisation_id}/surveys", response_model=SurveyOut, status_code=201
 )
@@ -198,6 +219,7 @@ def create_survey(
     )
     db.add(survey)
     db.flush()
+    _create_feature_layer_for_survey(db, survey)
 
     # The form body — sections/fields — is created in the same call, the
     # way Survey123/KoBo's "new form" workflow works. Optional: a survey
@@ -516,6 +538,7 @@ async def import_xlsform(
     )
     db.add(survey)
     db.flush()
+    _create_feature_layer_for_survey(db, survey)
 
     _replace_form(db, survey, definition.sections, definition.fields)
 

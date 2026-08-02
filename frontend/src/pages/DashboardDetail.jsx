@@ -89,7 +89,7 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
   const { layers } = useFeatureLayers(orgId)
   const [title, setTitle] = useState(initial?.title || '')
   const [widgetType, setWidgetType] = useState(initial?.widget_type || initialType || 'kpi')
-  const [surveyId, setSurveyId] = useState(initial?.config?.survey_id || '')
+  const [featureLayerId, setFeatureLayerId] = useState(initial?.config?.feature_layer_id || '')
   const [layerFields, setLayerFields] = useState([])
   const [aggregation, setAggregation] = useState(initial?.config?.aggregation || 'count')
   const [fieldKey, setFieldKey] = useState(initial?.config?.field_key || '')
@@ -121,15 +121,20 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
   })
 
   useEffect(() => {
-    if (!surveyId) {
+    if (!featureLayerId) {
       setLayerFields([])
       return
     }
-    authedFetch(`/api/surveys/${surveyId}`)
+    const layer = layers.find((l) => l.id === featureLayerId)
+    if (!layer) {
+      setLayerFields([])
+      return
+    }
+    authedFetch(`/api/surveys/${layer.survey_id}`)
       .then((s) => setLayerFields(s.field_definitions || []))
       .catch(() => setLayerFields([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId])
+  }, [featureLayerId, layers])
 
   const fields = layerFields
   const numberFields = fields.filter((f) => f.field_type === 'number')
@@ -152,7 +157,7 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
       : []
 
     let config = isStatic ? {} : { filters }
-    if (!isStatic && surveyId) config.survey_id = surveyId
+    if (!isStatic && featureLayerId) config.feature_layer_id = featureLayerId
 
     if (widgetType === 'kpi') {
       config = { ...config, aggregation, field_key: aggregation === 'count' ? null : fieldKey }
@@ -221,13 +226,13 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
       {!isStatic && (
         <label className="form-label">
           Layer (feature layer — any project in this org) {widgetType === 'map' && '· optional, blank shows every layer'}
-          <select value={surveyId} onChange={(e) => setSurveyId(e.target.value)}>
+          <select value={featureLayerId} onChange={(e) => setFeatureLayerId(e.target.value)}>
             {widgetType === 'map' && <option value="">All layers</option>}
             {widgetType !== 'map' && <option value="">Select a layer…</option>}
             {orderedLayers.map((layer) => (
-              <option key={layer.survey_id} value={layer.survey_id}>
+              <option key={layer.id} value={layer.id}>
                 {layer.project_name ? `${layer.project_name} — ` : ''}
-                {layer.survey_title} ({layer.record_count})
+                {layer.survey_title || layer.name} ({layer.record_count})
               </option>
             ))}
           </select>
@@ -717,23 +722,23 @@ function DataSourcesPanel({ orgId, projectId, onClose }) {
       </div>
       <div className="dashboard-side-panel-body">
         <p className="builder-hint">
-          Every Survey in this organisation is available as a feature layer to bind widgets to —
-          pick one when adding or editing an element.
+          Every Feature Layer in this organisation is available to bind widgets to — pick one
+          when adding or editing an element.
         </p>
         {loading ? (
           <p className="ws-muted">Loading…</p>
         ) : ordered.length === 0 ? (
           <div className="empty-state">
             <p>No feature layers yet.</p>
-            <span>Create a Survey first — every Survey is its own feature layer.</span>
+            <span>Create a Survey first — its feature layer is created automatically alongside it.</span>
           </div>
         ) : (
           <ul className="entity-list">
             {ordered.map((layer) => (
-              <li key={layer.survey_id} className="record-row">
+              <li key={layer.id} className="record-row">
                 <span className="color-dot" style={{ background: layer.color }} />
                 <div style={{ flex: 1 }}>
-                  <strong>{layer.survey_title}</strong>
+                  <strong>{layer.survey_title || layer.name}</strong>
                   <div className="ws-muted">
                     {layer.project_name || 'No project'} · {layer.record_count} records
                   </div>

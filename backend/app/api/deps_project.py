@@ -212,6 +212,51 @@ def _enforce_survey_assignment_scope(db: Session, survey: Survey, user_id: uuid.
         )
 
 
+def get_feature_layer_and_role(
+    db: Session, feature_layer_id: uuid.UUID, user_id: uuid.UUID
+) -> tuple["FeatureLayer", OrganisationMember]:
+    """Fetch a feature layer and enforce organisation membership — the
+    feature-layer analogue of `get_survey_and_role`. Delegates straight
+    to the survey-scoped checks (including per-survey Data Collector
+    scoping) through the layer's 1:1 `survey_id`, since a FeatureLayer
+    and its originating Survey are twins that share one access story —
+    see models/feature_layer.py.
+    """
+    from backend.app.models.feature_layer import FeatureLayer
+
+    layer = db.query(FeatureLayer).filter(FeatureLayer.id == feature_layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="Feature layer not found")
+
+    _, membership = get_survey_and_role(db, layer.survey_id, user_id)
+    return layer, membership
+
+
+def get_feature_layer_for_member(
+    db: Session, feature_layer_id: uuid.UUID, user_id: uuid.UUID
+) -> "FeatureLayer":
+    layer, _ = get_feature_layer_and_role(db, feature_layer_id, user_id)
+    return layer
+
+
+def require_feature_layer_role(
+    db: Session, feature_layer_id: uuid.UUID, user_id: uuid.UUID, minimum: str
+) -> tuple["FeatureLayer", OrganisationMember]:
+    """Fetch a feature layer and enforce that the caller's role in its
+    organisation is at least `minimum` — the feature-layer analogue of
+    `require_survey_role`, use for any feature-layer write (editing
+    settings, deleting/importing records, sharing).
+    """
+    from backend.app.models.feature_layer import FeatureLayer
+
+    layer = db.query(FeatureLayer).filter(FeatureLayer.id == feature_layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="Feature layer not found")
+
+    _, membership = require_survey_role(db, layer.survey_id, user_id, minimum)
+    return layer, membership
+
+
 def require_survey_role(
     db: Session, survey_id: uuid.UUID, user_id: uuid.UUID, minimum: str
 ) -> tuple[Survey, OrganisationMember]:

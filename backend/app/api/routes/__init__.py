@@ -6,6 +6,7 @@ from backend.app.api.routes import (
     auth,
     dashboard,
     dashboards,
+    feature_layers,
     health,
     organisations,
     projects,
@@ -24,6 +25,7 @@ router.include_router(projects.router, tags=["projects"])
 # old asset-types router is gone; form-builder, submission-link, and
 # XLSForm-import endpoints all live in surveys.router now.
 router.include_router(surveys.router, tags=["surveys"])
+router.include_router(feature_layers.router, tags=["feature-layers"])
 router.include_router(records.router, tags=["records"])
 router.include_router(attachments.router, tags=["attachments"])
 router.include_router(dashboard.router, tags=["dashboard"])

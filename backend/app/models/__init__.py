@@ -9,6 +9,7 @@ from backend.app.models.survey import (  # noqa: F401
     FieldDefinition,
     SubmissionAssignee,
 )
+from backend.app.models.feature_layer import FeatureLayer  # noqa: F401
 from backend.app.models.record import Record  # noqa: F401
 from backend.app.models.survey_assignment import SurveyAssignment  # noqa: F401
 from backend.app.models.attachment import Attachment  # noqa: F401

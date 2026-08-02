@@ -3,7 +3,8 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const TYPE_META = {
-  survey: { label: 'Survey (form + feature layer)', icon: '📋', color: '#0079c1' },
+  survey: { label: 'Survey (form)', icon: '📋', color: '#0079c1' },
+  feature_layer: { label: 'Feature Layer (data)', icon: '🗂️', color: '#2e8540' },
   dashboard: { label: 'Dashboard', icon: '📊', color: '#7a2e8e' },
   report: { label: 'Report', icon: '📄', color: '#5a6b78' },
   project: { label: 'Folder', icon: '📁', color: '#8a8a8a' },
@@ -35,7 +36,9 @@ export default function Content() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [activeFolder, setActiveFolder] = useState('all')
-  const [typeFilters, setTypeFilters] = useState(new Set(['survey', 'dashboard', 'report']))
+  const [typeFilters, setTypeFilters] = useState(
+    new Set(['survey', 'feature_layer', 'dashboard', 'report'])
+  )
   const [showNewMenu, setShowNewMenu] = useState(false)
   const [showNewFolder, setShowNewFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -44,8 +47,9 @@ export default function Content() {
     setLoading(true)
     setError('')
     try {
-      const [surveys, dashboards, reports, projectList] = await Promise.all([
+      const [surveys, layers, dashboards, reports, projectList] = await Promise.all([
         authedFetch(`/api/organisations/${orgId}/surveys`),
+        authedFetch(`/api/organisations/${orgId}/feature-layers`),
         authedFetch(`/api/organisations/${orgId}/dashboards`),
         authedFetch(`/api/organisations/${orgId}/reports`),
         authedFetch(`/api/organisations/${orgId}/projects`),
@@ -60,6 +64,15 @@ export default function Content() {
           modified: s.created_at,
           project_id: s.project_id,
           href: `/design/surveys/${s.id}`,
+        })),
+        ...layers.map((l) => ({
+          id: l.id,
+          type: 'feature_layer',
+          title: l.name,
+          modified: l.updated_at,
+          project_id: l.project_id,
+          color: l.color,
+          href: `/workspace/organisations/${orgId}/feature-layers/${l.id}`,
         })),
         ...dashboards.map((d) => ({
           id: d.id,
@@ -263,7 +276,7 @@ export default function Content() {
                   <tr key={`${item.type}-${item.id}`}>
                     <td>
                       <span className="content-table-title">
-                        <span className="content-table-icon" style={{ color: meta.color }}>
+                        <span className="content-table-icon" style={{ color: item.color || meta.color }}>
                           {meta.icon}
                         </span>
                         {item.title}

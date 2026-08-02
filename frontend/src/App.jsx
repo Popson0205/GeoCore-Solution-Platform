@@ -21,6 +21,7 @@ import AdminOrganisations from './pages/AdminOrganisations'
 import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
+import FeatureLayerDetail from './pages/FeatureLayerDetail'
 import SurveyDesigner from './pages/SurveyDesigner'
 import ProjectDetail from './pages/ProjectDetail'
 import ProjectOverview from './pages/ProjectOverview'
@@ -112,6 +113,7 @@ export default function App() {
             <Route path="surveys/:surveyId" element={<SurveyDetail />}>
               <Route index element={<SurveyOverview />} />
             </Route>
+            <Route path="feature-layers/:layerId" element={<FeatureLayerDetail />} />
             <Route path="records" element={<ProjectRecords />} />
             <Route path="map" element={<ProjectMap />} />
             <Route path="attachments" element={<ProjectAttachments />} />

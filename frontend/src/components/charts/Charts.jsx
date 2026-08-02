@@ -71,7 +71,7 @@ export function ListWidget({ rows }) {
   )
 }
 
-export function MapWidget({ features, colorBySurvey = {} }) {
+export function MapWidget({ features, colorByLayer = {} }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const layerRef = useRef(null)
@@ -98,7 +98,7 @@ export function MapWidget({ features, colorBySurvey = {} }) {
     ;(features || []).forEach((f) => {
       const geometry = f.geometry
       if (!geometry) return
-      const color = colorBySurvey[f.survey_id] || '#0079c1'
+      const color = colorByLayer[f.feature_layer_id] || '#0079c1'
       if (geometry.type === 'Point') {
         const [lng, lat] = geometry.coordinates
         L.circleMarker([lat, lng], { radius: 6, color, fillColor: color, fillOpacity: 0.85, weight: 2 }).addTo(
@@ -118,7 +118,7 @@ export function MapWidget({ features, colorBySurvey = {} }) {
     if (bounds.length) {
       mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 })
     }
-  }, [features, colorBySurvey])
+  }, [features, colorByLayer])
 
   return <div ref={mapEl} className="widget-map" />
 }

@@ -62,9 +62,19 @@ def create_record_for_survey(
     except FormValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors)
 
+    if not survey.feature_layer:
+        # Shouldn't happen post-migration (every Survey gets one at
+        # creation time) — but a clear 500 with a real explanation beats
+        # an AttributeError on .id below if it ever does.
+        raise HTTPException(
+            status_code=500,
+            detail="This survey has no feature layer to write records into. Contact support.",
+        )
+
     record = Record(
         organisation_id=survey.organisation_id,
         survey_id=survey.id,
+        feature_layer_id=survey.feature_layer.id,
         # Copied over from the survey purely as an optional folder tag on
         # the record — not used for scoping.
         project_id=survey.project_id,
@@ -289,6 +299,11 @@ async def import_records(
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found in this project")
     require_active_license(db, survey.organisation_id)
+    if not survey.feature_layer:
+        raise HTTPException(
+            status_code=500,
+            detail="This survey has no feature layer to write records into. Contact support.",
+        )
 
     content = await file.read()
     field_keys = {f.field_key for f in survey.field_definitions}
@@ -320,6 +335,7 @@ async def import_records(
             Record(
                 organisation_id=survey.organisation_id,
                 survey_id=survey.id,
+                feature_layer_id=survey.feature_layer.id,
                 project_id=project_id,
                 geometry=row.geometry,
                 field_data=processed_field_data,

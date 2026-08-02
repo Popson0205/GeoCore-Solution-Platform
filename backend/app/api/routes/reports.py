@@ -93,19 +93,24 @@ def _build_geoai_context(db: Session, organisation, surveys: list, summary: dict
         .all()
     )
 
-    records_by_survey: dict = defaultdict(list)
+    records_by_layer: dict = defaultdict(list)
     referenced_ids = {
-        w.config.get("survey_id") for d in dashboards for w in d.widgets if w.config.get("survey_id")
+        w.config.get("feature_layer_id")
+        for d in dashboards
+        for w in d.widgets
+        if w.config.get("feature_layer_id")
     }
     if referenced_ids:
-        for r in db.query(Record).filter(Record.survey_id.in_(referenced_ids)).all():
-            records_by_survey[str(r.survey_id)].append(r)
+        for r in db.query(Record).filter(Record.feature_layer_id.in_(referenced_ids)).all():
+            records_by_layer[str(r.feature_layer_id)].append(r)
     needs_org_records = any(
-        w.widget_type == "map" and not w.config.get("survey_id") for d in dashboards for w in d.widgets
+        w.widget_type == "map" and not w.config.get("feature_layer_id")
+        for d in dashboards
+        for w in d.widgets
     )
     if needs_org_records:
         for r in db.query(Record).filter(Record.organisation_id == organisation.id).all():
-            records_by_survey[str(r.survey_id)].append(r)
+            records_by_layer[str(r.feature_layer_id)].append(r)
 
     dashboard_ctx = [
         {
@@ -114,7 +119,7 @@ def _build_geoai_context(db: Session, organisation, surveys: list, summary: dict
                 {
                     "title": w.title,
                     "widget_type": w.widget_type,
-                    "data": compute_widget(w, records_by_survey),
+                    "data": compute_widget(w, records_by_layer),
                 }
                 for w in d.widgets
             ],

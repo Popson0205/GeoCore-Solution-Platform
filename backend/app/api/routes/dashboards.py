@@ -3,7 +3,6 @@ import uuid
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps import get_current_user
@@ -16,18 +15,17 @@ from backend.app.api.deps_project import (
 )
 from backend.app.core.dashboard_engine import compute_widget
 from backend.app.core.database import get_db
-from backend.app.core.roles import ANALYST, VIEWER
+from backend.app.core.roles import ANALYST
 from backend.app.models.dashboard import Dashboard, DashboardWidget
+from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
-from backend.app.models.survey import Survey
 from backend.app.models.user import User
 from backend.app.schemas.dashboards import (
     DashboardCreate,
     DashboardOut,
     DashboardSummaryOut,
     DashboardUpdate,
-    FeatureLayerOut,
     WidgetCreate,
     WidgetOut,
     WidgetUpdate,
@@ -258,26 +256,22 @@ def delete_dashboard(
     return None
 
 
-def _validate_widget_survey(db: Session, dashboard: Dashboard, config: dict) -> None:
-    """A widget can point at any Survey in the *same organisation* as this
-    dashboard — not just the dashboard's own project folder. This is the
-    "feature layer" model: data collected under one survey is still a
-    first-class layer any dashboard in the org can chart, the way an
-    ArcGIS Online organisation's feature layers aren't locked to a single
-    map. Cross-*organisation* references are never allowed — that would
-    cross the tenant boundary from blueprint section 7.
-
-    A Survey now carries its own organisation_id directly (flat model), so
-    comparing organisation_id on both sides is a single lookup — no join
-    through a former AssetType -> Survey chain needed any more.
+def _validate_widget_feature_layer(db: Session, dashboard: Dashboard, config: dict) -> None:
+    """A widget can point at any feature layer in the *same organisation*
+    as this dashboard — not just the dashboard's own project folder. Data
+    collected under one survey's feature layer is still a first-class
+    layer any dashboard in the org can chart, the way an ArcGIS Online
+    organisation's feature layers aren't locked to a single map.
+    Cross-*organisation* references are never allowed — that would cross
+    the tenant boundary from blueprint section 7.
     """
-    survey_id = config.get("survey_id")
-    if not survey_id:
+    feature_layer_id = config.get("feature_layer_id")
+    if not feature_layer_id:
         return
-    survey = db.query(Survey).filter(Survey.id == survey_id).first()
-    if not survey:
-        raise HTTPException(status_code=404, detail="That layer's survey no longer exists")
-    if survey.organisation_id != dashboard.organisation_id:
+    layer = db.query(FeatureLayer).filter(FeatureLayer.id == feature_layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="That feature layer no longer exists")
+    if layer.organisation_id != dashboard.organisation_id:
         raise HTTPException(
             status_code=403, detail="That layer belongs to a different organisation"
         )
@@ -292,7 +286,7 @@ def add_widget(
 ):
     dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
     require_active_license(db, dashboard.organisation_id)
-    _validate_widget_survey(db, dashboard, payload.config)
+    _validate_widget_feature_layer(db, dashboard, payload.config)
     widget = DashboardWidget(
         dashboard_id=dashboard.id,
         widget_type=payload.widget_type,
@@ -328,7 +322,7 @@ def update_widget(
     widget = _get_widget_for_role(db, widget_id, current_user, ANALYST)
     if payload.config is not None:
         dashboard = _get_dashboard(db, widget.dashboard_id)
-        _validate_widget_survey(db, dashboard, payload.config)
+        _validate_widget_feature_layer(db, dashboard, payload.config)
         widget.config = payload.config
     if payload.title is not None:
         widget.title = payload.title
@@ -362,75 +356,29 @@ def get_dashboard_data(
     """Computes every widget's current data in one call — see
     core/dashboard_engine.py. Returns {widget_id: computed_result}.
 
-    Records are fetched per-widget by the survey_id each widget's config
-    actually references (any layer in the org — see
-    _validate_widget_survey), not by a project_id. Map widgets with no
-    survey_id (survey_id is None => "every survey in the organisation")
-    pull the whole organisation's records rather than one project's — a
+    Records are fetched per-widget by the feature_layer_id each widget's
+    config actually references (any layer in the org — see
+    _validate_widget_feature_layer), not by a project_id. Map widgets
+    with no feature_layer_id (=> "every layer in the organisation") pull
+    the whole organisation's records rather than one project's — a
     dashboard's map is Portal-wide by default, the same way its widget
-    picker already draws from any survey in the org.
+    picker already draws from any layer in the org.
     """
     dashboard = _get_dashboard_for_member(db, dashboard_id, current_user)
 
     referenced_ids = {
-        w.config.get("survey_id") for w in dashboard.widgets if w.config.get("survey_id")
+        w.config.get("feature_layer_id") for w in dashboard.widgets if w.config.get("feature_layer_id")
     }
     needs_org_records = any(
-        w.widget_type == "map" and not w.config.get("survey_id") for w in dashboard.widgets
+        w.widget_type == "map" and not w.config.get("feature_layer_id") for w in dashboard.widgets
     )
 
-    records_by_survey: dict[str, list] = defaultdict(list)
+    records_by_layer: dict[str, list] = defaultdict(list)
     if referenced_ids:
-        for r in db.query(Record).filter(Record.survey_id.in_(referenced_ids)).all():
-            records_by_survey[str(r.survey_id)].append(r)
+        for r in db.query(Record).filter(Record.feature_layer_id.in_(referenced_ids)).all():
+            records_by_layer[str(r.feature_layer_id)].append(r)
     if needs_org_records:
         for r in db.query(Record).filter(Record.organisation_id == dashboard.organisation_id).all():
-            records_by_survey[str(r.survey_id)].append(r)
+            records_by_layer[str(r.feature_layer_id)].append(r)
 
-    return {str(w.id): compute_widget(w, records_by_survey) for w in dashboard.widgets}
-
-
-@router.get("/organisations/{organisation_id}/feature-layers", response_model=list[FeatureLayerOut])
-def list_feature_layers(
-    organisation_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Every Survey in this organisation, for the dashboard widget
-    builder's data-source picker — the "just select the layer, even from
-    a different survey/project" model. Read-only discovery metadata
-    (title/color/record count), not the records themselves.
-
-    In the flat model a Survey *is* the feature layer (the separate
-    AssetType layer is retired), so this queries Survey directly —
-    project_id/project_name are populated only when the survey happens to
-    have one (a survey may live directly under the organisation with no
-    project at all).
-    """
-    require_org_role(db, organisation_id, current_user.id, VIEWER)
-
-    rows = (
-        db.query(Survey, Project)
-        .outerjoin(Project, Project.id == Survey.project_id)
-        .filter(Survey.organisation_id == organisation_id)
-        .all()
-    )
-    counts = dict(
-        db.query(Record.survey_id, func.count(Record.id))
-        .filter(Record.organisation_id == organisation_id)
-        .group_by(Record.survey_id)
-        .all()
-    )
-
-    return [
-        FeatureLayerOut(
-            survey_id=survey.id,
-            survey_title=survey.title,
-            color=survey.color,
-            geometry_type=survey.geometry_type,
-            project_id=project.id if project else None,
-            project_name=project.name if project else None,
-            record_count=counts.get(survey.id, 0),
-        )
-        for survey, project in rows
-    ]
+    return {str(w.id): compute_widget(w, records_by_layer) for w in dashboard.widgets}

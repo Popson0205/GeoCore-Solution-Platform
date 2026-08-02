@@ -38,6 +38,7 @@ export default function ProjectMap() {
   const mapRef = useRef(null)
   const layerRef = useRef(null)
   const [records, setRecords] = useState([])
+  const [layers, setLayers] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -51,6 +52,15 @@ export default function ProjectMap() {
       .then(setRecords)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+    // Feature layers are the current source of truth for color/name —
+    // a Survey's own legacy color field can drift out of date once
+    // someone edits a layer's settings, so this is a separate fetch
+    // rather than reusing surveys from outlet context for styling.
+    if (orgId) {
+      authedFetch(`/api/organisations/${orgId}/feature-layers`)
+        .then(setLayers)
+        .catch(() => setLayers([]))
+    }
   }, [orgId, projectId, authedFetch])
 
   useEffect(() => {
@@ -74,14 +84,15 @@ export default function ProjectMap() {
 
     const bounds = []
     records.forEach((record) => {
+      const layer = layers.find((l) => l.id === record.feature_layer_id)
       const survey = surveys.find((s) => s.id === record.survey_id)
-      const color = survey?.color || '#0079c1'
+      const color = layer?.color || survey?.color || '#0079c1'
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
 
-      let layer
+      let mapLayer
       if (record.geometry.type === 'Point') {
-        layer = L.circleMarker(latLngs, {
+        mapLayer = L.circleMarker(latLngs, {
           radius: 7,
           color,
           fillColor: color,
@@ -90,21 +101,21 @@ export default function ProjectMap() {
         })
         bounds.push(latLngs)
       } else if (record.geometry.type === 'LineString') {
-        layer = L.polyline(latLngs, { color, weight: 3 })
+        mapLayer = L.polyline(latLngs, { color, weight: 3 })
         bounds.push(...latLngs)
       } else {
-        layer = L.polygon(latLngs, { color, fillColor: color, fillOpacity: 0.25 })
+        mapLayer = L.polygon(latLngs, { color, fillColor: color, fillOpacity: 0.25 })
         latLngs.forEach((ring) => bounds.push(...ring))
       }
 
-      layer.bindPopup(popupHtml(survey, record))
-      layer.addTo(layerRef.current)
+      mapLayer.bindPopup(popupHtml(survey, record))
+      mapLayer.addTo(layerRef.current)
     })
 
     if (bounds.length) {
       mapRef.current.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 })
     }
-  }, [records, surveys])
+  }, [records, layers, surveys])
 
   return (
     <section className="panel map-panel">
@@ -121,10 +132,10 @@ export default function ProjectMap() {
       )}
       <div ref={mapEl} className="map-container" />
       <div className="map-legend">
-        {surveys.map((s) => (
-          <span key={s.id} className="map-legend-item">
-            <span className="color-dot" style={{ background: s.color }} />
-            {s.title}
+        {layers.map((l) => (
+          <span key={l.id} className="map-legend-item">
+            <span className="color-dot" style={{ background: l.color }} />
+            {l.survey_title || l.name}
           </span>
         ))}
       </div>

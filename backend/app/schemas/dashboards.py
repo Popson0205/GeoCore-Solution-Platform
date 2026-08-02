@@ -108,25 +108,3 @@ class DashboardSummaryOut(BaseModel):
     description: Optional[str] = None
     updated_at: datetime
     widget_count: int
-
-
-class FeatureLayerOut(BaseModel):
-    """One Survey, discoverable as a dashboard data source from anywhere
-    in the organisation — not just the dashboard's own project. See
-    GET /organisations/{id}/feature-layers.
-
-    In the flat Survey123/KoBo model a Survey *is* the feature layer now
-    (the old separate AssetType layer is retired) — this is keyed by
-    survey_id/survey_title directly. project_id/project_name are only
-    populated when the survey happens to sit under a project folder (a
-    survey may live directly under the organisation with no project at
-    all).
-    """
-
-    survey_id: uuid.UUID
-    survey_title: str
-    color: str
-    geometry_type: str
-    project_id: Optional[uuid.UUID] = None
-    project_name: Optional[str] = None
-    record_count: int

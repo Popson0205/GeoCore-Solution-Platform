@@ -138,7 +138,7 @@ def compute_table(records: list[Any], config: dict) -> dict:
 def compute_map(records: list[Any], config: dict) -> list[dict]:
     records = apply_filters(records, config.get("filters"))
     return [
-        {"id": str(r.id), "survey_id": str(r.survey_id), "geometry": r.geometry}
+        {"id": str(r.id), "feature_layer_id": str(r.feature_layer_id), "geometry": r.geometry}
         for r in records
     ]
 
@@ -225,26 +225,26 @@ def compute_details(records: list[Any], config: dict) -> dict:
     return {"record_id": str(record.id), "items": items}
 
 
-def compute_widget(widget: Any, records_by_survey: dict[str, list[Any]]) -> dict:
-    """`records_by_survey` maps str(survey_id) -> that survey's records
-    for the project. Map widgets with no survey_id in their config get
-    every survey's records combined.
+def compute_widget(widget: Any, records_by_layer: dict[str, list[Any]]) -> dict:
+    """`records_by_layer` maps str(feature_layer_id) -> that layer's
+    records for the project. Map widgets with no feature_layer_id in
+    their config get every layer's records combined.
     """
     config = widget.config or {}
-    survey_id = config.get("survey_id")
+    feature_layer_id = config.get("feature_layer_id")
 
     # Rich text and embedded content are static — they render straight
-    # from their own config with no records lookup at all (no survey_id
-    # to resolve, nothing to compute).
+    # from their own config with no records lookup at all (no layer to
+    # resolve, nothing to compute).
     if widget.widget_type == "rich_text":
         return {"content": config.get("content", "")}
     if widget.widget_type == "embedded":
         return {"url": config.get("url", "")}
 
-    if widget.widget_type == "map" and not survey_id:
-        records = [r for recs in records_by_survey.values() for r in recs]
+    if widget.widget_type == "map" and not feature_layer_id:
+        records = [r for recs in records_by_layer.values() for r in recs]
     else:
-        records = records_by_survey.get(str(survey_id), []) if survey_id else []
+        records = records_by_layer.get(str(feature_layer_id), []) if feature_layer_id else []
 
     if widget.widget_type == "kpi":
         return compute_kpi(records, config)

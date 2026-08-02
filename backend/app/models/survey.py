@@ -45,11 +45,13 @@ class Survey(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    # point | line | polygon | none — the shape every Record under this survey
-    # collects ("none" = a non-spatial form with no map geometry). Moved down
-    # from the retired AssetType, which used to dictate this.
+    # LEGACY — superseded by FeatureLayer.geometry_type/color (see
+    # models/feature_layer.py). Kept as columns rather than dropped to
+    # avoid a destructive migration on a live database; nothing new reads
+    # these two fields going forward. Every Survey has exactly one
+    # FeatureLayer (created alongside it — see routes/surveys.py), which
+    # is the actual source of truth for a survey's geometry/color now.
     geometry_type = Column(String, default="point", nullable=False)
-    # Map styling colour for this survey's records (moved up from AssetType).
     color = Column(String, default="#2563eb", nullable=False)
     # draft | published | archived. Deleting a Survey soft-archives it
     # (status = "archived") rather than cascade-deleting collected records —
@@ -64,6 +66,11 @@ class Survey(Base):
     organisation = relationship("Organisation")
     project = relationship("Project")
     creator = relationship("User")
+    # One-to-one — see models/feature_layer.py's docstring for why this
+    # isn't a list.
+    feature_layer = relationship(
+        "FeatureLayer", back_populates="survey", uselist=False, cascade="all, delete-orphan"
+    )
     # The form itself now hangs directly off the Survey (was AssetType).
     sections = relationship(
         "FormSection",
