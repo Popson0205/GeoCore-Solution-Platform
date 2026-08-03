@@ -32,7 +32,7 @@ function WidgetBody({ widget, data }) {
   if (widget.widget_type === 'gauge') {
     return <GaugeChart value={data.value} maxValue={data.max_value} percent={data.percent} />
   }
-  if (widget.widget_type === 'bar_chart') return <BarChart rows={data.rows} />
+  if (widget.widget_type === 'bar_chart') return <BarChart rows={data.rows} orientation={widget.config?.orientation} />
   if (widget.widget_type === 'pie_chart') return <PieChart rows={data.rows} />
   if (widget.widget_type === 'line_chart') return <LineChart rows={data.rows} />
   if (widget.widget_type === 'table') return <TableWidget columns={data.columns} rows={data.rows} />

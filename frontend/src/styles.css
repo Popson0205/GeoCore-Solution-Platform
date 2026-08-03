@@ -948,7 +948,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .widget-list-text { display: flex; flex-direction: column; font-size: 0.84rem; }
 .widget-list-text .ws-muted { font-size: 0.76rem; }
 
-.widget-map { height: 280px; border-radius: 4px; overflow: hidden; }
+.widget-map { height: 100%; min-height: 200px; border-radius: 4px; overflow: hidden; }
 
 .upload-drop {
   display: block;
@@ -2009,3 +2009,8 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   gap: 16px;
 }
 .dashboard-sidebar-widget-card { width: 100%; }
+
+/* Dashboard layout draft/save state — resizing/repositioning updates
+   local state only; nothing persists until Save is clicked. */
+.dashboard-sidebar-item.has-unsaved-changes { color: var(--dash-warning, #d99000); }
+.dashboard-sidebar-item.has-unsaved-changes .dashboard-sidebar-icon { color: var(--dash-warning, #d99000); }

@@ -94,6 +94,7 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
   const [aggregation, setAggregation] = useState(initial?.config?.aggregation || 'count')
   const [fieldKey, setFieldKey] = useState(initial?.config?.field_key || '')
   const [groupByFieldKey, setGroupByFieldKey] = useState(initial?.config?.group_by_field_key || '')
+  const [orientation, setOrientation] = useState(initial?.config?.orientation || 'horizontal')
   const [valueFieldKey, setValueFieldKey] = useState(initial?.config?.value_field_key || '')
   const [interval, setInterval_] = useState(initial?.config?.interval || 'month')
   const [selectedFieldKeys, setSelectedFieldKeys] = useState(initial?.config?.field_keys || [])
@@ -176,6 +177,7 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
         group_by_field_key: groupByFieldKey,
         aggregation,
         value_field_key: aggregation === 'count' ? null : valueFieldKey,
+        ...(widgetType === 'bar_chart' ? { orientation } : {}),
       }
     } else if (widgetType === 'line_chart') {
       config = {
@@ -333,6 +335,12 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
                   {f.label}
                 </option>
               ))}
+            </select>
+          )}
+          {widgetType === 'bar_chart' && (
+            <select value={orientation} onChange={(e) => setOrientation(e.target.value)}>
+              <option value="horizontal">Horizontal bars</option>
+              <option value="vertical">Vertical bars</option>
             </select>
           )}
         </div>
@@ -501,7 +509,7 @@ function WidgetBody({ widget, data }) {
   if (widget.widget_type === 'gauge') {
     return <GaugeChart value={data.value} maxValue={data.max_value} percent={data.percent} />
   }
-  if (widget.widget_type === 'bar_chart') return <BarChart rows={data.rows} />
+  if (widget.widget_type === 'bar_chart') return <BarChart rows={data.rows} orientation={widget.config?.orientation} />
   if (widget.widget_type === 'pie_chart') return <PieChart rows={data.rows} />
   if (widget.widget_type === 'line_chart') return <LineChart rows={data.rows} />
   if (widget.widget_type === 'table') return <TableWidget columns={data.columns} rows={data.rows} />
@@ -1058,7 +1066,25 @@ export default function DashboardDetail() {
   const [addingType, setAddingType] = useState(null)
   const [editingWidgetId, setEditingWidgetId] = useState(null)
   const [dragWidgetId, setDragWidgetId] = useState(null)
-  const [resizing, setResizing] = useState(null) // { id, w } — live width during a drag-resize
+  const [resizing, setResizing] = useState(null) // { id, w, h } — live size during a drag-resize
+  // Layout changes (resize, reorder) are applied to local state
+  // immediately for instant feedback, but not persisted until "Save
+  // layout" is clicked — dragging/resizing should feel like drawing,
+  // not like triggering a network request (and a reload) every time.
+  const [pendingLayouts, setPendingLayouts] = useState({}) // widgetId -> {w, h, sort_order}
+  const [savingLayout, setSavingLayout] = useState(false)
+  const hasUnsavedLayout = Object.keys(pendingLayouts).length > 0
+
+  useEffect(() => {
+    function handleBeforeUnload(e) {
+      if (hasUnsavedLayout) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedLayout])
   const [collapsed, setCollapsed] = useState(false)
   const [saveFlash, setSaveFlash] = useState(false)
   const gridRef = useRef(null)
@@ -1176,12 +1202,43 @@ export default function DashboardDetail() {
     }
   }
 
-  function handleSaveClick() {
-    setSaveFlash(true)
-    load().finally(() => setTimeout(() => setSaveFlash(false), 1500))
+  async function handleSaveClick() {
+    if (Object.keys(pendingLayouts).length === 0) {
+      // Nothing pending — this is just a manual refresh of computed
+      // widget data (a widget bound to a feature layer someone else
+      // just edited, for instance), not a layout save.
+      setSaveFlash(true)
+      load().finally(() => setTimeout(() => setSaveFlash(false), 1500))
+      return
+    }
+    setSavingLayout(true)
+    setError('')
+    try {
+      await Promise.all(
+        Object.entries(pendingLayouts).map(([widgetId, patch]) =>
+          authedFetch(`/api/widgets/${widgetId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+          })
+        )
+      )
+      setPendingLayouts({})
+      setSaveFlash(true)
+      setTimeout(() => setSaveFlash(false), 1500)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingLayout(false)
+    }
   }
 
-  async function handleReorderWidget(draggedId, targetId) {
+  function handleDiscardLayoutChanges() {
+    setPendingLayouts({})
+    load()
+  }
+
+  function handleReorderWidget(draggedId, targetId) {
     const widgets = dashboard.widgets
     const fromIndex = widgets.findIndex((w) => w.id === draggedId)
     const toIndex = widgets.findIndex((w) => w.id === targetId)
@@ -1191,25 +1248,16 @@ export default function DashboardDetail() {
     const [moved] = reordered.splice(fromIndex, 1)
     reordered.splice(toIndex, 0, moved)
 
-    // Optimistic local update so the grid reflows immediately...
     setDashboard({ ...dashboard, widgets: reordered })
-    // ...then persist every widget whose position actually changed.
-    try {
-      await Promise.all(
-        reordered.map((w, index) =>
-          w.sort_order === index
-            ? null
-            : authedFetch(`/api/widgets/${w.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sort_order: index }),
-              })
-        )
-      )
-    } catch (err) {
-      setError(err.message)
-    }
-    await load()
+    setPendingLayouts((p) => {
+      const next = { ...p }
+      reordered.forEach((w, index) => {
+        if (w.sort_order !== index) {
+          next[w.id] = { ...next[w.id], sort_order: index }
+        }
+      })
+      return next
+    })
   }
 
   function startResize(e, widget) {
@@ -1242,22 +1290,18 @@ export default function DashboardDetail() {
       setResizing({ id: widget.id, w, h })
     }
 
-    async function onUp(upEvent) {
+    function onUp(upEvent) {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
       const { w: nextW, h: nextH } = computeNext(upEvent)
       setResizing(null)
       if (nextW !== startW || nextH !== startH) {
-        try {
-          await authedFetch(`/api/widgets/${widget.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ layout: { ...(widget.layout || {}), w: nextW, h: nextH } }),
-          })
-          await load()
-        } catch (err) {
-          setError(err.message)
-        }
+        const nextLayout = { ...(widget.layout || {}), w: nextW, h: nextH }
+        setDashboard((d) => ({
+          ...d,
+          widgets: d.widgets.map((w) => (w.id === widget.id ? { ...w, layout: nextLayout } : w)),
+        }))
+        setPendingLayouts((p) => ({ ...p, [widget.id]: { ...p[widget.id], layout: nextLayout } }))
       }
     }
 
@@ -1311,9 +1355,26 @@ export default function DashboardDetail() {
             </button>
           ))}
           {canEdit && (
-            <button className="dashboard-sidebar-item" onClick={handleSaveClick}>
+            <button
+              className={`dashboard-sidebar-item${hasUnsavedLayout ? ' has-unsaved-changes' : ''}`}
+              onClick={handleSaveClick}
+              disabled={savingLayout}
+              title={hasUnsavedLayout ? 'Unsaved layout changes' : 'Refresh widget data'}
+            >
               <span className="dashboard-sidebar-icon">{'\u2B07'}</span>
-              {!collapsed && (saveFlash ? 'Saved' : 'Save')}
+              {!collapsed &&
+                (savingLayout ? 'Saving…' : saveFlash ? 'Saved' : hasUnsavedLayout ? 'Save layout*' : 'Save')}
+            </button>
+          )}
+          {canEdit && hasUnsavedLayout && !collapsed && (
+            <button
+              className="dashboard-sidebar-item"
+              onClick={handleDiscardLayoutChanges}
+              disabled={savingLayout}
+              title="Discard unsaved layout changes"
+            >
+              <span className="dashboard-sidebar-icon">{'\u21B6'}</span>
+              Discard
             </button>
           )}
         </div>

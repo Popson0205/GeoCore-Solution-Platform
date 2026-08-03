@@ -91,6 +91,20 @@ export function MapWidget({ features, colorByLayer = {} }) {
     }
   }, [])
 
+  // CSS alone doesn't make Leaflet repaint correctly when its container
+  // is resized (e.g. dragging a dashboard widget's corner handle) —
+  // Leaflet caches its own internal size on first render and needs to be
+  // explicitly told to recalculate, or it leaves blank space / cuts off
+  // tiles instead of actually filling the new container size.
+  useEffect(() => {
+    if (!mapEl.current) return
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize()
+    })
+    observer.observe(mapEl.current)
+    return () => observer.disconnect()
+  }, [])
+
   useEffect(() => {
     if (!layerRef.current || !mapRef.current) return
     layerRef.current.clearLayers()
@@ -151,9 +165,44 @@ export function KpiCard({ value, label, accent = '#0079c1' }) {
   )
 }
 
-export function BarChart({ rows }) {
+export function BarChart({ rows, orientation = 'horizontal' }) {
   if (!rows || rows.length === 0) return <p className="ws-muted">No data yet.</p>
   const max = Math.max(...rows.map((r) => r.value), 1)
+
+  if (orientation === 'vertical') {
+    const barWidth = 40
+    const gap = 24
+    const chartHeight = 180
+    const labelSpace = 34
+    const width = rows.length * (barWidth + gap)
+    return (
+      <svg viewBox={`0 0 ${width} ${chartHeight + labelSpace}`} width="100%" height={chartHeight + labelSpace} role="img">
+        {rows.map((row, i) => {
+          const x = i * (barWidth + gap)
+          const barH = Math.max((row.value / max) * chartHeight, 2)
+          const y = chartHeight - barH
+          return (
+            <g key={row.label}>
+              <text x={x + barWidth / 2} y={y - 6} fontSize="11" fill="var(--ws-text)" textAnchor="middle">
+                {row.value}
+              </text>
+              <rect x={x} y={y} width={barWidth} height={barH} rx={4} fill={COLORS[i % COLORS.length]} />
+              <text
+                x={x + barWidth / 2}
+                y={chartHeight + 16}
+                fontSize="11"
+                fill="var(--ws-text-muted)"
+                textAnchor="middle"
+              >
+                {row.label.length > 9 ? `${row.label.slice(0, 8)}…` : row.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    )
+  }
+
   const barHeight = 26
   const gap = 10
   const height = rows.length * (barHeight + gap)
