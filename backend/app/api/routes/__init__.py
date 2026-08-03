@@ -30,10 +30,11 @@ router.include_router(attachments.router, tags=["attachments"])
 router.include_router(dashboard.router, tags=["dashboard"])
 router.include_router(dashboards.router, tags=["dashboards"])
 router.include_router(reports.router, tags=["reports"])
-# The Admin Portal is a genuinely separate deployment now (see
-# backend/app/main_admin.py and Dockerfile.admin) -- this backend
-# process registers nothing under /admin at all, so there's no route
-# here to accidentally expose even if a role check were ever missed.
+# The Admin Portal is a genuinely separate deployment AND a genuinely
+# separate repository now (github.com/Popson0205/GeoCore-Admin-Portal)
+# -- this backend process registers nothing under /admin at all, and
+# doesn't even contain that code, so there's no route here to
+# accidentally expose even if a role check were ever missed.
 # No get_current_user dependency on this router — access is controlled by
 # the share_token/share_enabled check inside each handler instead.
 router.include_router(public.router, prefix="/public", tags=["public"])

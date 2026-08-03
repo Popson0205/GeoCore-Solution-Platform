@@ -18,7 +18,6 @@ export default defineConfig({
         portal: resolve(__dirname, 'index.html'),
         survey: resolve(__dirname, 'survey.html'),
         dashboard: resolve(__dirname, 'dashboard.html'),
-        admin: resolve(__dirname, 'admin.html'),
       },
     },
   },

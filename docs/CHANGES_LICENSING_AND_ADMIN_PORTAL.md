@@ -1,25 +1,26 @@
 # Licensing & the Admin Portal
 
-## Deployment: the Admin Portal is a separate service from the main platform
+# Licensing & the Admin Portal
 
-The Admin Portal (`backend/app/main_admin.py`, built via `Dockerfile.admin`)
-is a genuinely separate deployment from the customer-facing platform
-(`backend/app/main.py`, built via the root `Dockerfile`) — not just a
-hidden route in the same process. It shares the same database (same
+## Deployment: the Admin Portal is a separate repo and a separate service
+
+The Admin Portal now lives in its own repository —
+[GeoCore-Admin-Portal](https://github.com/Popson0205/GeoCore-Admin-Portal) —
+deployed as a genuinely separate service from the customer-facing
+platform (this repo), not just a hidden route or a second Dockerfile in
+the same codebase. It shares the same database (same
 `DATABASE_URL`/`DB_HOST`/etc — both read/write the same
-Customers/Licenses/Organisations tables) but registers none of the
-customer-facing routes at all, so there's nothing to accidentally expose
-there even if a role check were ever missed.
+Customers/Licenses/Organisations tables) but contains none of the
+customer-facing code at all.
 
-To deploy it (e.g. on Railway): create a **second service** pointed at
-this same repo, with its build set to use `Dockerfile.admin` instead of
-the root `Dockerfile`, and give it its own domain. Set the same
-`DATABASE_URL` (and JWT/`SECRET_KEY`) as the main platform's service so
-logins and data line up — this is the one setting that must match
-exactly between the two. Only the main platform's deployment runs
-`alembic upgrade head` on startup; the admin deployment does not (see
-`main_admin.py`'s docstring), so redeploy the main platform first after
-a migration, then the admin service.
+To deploy it (e.g. on Railway): create a service pointed at the
+`GeoCore-Admin-Portal` repo directly — its own `Dockerfile` needs no
+special path configuration. Set the same `DATABASE_URL` (and JWT/
+`SECRET_KEY`) as this platform's service so logins and data line up —
+this is the one setting that must match exactly between the two. Only
+this platform's deployment runs `alembic upgrade head` on startup; the
+admin repo's deployment does not, so redeploy this one first after a
+migration, then the admin service.
 
 ## One-time setup (do this once, ever)
 
