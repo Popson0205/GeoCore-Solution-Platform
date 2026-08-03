@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps_project import require_active_license
 from backend.app.core import email as email_module
+from backend.app.core.data_import import backfill_location_fields
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.models.customer import Customer
@@ -229,11 +230,19 @@ def public_submit_record(token: str, payload: PublicSubmitRequest, db: Session =
     except Exception as exc:  # pydantic validation error on the nested dict
         raise HTTPException(status_code=422, detail=[f"Invalid location: {exc}"])
 
+    # Fill in latitude/longitude from the submitted geometry BEFORE
+    # validation runs — see routes/records.py's create_record_for_survey
+    # for why this has to happen before, not after.
+    field_data = dict(payload.field_data)
+    backfill_location_fields(
+        field_data, geometry.model_dump(), {f.field_key for f in survey.field_definitions}
+    )
+
     # Exact same authoritative engine as an internal record submission
     # (routes/records.py) — a public/assigned submitter gets no special
     # treatment or reduced validation.
     try:
-        processed_field_data = process_submission(survey, payload.field_data)
+        processed_field_data = process_submission(survey, field_data)
     except FormValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors)
 

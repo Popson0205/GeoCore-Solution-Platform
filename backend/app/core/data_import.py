@@ -62,6 +62,24 @@ def _match_field_key(header: str, field_keys: set[str]) -> str:
     return slug
 
 
+def backfill_location_fields(field_data: dict, geometry: dict | None, field_keys: set[str]) -> None:
+    """Mutates `field_data` in place: if `geometry` is a Point and the
+    survey has real latitude/longitude fields (see routes/surveys.py's
+    _ensure_location_fields), copies the coordinates into them —
+    setdefault so an explicit value from somewhere else is never
+    clobbered. Shared by every path that creates a Record (import, the
+    survey's own form submission, public submission), so location shows
+    up the same way in the Data table no matter how the record arrived.
+    """
+    if not geometry or geometry.get("type") != "Point":
+        return
+    if "latitude" not in field_keys or "longitude" not in field_keys:
+        return
+    lng, lat = geometry["coordinates"]
+    field_data.setdefault("latitude", lat)
+    field_data.setdefault("longitude", lng)
+
+
 def _apply_column_mapping(row: dict, column_mapping: dict[str, str] | None) -> dict:
     """`column_mapping` is {field_key: source_column_name} — the shape the
     mapping wizard produces (see routes/feature_layers.py's preview_import
@@ -239,6 +257,12 @@ def _flat_row_to_import_row(
             continue
         field_data[_match_field_key(key.strip(), field_keys)] = value
 
+    # The coordinates used to build a Point's geometry are also stored as
+    # the survey's own latitude/longitude fields (if it has them), so an
+    # imported record shows them in the Data table the same way a record
+    # submitted through the form does.
+    backfill_location_fields(field_data, geometry, field_keys)
+
     return ImportRow(line_number=line_number, geometry=geometry, field_data=field_data)
 
 
@@ -279,6 +303,7 @@ def parse_geojson(
         field_data = {
             _match_field_key(str(k).strip(), field_keys): v for k, v in properties.items() if v not in (None, "")
         }
+        backfill_location_fields(field_data, geometry, field_keys)
         rows.append(ImportRow(line_number=i, geometry=geometry, field_data=field_data))
     return rows
 
@@ -319,6 +344,7 @@ def parse_json(
                 for k, v in mapped_field_data.items()
                 if v not in (None, "")
             }
+            backfill_location_fields(field_data, geometry, field_keys)
             rows.append(ImportRow(line_number=i, geometry=geometry, field_data=field_data))
             continue
 

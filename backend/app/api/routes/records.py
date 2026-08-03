@@ -14,7 +14,7 @@ from backend.app.api.deps_project import (
     require_survey_role,
 )
 from backend.app.core.audit import log_action
-from backend.app.core.data_import import ImportError_, parse_import_file
+from backend.app.core.data_import import ImportError_, backfill_location_fields, parse_import_file
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.core.rate_limit import get_client_ip
@@ -55,12 +55,23 @@ def create_record_for_survey(
     survey, _ = require_survey_role(db, survey_id, current_user.id, DATA_COLLECTOR)
     require_active_license(db, survey.organisation_id)
 
+    # Fill in latitude/longitude from the submitted geometry BEFORE
+    # validation runs — these are marked required (see
+    # _ensure_location_fields), and someone filling out the form only
+    # interacts with the map click, never typing coordinates directly.
+    # Backfilling after validation would be too late: the required-field
+    # check would already have rejected the submission.
+    field_data = dict(payload.field_data)
+    backfill_location_fields(
+        field_data, payload.geometry.model_dump(), {f.field_key for f in survey.field_definitions}
+    )
+
     # Authoritative pass: evaluates skip logic, recomputes calculated
     # fields server-side, and validates — never persist raw client
     # field_data directly (blueprint section 12 & 19: validation can't
     # live only in the frontend).
     try:
-        processed_field_data = process_submission(survey, payload.field_data)
+        processed_field_data = process_submission(survey, field_data)
     except FormValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors)
 

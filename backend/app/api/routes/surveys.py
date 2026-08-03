@@ -176,6 +176,85 @@ def _replace_form(
 # ---------------------------------------------------------------------------
 
 
+def _ensure_location_fields(db: Session, survey: Survey) -> None:
+    """This is a geospatial platform — every point-geometry Survey gets
+    explicit Latitude/Longitude fields automatically, so location is a
+    real, visible field (shown in the Data table, in exports, in the
+    form itself) rather than only living inside an internal geometry
+    column nobody can see or map a CSV column to. This is what
+    guarantees a data import always has an unambiguous column to match
+    against for location — see core/data_import.py's handling of these
+    two field_keys specifically.
+
+    Line/polygon layers need more than one coordinate pair, so this only
+    applies to "point" geometry. Idempotent: does nothing if the survey
+    already has fields with these exact keys (a template or an XLSForm
+    import may already define them), and safe to call again after a
+    geometry_type change (see update_survey) without duplicating fields.
+    """
+    if survey.geometry_type != "point":
+        return
+
+    existing_keys = {
+        row[0]
+        for row in db.query(FieldDefinition.field_key).filter(FieldDefinition.survey_id == survey.id).all()
+    }
+    if "latitude" in existing_keys and "longitude" in existing_keys:
+        return
+
+    section = (
+        db.query(FormSection)
+        .filter(FormSection.survey_id == survey.id, FormSection.section_key == "location")
+        .first()
+    )
+    if not section:
+        max_section_order = (
+            db.query(func.max(FormSection.sort_order)).filter(FormSection.survey_id == survey.id).scalar()
+        )
+        section = FormSection(
+            survey_id=survey.id,
+            title="Location",
+            section_key="location",
+            sort_order=(max_section_order if max_section_order is not None else -1) + 1,
+        )
+        db.add(section)
+        db.flush()
+
+    max_field_order = (
+        db.query(func.max(FieldDefinition.sort_order))
+        .filter(FieldDefinition.survey_id == survey.id, FieldDefinition.section_id == section.id)
+        .scalar()
+    )
+    next_order = (max_field_order if max_field_order is not None else -1) + 1
+
+    if "latitude" not in existing_keys:
+        db.add(
+            FieldDefinition(
+                survey_id=survey.id,
+                section_id=section.id,
+                label="Latitude",
+                field_key="latitude",
+                field_type="number",
+                is_required=True,
+                sort_order=next_order,
+            )
+        )
+        next_order += 1
+    if "longitude" not in existing_keys:
+        db.add(
+            FieldDefinition(
+                survey_id=survey.id,
+                section_id=section.id,
+                label="Longitude",
+                field_key="longitude",
+                field_type="number",
+                is_required=True,
+                sort_order=next_order,
+            )
+        )
+    db.flush()
+
+
 def _create_feature_layer_for_survey(db: Session, survey: Survey) -> FeatureLayer:
     """Every Survey gets exactly one FeatureLayer, created in the same
     transaction — the way ArcGIS Survey123 creates a Form item and a
@@ -230,6 +309,8 @@ def create_survey(
     # PUT /surveys/{id}/form.
     if payload.sections or payload.fields:
         _replace_form(db, survey, payload.sections, payload.fields)
+
+    _ensure_location_fields(db, survey)
 
     db.commit()
     return _survey_with_form(db, survey.id)
@@ -302,6 +383,8 @@ def update_survey(
         survey.status = payload.status
     if payload.geometry_type is not None:
         survey.geometry_type = payload.geometry_type
+        db.flush()
+        _ensure_location_fields(db, survey)
     if payload.color is not None:
         survey.color = payload.color
     if payload.visibility is not None:
@@ -566,6 +649,7 @@ async def import_xlsform(
     _create_feature_layer_for_survey(db, survey)
 
     _replace_form(db, survey, definition.sections, definition.fields)
+    _ensure_location_fields(db, survey)
 
     db.commit()
     return XLSFormImportResult(survey=_survey_with_form(db, survey.id), warnings=parsed.warnings)
