@@ -153,7 +153,7 @@ def generate_report_for_organisation(
     """`include_ai=true` asks GeoAI to write a narrative section — an
     actual explanation of what the data shows (referencing real survey
     fields and dashboard chart values), not just the counts in `summary`.
-    Requires ANTHROPIC_API_KEY to be configured on this deployment; if
+    Requires GEMINI_API_KEY to be configured on this deployment; if
     it's not, this 503s with a clear message rather than silently
     returning a report without the narrative the caller explicitly asked
     for.
@@ -218,7 +218,7 @@ def geoai_status(
     get_organisation_for_member(db, organisation_id, current_user.id)
     from backend.app.core.config import settings
 
-    return {"available": bool(settings.anthropic_api_key)}
+    return {"available": bool(settings.gemini_api_key)}
 
 
 # ---------------------------------------------------------------------------

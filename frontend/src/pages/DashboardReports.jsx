@@ -54,7 +54,7 @@ function GenerateReportPanel({ orgId, onGenerated }) {
       {!geoaiAvailable && (
         <p className="builder-hint" style={{ marginBottom: 12 }}>
           GeoAI isn't configured on this deployment yet — an administrator needs to set
-          ANTHROPIC_API_KEY.
+          GEMINI_API_KEY.
         </p>
       )}
       <button className="btn-primary" onClick={handleGenerate} disabled={generating}>

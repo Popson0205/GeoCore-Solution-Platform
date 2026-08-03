@@ -1,9 +1,15 @@
 """GeoAI — turns a report's underlying data (survey structure, dashboard
 widgets and their live computed values, and summary stats) into a written
 narrative, instead of a report being just raw counts. This is genuinely
-optional: without an ANTHROPIC_API_KEY configured (see core/config.py),
+optional: without a GEMINI_API_KEY configured (see core/config.py),
 `generate_narrative` returns None and report generation proceeds exactly
 as it did before GeoAI existed — nothing else depends on this succeeding.
+
+Uses Google's Gemini API (free tier: no credit card, ~1,500 requests/day
+on the default model as of this writing) rather than a paid provider —
+this feature doesn't need frontier-tier quality, and it's triggered
+per-report rather than per-request, so the free tier's daily cap is not
+a realistic constraint here.
 
 This module has no database access of its own on purpose — the caller
 (routes/reports.py) assembles the context dict from data it already has
@@ -80,19 +86,22 @@ def generate_narrative(context: dict) -> str:
     generation should never hard-fail just because the narrative couldn't
     be produced this time.
     """
-    if not settings.anthropic_api_key:
-        raise GeoAIUnavailable("No ANTHROPIC_API_KEY configured for this deployment.")
+    if not settings.gemini_api_key:
+        raise GeoAIUnavailable("No GEMINI_API_KEY configured for this deployment.")
 
     try:
-        import anthropic
+        from google import genai
+        from google.genai.types import GenerateContentConfig
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        response = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1200,
-            messages=[{"role": "user", "content": _build_prompt(context)}],
+        client = genai.Client(api_key=settings.gemini_api_key)
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=_build_prompt(context),
+            config=GenerateContentConfig(max_output_tokens=1200),
         )
-        text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
+        text = response.text
+        if not text:
+            raise GeoAIUnavailable("Gemini returned an empty response.")
         return text.strip()
     except GeoAIUnavailable:
         raise

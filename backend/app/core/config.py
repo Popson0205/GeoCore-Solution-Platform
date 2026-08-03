@@ -41,8 +41,10 @@ class Settings(BaseSettings):
     # GeoAI — optional narrative analysis woven into generated reports (see
     # core/geoai.py). Reports work fine with this unset; the "Generate with
     # GeoAI insights" option is just unavailable until a key is configured.
-    anthropic_api_key: str | None = None
-    anthropic_model: str = "claude-sonnet-5"
+    # Uses Google's Gemini API (free tier, no credit card) rather than a
+    # paid provider — see core/geoai.py's module docstring for why.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
 
     # Licensing (see core/licensing.py) — this is the Ed25519 PUBLIC key,
     # safe to bake into every deployment including on-prem/air-gapped

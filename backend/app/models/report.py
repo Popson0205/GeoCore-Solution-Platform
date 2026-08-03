@@ -34,7 +34,7 @@ class Report(Base):
     # the data actually shows — survey structure, dashboard charts, and
     # field-level patterns — not just the raw counts in `summary`. NULL
     # when generated without the "GeoAI insights" option, or when no
-    # ANTHROPIC_API_KEY is configured.
+    # GEMINI_API_KEY is configured.
     ai_summary = Column(Text, nullable=True)
     generated_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
