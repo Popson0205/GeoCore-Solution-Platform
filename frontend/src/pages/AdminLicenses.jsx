@@ -103,7 +103,7 @@ export default function AdminLicenses() {
                 </div>
               </div>
               <span className={`pill license-status-pill status-${lic.status}`}>{lic.status}</span>
-              <Link to={`/admin/customers/${lic.customer_id}`} className="btn-ghost">
+              <Link to={`/customers/${lic.customer_id}`} className="btn-ghost">
                 Customer
               </Link>
               {lic.status !== 'revoked' && (

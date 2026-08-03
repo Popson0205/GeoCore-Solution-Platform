@@ -1,5 +1,5 @@
 import React from 'react'
-import { Navigate, NavLink, Outlet } from 'react-router-dom'
+import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const TABS = [
@@ -16,7 +16,8 @@ const TABS = [
  * and can assume they're already authorized.
  */
 export default function AdminLayout() {
-  const { status, user } = useAuth()
+  const { status, user, logout } = useAuth()
+  const navigate = useNavigate()
 
   if (status === 'checking') {
     return (
@@ -27,7 +28,30 @@ export default function AdminLayout() {
     )
   }
   if (status === 'guest') return <Navigate to="/login" replace />
-  if (user && !user.is_platform_admin) return <Navigate to="/workspace" replace />
+  if (user && !user.is_platform_admin) {
+    return (
+      <div className="ws-page">
+        <div className="empty-state">
+          <p>You don't have access to this.</p>
+          <span>
+            Signed in as {user.email}, which isn't a platform admin account. If this should be
+            one, it's granted directly in the database — see
+            docs/CHANGES_LICENSING_AND_ADMIN_PORTAL.md.
+          </span>
+        </div>
+        <button
+          className="btn-secondary"
+          style={{ marginTop: 16 }}
+          onClick={() => {
+            logout()
+            navigate('/login')
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="ws-page ws-page-wide" style={{ paddingTop: 24 }}>

@@ -12,12 +12,6 @@ import OrganisationSettings from './pages/OrganisationSettings'
 import OrganisationDetail from './pages/OrganisationDetail'
 import OrganisationOverview from './pages/OrganisationOverview'
 import Content from './pages/Content'
-import AdminLayout from './pages/AdminLayout'
-import AdminOverview from './pages/AdminOverview'
-import AdminCustomers from './pages/AdminCustomers'
-import AdminCustomerDetail from './pages/AdminCustomerDetail'
-import AdminLicenses from './pages/AdminLicenses'
-import AdminOrganisations from './pages/AdminOrganisations'
 import SurveyNew from './pages/SurveyNew'
 import SurveyDetail from './pages/SurveyDetail'
 import SurveyOverview from './pages/SurveyOverview'
@@ -74,16 +68,6 @@ export default function App() {
             organisation_id/project_id from the dashboard itself now,
             so it doesn't need an ancestor route to hand those down. */}
         <Route path="/design/dashboards/:dashboardId" element={<DashboardDetail />} />
-
-        {/* Admin Portal — hidden (no nav link anywhere), gated by
-            is_platform_admin. See AdminLayout.jsx's docstring. */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminOverview />} />
-          <Route path="customers" element={<AdminCustomers />} />
-          <Route path="customers/:customerId" element={<AdminCustomerDetail />} />
-          <Route path="licenses" element={<AdminLicenses />} />
-          <Route path="organisations" element={<AdminOrganisations />} />
-        </Route>
 
         {/* App Launcher destinations — branded entry points into the same
             underlying project data, the way Survey123/Dashboards feel like

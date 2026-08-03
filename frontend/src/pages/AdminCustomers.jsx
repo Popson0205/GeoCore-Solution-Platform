@@ -139,7 +139,7 @@ export default function AdminCustomers() {
                   </div>
                 </div>
                 <span className={`pill admin-customer-status-pill status-${c.status}`}>{c.status}</span>
-                <Link to={`/admin/customers/${c.id}`} className="btn-ghost">
+                <Link to={`/customers/${c.id}`} className="btn-ghost">
                   Open
                 </Link>
               </li>

@@ -266,7 +266,7 @@ export default function AdminCustomerDetail() {
 
   return (
     <div>
-      <Link to="/admin/customers" className="ws-breadcrumb">
+      <Link to="/customers" className="ws-breadcrumb">
         &larr; Customers
       </Link>
 

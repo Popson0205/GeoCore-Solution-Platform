@@ -1,5 +1,26 @@
 # Licensing & the Admin Portal
 
+## Deployment: the Admin Portal is a separate service from the main platform
+
+The Admin Portal (`backend/app/main_admin.py`, built via `Dockerfile.admin`)
+is a genuinely separate deployment from the customer-facing platform
+(`backend/app/main.py`, built via the root `Dockerfile`) — not just a
+hidden route in the same process. It shares the same database (same
+`DATABASE_URL`/`DB_HOST`/etc — both read/write the same
+Customers/Licenses/Organisations tables) but registers none of the
+customer-facing routes at all, so there's nothing to accidentally expose
+there even if a role check were ever missed.
+
+To deploy it (e.g. on Railway): create a **second service** pointed at
+this same repo, with its build set to use `Dockerfile.admin` instead of
+the root `Dockerfile`, and give it its own domain. Set the same
+`DATABASE_URL` (and JWT/`SECRET_KEY`) as the main platform's service so
+logins and data line up — this is the one setting that must match
+exactly between the two. Only the main platform's deployment runs
+`alembic upgrade head` on startup; the admin deployment does not (see
+`main_admin.py`'s docstring), so redeploy the main platform first after
+a migration, then the admin service.
+
 ## One-time setup (do this once, ever)
 
 1. Generate your vendor keypair:
@@ -16,8 +37,8 @@
    LICENSE_PUBLIC_KEY=<the printed value>
    ```
 
-3. Set the private key **only** on your own team's Admin Portal instance
-   (never on a customer deployment):
+3. Set the private key **only** on the Admin Portal's own deployment
+   (never on the main platform, and never on a customer deployment):
    ```
    LICENSE_PRIVATE_KEY="$(cat secrets/license_private_key.pem)"
    ```
@@ -30,7 +51,7 @@
    UPDATE users SET is_platform_admin = true WHERE email = 'you@geocore.example';
    ```
 
-5. (Optional) Set up email delivery:
+5. (Optional) Set up email delivery on the Admin Portal's deployment:
    ```
    RESEND_API_KEY=re_xxx
    RESEND_FROM_EMAIL=licensing@yourdomain.com
@@ -40,8 +61,9 @@
 
 ## Day-to-day: issuing a license after a manually-invoiced payment
 
-1. Go to `/admin/customers` (hidden — no nav link, only reachable if
-   you know the URL and your account is a platform admin).
+1. Go to the Admin Portal's own domain (a completely separate URL from
+   the main platform — bookmark it, since there's no link to it from
+   anywhere in the customer-facing product on purpose).
 2. Create the customer if they're new (gets an auto-assigned number like
    `GC-000042`).
 3. Open the customer, fill in the "Issue a license" form: plan, tier,
