@@ -39,7 +39,7 @@ function AdminStandaloneApp() {
     <AuthProvider>
       <Routes>
         <Route element={<PublicLayout />}>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<Login showRegisterLink={false} />} />
         </Route>
 
         <Route path="/" element={<AdminLayout />}>

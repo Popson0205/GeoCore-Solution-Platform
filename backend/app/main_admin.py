@@ -9,11 +9,12 @@ DATABASE_URL — see the deployment notes at the bottom of this file) via
 the same core.database/models modules, since the whole point of the
 Admin Portal is managing Customers/Licenses/Organisations that live in
 that one shared schema. What's NOT shared is the HTTP surface: this
-process only ever registers health, auth (so an admin can log in at
-all), and admin — every customer-facing route (surveys, records,
-dashboards, public links, ...) simply does not exist in this process,
-so there's nothing to accidentally expose here even if a route-level
-check were ever missed.
+process only ever registers health, admin_auth (a login endpoint that
+rejects anyone who isn't a platform admin, not the same /login+/register
+the main platform uses — see admin_auth.py), and admin — every
+customer-facing route (surveys, records, dashboards, public links, ...)
+simply does not exist in this process, so there's nothing to accidentally
+expose here even if a route-level check were ever missed.
 
 Only ONE of the two deployments should run `alembic upgrade head` on
 startup — see the lifespan function below. This one deliberately does
@@ -33,7 +34,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import models  # noqa: F401  (registers models on Base.metadata)
-from backend.app.api.routes import admin, auth, health
+from backend.app.api.routes import admin, admin_auth, health
 from backend.app.core.config import settings
 
 logger = logging.getLogger("geocore.admin.startup")
@@ -68,7 +69,7 @@ app.add_middleware(
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
-api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(admin_auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(api_router, prefix="/api", tags=["api"])
 

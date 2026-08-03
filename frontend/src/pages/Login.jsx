@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-export default function Login() {
+export default function Login({ showRegisterLink = true }) {
   const { status, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -73,9 +73,11 @@ export default function Login() {
 
         {error && <p className={error.includes('created') ? 'hint hint-ok' : 'hint'}>{error}</p>}
 
-        <p className="auth-switch">
-          Need an account? <Link to="/register">Register</Link>
-        </p>
+        {showRegisterLink && (
+          <p className="auth-switch">
+            Need an account? <Link to="/register">Register</Link>
+          </p>
+        )}
       </form>
     </main>
   )
