@@ -35,6 +35,7 @@ import DashboardDetail from './pages/DashboardDetail'
 import ProjectReports from './pages/ProjectReports'
 import PublicShare from './pages/PublicShare'
 import PublicFeatureLayer from './pages/PublicFeatureLayer'
+import PublicDashboard from './pages/PublicDashboard'
 import PublicSubmit from './pages/PublicSubmit'
 import SurveyApp from './pages/SurveyApp'
 import DashboardApp from './pages/DashboardApp'
@@ -56,6 +57,7 @@ export default function App() {
             deliberately outside WorkspaceLayout's auth gate. */}
         <Route path="/share/:token" element={<PublicShare />} />
         <Route path="/layers/:token" element={<PublicFeatureLayer />} />
+        <Route path="/dashboards/shared/:token" element={<PublicDashboard />} />
         {/* Unauthenticated data-collection form for a survey's
             submission link — a field officer's entire world. */}
         <Route path="/submit/:token" element={<PublicSubmit />} />

@@ -771,6 +771,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: 40px;
   gap: 14px;
 }
 .widget-card {

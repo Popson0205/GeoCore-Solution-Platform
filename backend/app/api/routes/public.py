@@ -16,6 +16,7 @@ the same pattern on the authenticated side.
 """
 
 import uuid
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -24,10 +25,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from backend.app.api.deps_project import require_active_license
 from backend.app.core import email as email_module
+from backend.app.core.dashboard_engine import apply_time_filter, compute_widget
 from backend.app.core.data_import import backfill_location_fields
 from backend.app.core.database import get_db
 from backend.app.core.form_engine import FormValidationError, process_submission
 from backend.app.models.customer import Customer
+from backend.app.models.dashboard import Dashboard
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
 from backend.app.models.record import Record
@@ -35,6 +38,7 @@ from backend.app.models.report import Report
 from backend.app.models.survey import FormSection, Survey, SubmissionAssignee
 from backend.app.schemas.public_purchase import PurchaseRequestCreate, PurchaseRequestReceipt
 from backend.app.schemas.feature_layer import FeatureLayerOut
+from backend.app.schemas.dashboards import DashboardOut
 from backend.app.schemas.project import ProjectOut
 from backend.app.schemas.record import Geometry, RecordOut
 from backend.app.schemas.report import ReportOut
@@ -134,6 +138,58 @@ def public_feature_layer_records(token: str, db: Session = Depends(get_db)):
         .order_by(Record.created_at.desc())
         .all()
     )
+
+
+def _get_shared_dashboard(db: Session, token: str) -> Dashboard:
+    dashboard = (
+        db.query(Dashboard)
+        .filter(
+            Dashboard.share_token == token,
+            Dashboard.visibility == "public",
+            Dashboard.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="This share link is invalid or disabled")
+    return dashboard
+
+
+@router.get("/dashboards/{token}", response_model=DashboardOut)
+def public_dashboard(token: str, db: Session = Depends(get_db)):
+    return _get_shared_dashboard(db, token)
+
+
+@router.get("/dashboards/{token}/data")
+def public_dashboard_data(token: str, db: Session = Depends(get_db)):
+    """Same computation as the authenticated GET /dashboards/{id}/data
+    (routes/dashboards.py) — every widget's current data in one call —
+    just reached via the share token instead of a bearer token.
+    """
+    dashboard = _get_shared_dashboard(db, token)
+
+    referenced_ids = {
+        w.config.get("feature_layer_id") for w in dashboard.widgets if w.config.get("feature_layer_id")
+    }
+    needs_org_records = any(
+        w.widget_type == "map" and not w.config.get("feature_layer_id") for w in dashboard.widgets
+    )
+
+    records_by_layer: dict = defaultdict(list)
+    if referenced_ids:
+        for r in db.query(Record).filter(Record.feature_layer_id.in_(referenced_ids)).all():
+            records_by_layer[str(r.feature_layer_id)].append(r)
+    if needs_org_records:
+        for r in db.query(Record).filter(Record.organisation_id == dashboard.organisation_id).all():
+            records_by_layer[str(r.feature_layer_id)].append(r)
+
+    if dashboard.time_filter:
+        records_by_layer = {
+            layer_id: apply_time_filter(recs, dashboard.time_filter)
+            for layer_id, recs in records_by_layer.items()
+        }
+
+    return {str(w.id): compute_widget(w, records_by_layer) for w in dashboard.widgets}
 
 
 @router.get("/{token}/reports", response_model=list[ReportOut])

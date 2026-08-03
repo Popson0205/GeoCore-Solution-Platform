@@ -128,6 +128,17 @@ class DashboardOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DashboardShareStatus(BaseModel):
+    """The public-link half of visibility="public" — mirrors
+    schemas.feature_layer.FeatureLayerShareStatus. The token itself is a
+    credential and only ever appears here, never in DashboardOut.
+    """
+
+    enabled: bool
+    token: Optional[str] = None
+    public_path: Optional[str] = None
+
+
 class DashboardSummaryOut(BaseModel):
     """Lighter-weight shape for listing dashboards without every widget's
     full config.

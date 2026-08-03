@@ -1,4 +1,5 @@
 import logging
+import secrets
 import uuid
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -27,6 +28,7 @@ from backend.app.models.user import User
 from backend.app.schemas.dashboards import (
     DashboardCreate,
     DashboardOut,
+    DashboardShareStatus,
     DashboardSummaryOut,
     DashboardUpdate,
     WidgetCreate,
@@ -257,6 +259,8 @@ def update_dashboard(
     if payload.visibility is not None:
         old_visibility = dashboard.visibility
         dashboard.visibility = payload.visibility
+        if payload.visibility == "public" and not dashboard.share_token:
+            dashboard.share_token = secrets.token_urlsafe(24)
         if old_visibility != payload.visibility:
             log_action(
                 db,
@@ -319,6 +323,44 @@ def permanently_delete_dashboard(
     db.delete(dashboard)
     db.commit()
     return None
+
+
+@router.get("/dashboards/{dashboard_id}/share", response_model=DashboardShareStatus)
+def get_dashboard_share_status(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
+    enabled = dashboard.visibility == "public"
+    return DashboardShareStatus(
+        enabled=enabled,
+        token=dashboard.share_token if enabled else None,
+        public_path=f"/dashboards/shared/{dashboard.share_token}" if (enabled and dashboard.share_token) else None,
+    )
+
+
+@router.post("/dashboards/{dashboard_id}/share/rotate", response_model=DashboardShareStatus)
+def rotate_dashboard_share_link(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Invalidates the current public link and issues a new one — only
+    meaningful once visibility is already "public" (set via
+    update_dashboard, which is what actually generates the first token).
+    """
+    dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
+    if dashboard.visibility != "public":
+        raise HTTPException(
+            status_code=422, detail="Set this dashboard's visibility to Public before rotating its link."
+        )
+    dashboard.share_token = secrets.token_urlsafe(24)
+    db.commit()
+    db.refresh(dashboard)
+    return DashboardShareStatus(
+        enabled=True, token=dashboard.share_token, public_path=f"/dashboards/shared/{dashboard.share_token}"
+    )
 
 
 def _validate_widget_feature_layer(db: Session, dashboard: Dashboard, config: dict) -> None:

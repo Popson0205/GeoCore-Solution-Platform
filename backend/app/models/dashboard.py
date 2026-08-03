@@ -49,6 +49,11 @@ class Dashboard(Base):
     # after deleted_at unless restored first. See core/trash.py and
     # routes/dashboards.py's trash_dashboard/restore_dashboard.
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    # Generated automatically the moment visibility becomes "public" (see
+    # routes/dashboards.py's update_dashboard) — mirrors
+    # models/feature_layer.py's share_token. The actual public viewer is
+    # GET /public/dashboards/{token}.
+    share_token = Column(String, unique=True, nullable=True, index=True)
     # {"preset": "all_time" | "last_7_days" | "last_30_days" | "last_90_days"
     # | "last_year" | "custom", "start": "2026-01-01", "end": "2026-02-01"}
     # (start/end only meaningful for "custom") — a dashboard-wide filter

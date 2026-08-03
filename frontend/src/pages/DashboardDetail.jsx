@@ -610,13 +610,29 @@ const SIDEBAR_ITEMS = [
 const DASHBOARD_VISIBILITY_OPTIONS = [
   { value: 'private', label: 'Private', desc: 'Only you (and Administrators) can see this dashboard.' },
   { value: 'organization', label: 'Organization', desc: 'Everyone in this organisation can see it.' },
-  { value: 'public', label: 'Public', desc: 'Reserved for a future viewer — not yet reachable by a link.' },
+  { value: 'public', label: 'Public', desc: 'Anyone with the link can view it — no login needed.' },
 ]
 
 function VisibilitySettingsPanel({ dashboard, canEdit, onSaveDetails }) {
+  const { authedFetch } = useAuth()
   const [visibility, setVisibility] = useState(dashboard.visibility || 'organization')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [shareStatus, setShareStatus] = useState(null)
+  const [copied, setCopied] = useState(false)
+
+  async function loadShare() {
+    try {
+      setShareStatus(await authedFetch(`/api/dashboards/${dashboard.id}/share`))
+    } catch {
+      // non-fatal — the panel just won't show a link
+    }
+  }
+
+  useEffect(() => {
+    loadShare()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboard.id, visibility])
 
   async function handleChange(next) {
     setVisibility(next)
@@ -629,6 +645,22 @@ function VisibilitySettingsPanel({ dashboard, canEdit, onSaveDetails }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleRotate() {
+    try {
+      setShareStatus(await authedFetch(`/api/dashboards/${dashboard.id}/share/rotate`, { method: 'POST' }))
+      setCopied(false)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  function copyLink() {
+    if (!shareStatus?.public_path) return
+    navigator.clipboard?.writeText(`${window.location.origin}${shareStatus.public_path}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -655,6 +687,19 @@ function VisibilitySettingsPanel({ dashboard, canEdit, onSaveDetails }) {
               <span className="plan-choice-desc">{opt.desc}</span>
             </label>
           ))}
+        </div>
+      )}
+      {visibility === 'public' && shareStatus?.public_path && (
+        <div className="form-row" style={{ marginTop: 14 }}>
+          <input readOnly value={`${window.location.origin}${shareStatus.public_path}`} style={{ flex: 1 }} />
+          <button className="btn-secondary" onClick={copyLink}>
+            {copied ? 'Copied!' : 'Copy link'}
+          </button>
+          {canEdit && (
+            <button className="btn-ghost" onClick={handleRotate}>
+              Rotate link
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1173,29 +1218,41 @@ export default function DashboardDetail() {
     const grid = gridRef.current
     if (!grid) return
     const colWidth = grid.getBoundingClientRect().width / 12
+    // Must match .dashboard-grid's grid-auto-rows in styles.css — this
+    // is what translates a vertical drag distance into row units.
+    const rowHeightPx = 40
     const startX = e.clientX
+    const startY = e.clientY
     const startW = widget.layout?.w || 4
+    const startH = widget.layout?.h || 4
 
-    setResizing({ id: widget.id, w: startW })
+    setResizing({ id: widget.id, w: startW, h: startH })
+
+    function computeNext(moveEvent) {
+      const deltaCols = Math.round((moveEvent.clientX - startX) / colWidth)
+      const deltaRows = Math.round((moveEvent.clientY - startY) / rowHeightPx)
+      return {
+        w: Math.min(12, Math.max(2, startW + deltaCols)),
+        h: Math.max(2, startH + deltaRows),
+      }
+    }
 
     function onMove(moveEvent) {
-      const deltaCols = Math.round((moveEvent.clientX - startX) / colWidth)
-      const nextW = Math.min(12, Math.max(2, startW + deltaCols))
-      setResizing({ id: widget.id, w: nextW })
+      const { w, h } = computeNext(moveEvent)
+      setResizing({ id: widget.id, w, h })
     }
 
     async function onUp(upEvent) {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
-      const deltaCols = Math.round((upEvent.clientX - startX) / colWidth)
-      const nextW = Math.min(12, Math.max(2, startW + deltaCols))
+      const { w: nextW, h: nextH } = computeNext(upEvent)
       setResizing(null)
-      if (nextW !== startW) {
+      if (nextW !== startW || nextH !== startH) {
         try {
           await authedFetch(`/api/widgets/${widget.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ layout: { ...(widget.layout || {}), w: nextW } }),
+            body: JSON.stringify({ layout: { ...(widget.layout || {}), w: nextW, h: nextH } }),
           })
           await load()
         } catch (err) {
@@ -1356,11 +1413,16 @@ export default function DashboardDetail() {
           <div className="dashboard-grid" ref={gridRef} style={{ flex: 1, margin: 0 }}>
             {dashboard.widgets.filter((w) => w.layout?.region !== 'sidebar').map((widget) => {
               const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
+              const liveHeight = resizing?.id === widget.id ? resizing.h : widget.layout?.h || 4
               return (
                 <div
                   key={widget.id}
                   className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
-                  style={{ gridColumn: `span ${Math.min(liveWidth, 12)}`, position: 'relative' }}
+                  style={{
+                    gridColumn: `span ${Math.min(liveWidth, 12)}`,
+                    gridRow: `span ${Math.max(liveHeight, 2)}`,
+                    position: 'relative',
+                  }}
                   draggable={canEdit}
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move'
