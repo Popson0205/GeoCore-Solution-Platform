@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -17,7 +18,7 @@ from backend.app.core.audit import log_action
 from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.dashboard_engine import apply_time_filter, compute_widget
 from backend.app.core.database import get_db
-from backend.app.core.roles import ANALYST
+from backend.app.core.roles import ANALYST, OWNER
 from backend.app.models.dashboard import Dashboard, DashboardWidget
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
@@ -51,6 +52,8 @@ def _get_dashboard(db: Session, dashboard_id: uuid.UUID) -> Dashboard:
 
 def _get_dashboard_for_member(db: Session, dashboard_id: uuid.UUID, user: User) -> Dashboard:
     dashboard = _get_dashboard(db, dashboard_id)
+    if dashboard.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
     # Resolved through organisation_id, not the now-optional project_id
     # folder tag.
     membership = require_org_role(db, dashboard.organisation_id, user.id, "viewer")
@@ -121,7 +124,7 @@ def list_dashboards_for_organisation(
     dashboards = (
         db.query(Dashboard)
         .options(selectinload(Dashboard.widgets))
-        .filter(Dashboard.organisation_id == organisation_id)
+        .filter(Dashboard.organisation_id == organisation_id, Dashboard.deleted_at.is_(None))
         .order_by(Dashboard.created_at)
         .all()
     )
@@ -273,12 +276,46 @@ def update_dashboard(
 
 
 @router.delete("/dashboards/{dashboard_id}", status_code=204)
-def delete_dashboard(
+def trash_dashboard(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Moves a dashboard to the trash — fully restorable for 7 days, then
+    permanently purged (see core/trash.py) — rather than deleting it
+    immediately.
+    """
+    dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
+    dashboard.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return None
+
+
+@router.post("/dashboards/{dashboard_id}/restore", response_model=DashboardOut)
+def restore_dashboard(
     dashboard_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, ANALYST)
+    dashboard.deleted_at = None
+    db.commit()
+    db.refresh(dashboard)
+    return dashboard
+
+
+@router.delete("/dashboards/{dashboard_id}/permanent", status_code=204)
+def permanently_delete_dashboard(
+    dashboard_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Skips the 7-day trash window — immediately and irreversibly
+    deletes this dashboard and its widgets. Reserved for Owner only
+    (stricter than trashing, which is Analyst+), since there's no undo
+    past this point.
+    """
+    dashboard = _get_dashboard_for_role(db, dashboard_id, current_user, OWNER)
     db.delete(dashboard)
     db.commit()
     return None

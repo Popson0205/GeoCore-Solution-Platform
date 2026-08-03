@@ -233,6 +233,7 @@ function DragHandle(props) {
 function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) {
   const [expanded, setExpanded] = React.useState(false)
   const key = slugifyKey(field.label)
+  const isLocationField = key === 'latitude' || key === 'longitude'
   const hasOptions = ['single_select', 'multi_select'].includes(field.field_type)
   const isNumberish = field.field_type === 'number'
   const isTextish = ['text', 'long_text'].includes(field.field_type)
@@ -281,7 +282,13 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
         <button type="button" className="btn-ghost" onClick={() => setExpanded(!expanded)} title="Skip logic, calculation, validation">
           {expanded ? '▲ Less' : '⚙ Rules'}
         </button>
-        <button type="button" className="btn-ghost" onClick={onRemove}>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={onRemove}
+          disabled={isLocationField}
+          title={isLocationField ? "This survey collects location — Latitude/Longitude can't be removed" : undefined}
+        >
           Remove
         </button>
       </div>

@@ -67,6 +67,13 @@ class Survey(Base):
     # viewing/opening the survey). See core/visibility.py for the shared
     # enforcement helper used across Survey/FeatureLayer/Dashboard.
     visibility = Column(String, default="organization", nullable=False)
+    # NULL = active. Set = in the trash (see routes/surveys.py's
+    # trash_survey/restore_survey) -- distinct from status="archived",
+    # which is a permanent "retired but never deleted" state that
+    # predates this. A trashed Survey (and its twin FeatureLayer, and
+    # every Record under it) is permanently purged 7 days after
+    # deleted_at unless restored first -- see core/trash.py.
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

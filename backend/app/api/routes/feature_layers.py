@@ -71,7 +71,8 @@ def list_feature_layers(
     membership = require_org_role(db, organisation_id, current_user.id, VIEWER)
     layers = (
         db.query(FeatureLayer)
-        .filter(FeatureLayer.organisation_id == organisation_id)
+        .join(Survey, Survey.id == FeatureLayer.survey_id)
+        .filter(FeatureLayer.organisation_id == organisation_id, Survey.deleted_at.is_(None))
         .order_by(FeatureLayer.created_at.desc())
         .all()
     )
@@ -135,6 +136,8 @@ def get_feature_layer(
     current_user: User = Depends(get_current_user),
 ):
     layer, membership = require_feature_layer_role(db, feature_layer_id, current_user.id, VIEWER)
+    if layer.survey and layer.survey.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Feature layer not found")
     creator = layer.survey.created_by if layer.survey else None
     if not content_visibility.can_view(layer.visibility, creator, current_user.id, membership.role):
         raise HTTPException(status_code=404, detail="Feature layer not found")

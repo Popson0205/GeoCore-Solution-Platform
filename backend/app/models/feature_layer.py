@@ -59,4 +59,9 @@ class FeatureLayer(Base):
     organisation = relationship("Organisation")
     project = relationship("Project")
     survey = relationship("Survey", back_populates="feature_layer")
-    records = relationship("Record", back_populates="feature_layer")
+    # cascade="all, delete-orphan": a FeatureLayer being permanently
+    # purged (see core/trash.py) takes its Records with it -- this only
+    # ever fires 7 days after someone deliberately trashed the whole
+    # Survey and never restored it, never as a side effect of any
+    # everyday action.
+    records = relationship("Record", back_populates="feature_layer", cascade="all, delete-orphan")

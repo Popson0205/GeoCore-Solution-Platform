@@ -1,6 +1,7 @@
 import logging
 import secrets
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import func
@@ -17,7 +18,7 @@ from backend.app.core import content_visibility
 from backend.app.core.audit import log_action
 from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.database import get_db
-from backend.app.core.roles import ADMINISTRATOR, PROJECT_MANAGER, VIEWER
+from backend.app.core.roles import ADMINISTRATOR, OWNER, PROJECT_MANAGER, VIEWER
 from backend.app.core.xlsform import ParsedForm, XLSFormError, parse_xlsform
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.project import Project
@@ -166,6 +167,12 @@ def _replace_form(
         db.flush()
         for field_index, field_payload in enumerate(section_payload.fields):
             _add_field(db, survey.id, section.id, field_payload, field_index, used_field_keys)
+
+    # A point-geometry survey's Latitude/Longitude fields can't actually
+    # be deleted — if a form-replace payload leaves them out (e.g.
+    # someone removed them in the builder), they're silently re-added
+    # here rather than rejecting the request. See _ensure_location_fields.
+    _ensure_location_fields(db, survey)
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +333,7 @@ def list_surveys(
     surveys = (
         db.query(Survey)
         .options(*_LOAD_OPTIONS)
-        .filter(Survey.organisation_id == organisation_id)
+        .filter(Survey.organisation_id == organisation_id, Survey.deleted_at.is_(None))
         .all()
     )
     surveys = [
@@ -354,6 +361,8 @@ def get_survey(
     # Any organisation member may read; require_survey_role with VIEWER is the
     # membership + minimum-role check in one.
     survey, membership = require_survey_role(db, survey_id, current_user.id, VIEWER)
+    if survey.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Survey not found")
     if not content_visibility.can_view(survey.visibility, survey.created_by, current_user.id, membership.role):
         raise HTTPException(status_code=404, detail="Survey not found")
     survey = _survey_with_form(db, survey_id)
@@ -429,20 +438,51 @@ def replace_form(
 
 
 @router.delete("/surveys/{survey_id}", response_model=SurveyOut)
-def archive_survey(
+def trash_survey(
     survey_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft-archive a survey rather than hard-deleting it. Cascade-deleting a
-    survey would take its collected Records with it; archiving protects that
-    already-collected field data. Reserved for administrator+, mirroring
+    """Moves a survey (and its twin FeatureLayer, and every Record under
+    it) to the trash — fully restorable for 7 days, then permanently
+    purged (see core/trash.py). Reserved for administrator+, mirroring
     project deletion (blueprint section 13).
     """
     survey, _ = require_survey_role(db, survey_id, current_user.id, ADMINISTRATOR)
-    survey.status = "archived"
+    survey.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return _survey_with_form(db, survey_id)
+
+
+@router.post("/surveys/{survey_id}/restore", response_model=SurveyOut)
+def restore_survey(
+    survey_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    survey, _ = require_survey_role(db, survey_id, current_user.id, ADMINISTRATOR)
+    survey.deleted_at = None
+    db.commit()
+    return _survey_with_form(db, survey_id)
+
+
+@router.delete("/surveys/{survey_id}/permanent", status_code=204)
+def permanently_delete_survey(
+    survey_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Skips the 7-day trash window entirely — immediately and
+    irreversibly deletes this survey, its twin FeatureLayer, and every
+    Record under it. Reserved for Owner only (stricter than trashing,
+    which is Administrator+), since there's no undo past this point.
+    Also works on a survey that's still active (not yet trashed) — the
+    Trash view is the expected way to reach this, but it isn't required.
+    """
+    survey, _ = require_survey_role(db, survey_id, current_user.id, OWNER)
+    db.delete(survey)
+    db.commit()
+    return None
 
 
 # ---------------------------------------------------------------------------

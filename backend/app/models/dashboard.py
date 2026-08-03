@@ -45,6 +45,10 @@ class Dashboard(Base):
     # actual public dashboard viewer; reserved for a future pass). See
     # core/visibility.py.
     visibility = Column(String, default="organization", nullable=False)
+    # NULL = active. Set = in the trash — permanently purged 7 days
+    # after deleted_at unless restored first. See core/trash.py and
+    # routes/dashboards.py's trash_dashboard/restore_dashboard.
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
     # {"preset": "all_time" | "last_7_days" | "last_30_days" | "last_90_days"
     # | "last_year" | "custom", "start": "2026-01-01", "end": "2026-02-01"}
     # (start/end only meaningful for "custom") — a dashboard-wide filter

@@ -71,6 +71,7 @@ export default function Content() {
           title: l.name,
           modified: l.updated_at,
           project_id: l.project_id,
+          survey_id: l.survey_id,
           color: l.color,
           href: `/workspace/organisations/${orgId}/feature-layers/${l.id}`,
         })),
@@ -96,6 +97,29 @@ export default function Content() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDelete(item) {
+    const label = TYPE_META[item.type]?.label || 'item'
+    if (!window.confirm(`Move "${item.title}" to the trash? It stays recoverable for 7 days.`)) return
+    try {
+      // A Feature Layer has no delete of its own — it's a twin of its
+      // Survey (see models/feature_layer.py), so deleting it really
+      // means trashing the Survey, which takes the layer and every
+      // record with it.
+      if (item.type === 'survey') {
+        await authedFetch(`/api/surveys/${item.id}`, { method: 'DELETE' })
+      } else if (item.type === 'feature_layer') {
+        await authedFetch(`/api/surveys/${item.survey_id}`, { method: 'DELETE' })
+      } else if (item.type === 'dashboard') {
+        await authedFetch(`/api/dashboards/${item.id}`, { method: 'DELETE' })
+      } else {
+        return
+      }
+      await load()
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -209,6 +233,10 @@ export default function Content() {
               {meta.icon} {meta.label}
             </label>
           ))}
+
+        <Link to={`/workspace/organisations/${orgId}/trash`} className="content-filter-item" style={{ marginTop: 16, display: 'flex' }}>
+          🗑️ Trash
+        </Link>
       </aside>
 
       <div className="content-main">
@@ -284,7 +312,7 @@ export default function Content() {
                     </td>
                     <td className="ws-muted">{meta.label}</td>
                     <td className="ws-muted">{formatDate(item.modified)}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {item.href ? (
                         <button className="btn-ghost" onClick={() => navigate(item.href)}>
                           Open
@@ -293,6 +321,11 @@ export default function Content() {
                         <span className="ws-muted" style={{ fontSize: '0.82rem' }}>
                           See Reports tab
                         </span>
+                      )}
+                      {['survey', 'feature_layer', 'dashboard'].includes(item.type) && (
+                        <button className="btn-ghost" onClick={() => handleDelete(item)}>
+                          Delete
+                        </button>
                       )}
                     </td>
                   </tr>

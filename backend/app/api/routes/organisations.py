@@ -10,15 +10,19 @@ from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import get_membership, require_org_role
 from backend.app.core import licensing
 from backend.app.core.audit import log_action
+from backend.app.core.trash import purge_at, purge_expired_trash
 from backend.app.core.database import get_db
 from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.roles import ADMINISTRATOR, OWNER
 from backend.app.core.storage import resolve_upload, save_upload
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.customer import Customer, License as LicenseRecord
+from backend.app.models.dashboard import Dashboard
 from backend.app.models.organisation import Organisation, OrganisationMember
+from backend.app.models.survey import Survey
 from backend.app.models.user import User
 from backend.app.schemas.audit import AuditLogOut
+from backend.app.schemas.trash import TrashItemOut
 from backend.app.schemas.organisation import (
     ActivateLicenseRequest,
     LicenseApply,
@@ -601,3 +605,45 @@ def list_audit_log(
         row.user_email = emails.get(e.user_id)
         out.append(row)
     return out
+
+
+@router.get("/{organisation_id}/trash", response_model=list[TrashItemOut])
+def list_trash(
+    organisation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The recycle bin — every Survey (with its twin FeatureLayer and
+    Records) and Dashboard trashed within the last 7 days, restorable
+    from here. Administrator+ only, the same bar as deleting them.
+    Purges anything already past its 7-day window before listing, so
+    the bin never shows something that's about to disappear on refresh
+    anyway (see core/trash.py).
+    """
+    require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    purge_expired_trash(db, organisation_id)
+
+    surveys = (
+        db.query(Survey)
+        .filter(Survey.organisation_id == organisation_id, Survey.deleted_at.isnot(None))
+        .all()
+    )
+    dashboards = (
+        db.query(Dashboard)
+        .filter(Dashboard.organisation_id == organisation_id, Dashboard.deleted_at.isnot(None))
+        .all()
+    )
+
+    items = [
+        TrashItemOut(
+            id=s.id, item_type="survey", name=s.title, deleted_at=s.deleted_at, purge_at=purge_at(s.deleted_at)
+        )
+        for s in surveys
+    ] + [
+        TrashItemOut(
+            id=d.id, item_type="dashboard", name=d.name, deleted_at=d.deleted_at, purge_at=purge_at(d.deleted_at)
+        )
+        for d in dashboards
+    ]
+    items.sort(key=lambda i: i.deleted_at, reverse=True)
+    return items
