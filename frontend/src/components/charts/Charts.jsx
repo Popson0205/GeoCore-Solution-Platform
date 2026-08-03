@@ -27,8 +27,8 @@ export function GaugeChart({ value, maxValue, percent }) {
   const color = percent >= 90 ? '#dc2626' : percent >= 70 ? '#f59e0b' : '#16a34a'
 
   return (
-    <div className="gauge-widget">
-      <svg viewBox="0 0 160 100" width="220" height="140" role="img">
+    <div className="gauge-widget" style={{ width: '100%', height: '100%' }}>
+      <svg viewBox="0 0 160 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img">
         <path
           d={`M${x1},${y1} A${radius},${radius} 0 ${largeArcTrack} 1 ${x2},${y2}`}
           fill="none"
@@ -176,7 +176,13 @@ export function BarChart({ rows, orientation = 'horizontal' }) {
     const labelSpace = 34
     const width = rows.length * (barWidth + gap)
     return (
-      <svg viewBox={`0 0 ${width} ${chartHeight + labelSpace}`} width="100%" height={chartHeight + labelSpace} role="img">
+      <svg
+        viewBox={`0 0 ${width} ${chartHeight + labelSpace}`}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+      >
         {rows.map((row, i) => {
           const x = i * (barWidth + gap)
           const barH = Math.max((row.value / max) * chartHeight, 2)
@@ -209,7 +215,7 @@ export function BarChart({ rows, orientation = 'horizontal' }) {
   const chartWidth = 260
 
   return (
-    <svg viewBox={`0 0 340 ${height}`} width="100%" height={height} role="img">
+    <svg viewBox={`0 0 340 ${height}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img">
       {rows.map((row, i) => {
         const y = i * (barHeight + gap)
         const w = Math.max((row.value / max) * chartWidth, 2)
@@ -259,8 +265,15 @@ export function PieChart({ rows }) {
   })
 
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-      <svg viewBox="0 0 160 160" width="160" height="160" role="img">
+    <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', width: '100%', height: '100%' }}>
+      <svg
+        viewBox="0 0 160 160"
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ maxWidth: 200, flexShrink: 0 }}
+        role="img"
+      >
         {slices.map((s) => (
           <path key={s.label} d={s.path} fill={s.color} />
         ))}
@@ -295,7 +308,7 @@ export function LineChart({ rows }) {
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img">
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img">
       <line
         x1={padding}
         y1={height - padding}

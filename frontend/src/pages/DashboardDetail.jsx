@@ -84,7 +84,7 @@ function useFeatureLayers(orgId) {
   return { layers, loading }
 }
 
-function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }) {
+function WidgetForm({ orgId, projectId, initial, initialType, nextPosition, onSave, onCancel }) {
   const { authedFetch } = useAuth()
   const { layers } = useFeatureLayers(orgId)
   const [title, setTitle] = useState(initial?.title || '')
@@ -204,7 +204,7 @@ function WidgetForm({ orgId, projectId, initial, initialType, onSave, onCancel }
     }
 
     try {
-      await onSave({ title, widget_type: widgetType, config, layout: initial?.layout || { x: 0, y: 0, w: 4, h: 3 } })
+      await onSave({ title, widget_type: widgetType, config, layout: initial?.layout || { ...(nextPosition || { x: 0, y: 0 }), w: 4, h: 3 } })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1067,6 +1067,7 @@ export default function DashboardDetail() {
   const [editingWidgetId, setEditingWidgetId] = useState(null)
   const [dragWidgetId, setDragWidgetId] = useState(null)
   const [resizing, setResizing] = useState(null) // { id, w, h } — live size during a drag-resize
+  const [moving, setMoving] = useState(null) // { id, x, y } — live position during a drag-move
   // Layout changes (resize, reorder) are applied to local state
   // immediately for instant feedback, but not persisted until "Save
   // layout" is clicked — dragging/resizing should feel like drawing,
@@ -1238,26 +1239,58 @@ export default function DashboardDetail() {
     load()
   }
 
-  function handleReorderWidget(draggedId, targetId) {
-    const widgets = dashboard.widgets
-    const fromIndex = widgets.findIndex((w) => w.id === draggedId)
-    const toIndex = widgets.findIndex((w) => w.id === targetId)
-    if (fromIndex === -1 || toIndex === -1) return
+  function startMove(e, widget) {
+    e.preventDefault()
+    e.stopPropagation()
+    const grid = gridRef.current
+    if (!grid) return
+    const colWidth = grid.getBoundingClientRect().width / 12
+    // Must match .dashboard-grid's grid-auto-rows in styles.css, same as startResize below.
+    const rowHeightPx = 40
+    const startX = e.clientX
+    const startY = e.clientY
+    const startGridX = widget.layout?.x ?? 0
+    const startGridY = widget.layout?.y ?? 0
+    const w = widget.layout?.w || 4
 
-    const reordered = [...widgets]
-    const [moved] = reordered.splice(fromIndex, 1)
-    reordered.splice(toIndex, 0, moved)
+    setDragWidgetId(widget.id)
+    setMoving({ id: widget.id, x: startGridX, y: startGridY })
 
-    setDashboard({ ...dashboard, widgets: reordered })
-    setPendingLayouts((p) => {
-      const next = { ...p }
-      reordered.forEach((w, index) => {
-        if (w.sort_order !== index) {
-          next[w.id] = { ...next[w.id], sort_order: index }
-        }
-      })
-      return next
-    })
+    function computeNext(moveEvent) {
+      const deltaCols = Math.round((moveEvent.clientX - startX) / colWidth)
+      const deltaRows = Math.round((moveEvent.clientY - startY) / rowHeightPx)
+      return {
+        // Clamped so a widget can never be dragged partially or fully
+        // off the 12-column grid horizontally. No upper bound on y —
+        // the grid just grows downward (grid-auto-rows handles it).
+        x: Math.min(12 - w, Math.max(0, startGridX + deltaCols)),
+        y: Math.max(0, startGridY + deltaRows),
+      }
+    }
+
+    function onMove(moveEvent) {
+      const { x, y } = computeNext(moveEvent)
+      setMoving({ id: widget.id, x, y })
+    }
+
+    function onUp(upEvent) {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const { x: nextX, y: nextY } = computeNext(upEvent)
+      setDragWidgetId(null)
+      setMoving(null)
+      if (nextX !== startGridX || nextY !== startGridY) {
+        const nextLayout = { ...(widget.layout || {}), x: nextX, y: nextY }
+        setDashboard((d) => ({
+          ...d,
+          widgets: d.widgets.map((w2) => (w2.id === widget.id ? { ...w2, layout: nextLayout } : w2)),
+        }))
+        setPendingLayouts((p) => ({ ...p, [widget.id]: { ...p[widget.id], layout: nextLayout } }))
+      }
+    }
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   function startResize(e, widget) {
@@ -1456,6 +1489,12 @@ export default function DashboardDetail() {
               projectId={projectId}
               initialType={addingType}
               initial={editingWidgetId ? dashboard.widgets.find((w) => w.id === editingWidgetId) : undefined}
+              nextPosition={{
+                x: 0,
+                y: dashboard.widgets
+                  .filter((w) => w.layout?.region !== 'sidebar')
+                  .reduce((maxBottom, w) => Math.max(maxBottom, (w.layout?.y ?? 0) + (w.layout?.h ?? 4)), 0),
+              }}
               onSave={(payload) =>
                 editingWidgetId ? handleUpdateWidget(editingWidgetId, payload) : handleAddWidget(payload)
               }
@@ -1475,32 +1514,28 @@ export default function DashboardDetail() {
             {dashboard.widgets.filter((w) => w.layout?.region !== 'sidebar').map((widget) => {
               const liveWidth = resizing?.id === widget.id ? resizing.w : widget.layout?.w || 4
               const liveHeight = resizing?.id === widget.id ? resizing.h : widget.layout?.h || 4
+              const liveX = moving?.id === widget.id ? moving.x : widget.layout?.x ?? 0
+              const liveY = moving?.id === widget.id ? moving.y : widget.layout?.y ?? 0
               return (
                 <div
                   key={widget.id}
                   className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
                   style={{
-                    gridColumn: `span ${Math.min(liveWidth, 12)}`,
-                    gridRow: `span ${Math.max(liveHeight, 2)}`,
+                    gridColumn: `${liveX + 1} / span ${Math.min(liveWidth, 12)}`,
+                    gridRow: `${liveY + 1} / span ${Math.max(liveHeight, 2)}`,
                     position: 'relative',
-                  }}
-                  draggable={canEdit}
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = 'move'
-                    setDragWidgetId(widget.id)
-                  }}
-                  onDragEnd={() => setDragWidgetId(null)}
-                  onDragOver={(e) => canEdit && e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    if (canEdit && dragWidgetId && dragWidgetId !== widget.id) {
-                      handleReorderWidget(dragWidgetId, widget.id)
-                    }
-                    setDragWidgetId(null)
                   }}
                 >
                   <div className="widget-card-head">
-                    {canEdit && <span className="drag-handle" title="Drag to reorder">⠿</span>}
+                    {canEdit && (
+                      <span
+                        className="drag-handle"
+                        title="Drag to reposition anywhere on the grid"
+                        onMouseDown={(e) => startMove(e, widget)}
+                      >
+                        ⠿
+                      </span>
+                    )}
                     <h3>{widget.title}</h3>
                     {canEdit && (
                       <>
