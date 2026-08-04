@@ -43,7 +43,7 @@ export default function PublicLayout() {
       </div>
 
       <footer className="public-footer">
-        <span>GeoCore Starter · a reusable platform foundation</span>
+        <span>GeoCore — field data collection, mapped and reported</span>
         <span className="public-footer-version">v1.0.0</span>
       </footer>
     </div>
