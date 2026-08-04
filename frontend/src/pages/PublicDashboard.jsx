@@ -134,7 +134,7 @@ export default function PublicDashboard() {
                   className="widget-card"
                   style={{
                     gridColumn: `${(widget.layout?.x ?? 0) + 1} / span ${Math.min(widget.layout?.w || 4, 12)}`,
-                    gridRow: `${(widget.layout?.y ?? 0) + 1} / span ${Math.max(widget.layout?.h || 4, 2)}`,
+                    gridRow: `${(widget.layout?.y ?? 0) + 1} / span ${Math.max(widget.layout?.h || 4, 3)}`,
                   }}
                 >
                   <div className="widget-card-head">

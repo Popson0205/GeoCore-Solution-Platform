@@ -288,6 +288,7 @@ export default function Content() {
             <span>Try a different folder or item-type filter, or create something new above.</span>
           </div>
         ) : (
+          <div className="content-table-wrap">
           <table className="content-table">
             <thead>
               <tr>
@@ -300,17 +301,25 @@ export default function Content() {
             <tbody>
               {filtered.map((item) => {
                 const meta = TYPE_META[item.type]
+                const rowColor = item.color || meta.color
                 return (
                   <tr key={`${item.type}-${item.id}`}>
                     <td>
                       <span className="content-table-title">
-                        <span className="content-table-icon" style={{ color: item.color || meta.color }}>
+                        <span
+                          className="content-table-icon"
+                          style={{ background: `${rowColor}1a`, color: rowColor }}
+                        >
                           {meta.icon}
                         </span>
                         {item.title}
                       </span>
                     </td>
-                    <td className="ws-muted">{meta.label}</td>
+                    <td>
+                      <span className="content-type-pill" style={{ background: `${rowColor}1a`, color: rowColor }}>
+                        {meta.label}
+                      </span>
+                    </td>
                     <td className="ws-muted">{formatDate(item.modified)}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {item.href ? (
@@ -333,6 +342,7 @@ export default function Content() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

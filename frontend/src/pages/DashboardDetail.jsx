@@ -1314,7 +1314,7 @@ export default function DashboardDetail() {
       const deltaRows = Math.round((moveEvent.clientY - startY) / rowHeightPx)
       return {
         w: Math.min(12, Math.max(2, startW + deltaCols)),
-        h: Math.max(2, startH + deltaRows),
+        h: Math.max(3, startH + deltaRows),
       }
     }
 
@@ -1522,7 +1522,7 @@ export default function DashboardDetail() {
                   className={`widget-card${dragWidgetId === widget.id ? ' is-dragging' : ''}`}
                   style={{
                     gridColumn: `${liveX + 1} / span ${Math.min(liveWidth, 12)}`,
-                    gridRow: `${liveY + 1} / span ${Math.max(liveHeight, 2)}`,
+                    gridRow: `${liveY + 1} / span ${Math.max(liveHeight, 3)}`,
                     position: 'relative',
                   }}
                 >

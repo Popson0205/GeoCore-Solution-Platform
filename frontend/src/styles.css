@@ -472,11 +472,22 @@ a { color: inherit; }
   display: block;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, transform 0.12s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 .module-card:hover {
-  border-color: rgba(217, 144, 0, 0.4);
-  transform: translateY(-1px);
+  border-color: var(--brand);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.module-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  margin-bottom: 12px;
 }
 
 .ws-page-head { margin-bottom: 28px; }
@@ -1770,9 +1781,10 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .org-hero-banner-logo {
   width: 64px;
   height: 64px;
-  border-radius: 6px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -1874,10 +1886,17 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   max-width: 320px;
   padding: 9px 12px;
   border: 1px solid var(--ws-border);
-  border-radius: 4px;
+  border-radius: 7px;
   font-size: 0.88rem;
 }
 
+.content-table-wrap {
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
 .content-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .content-table th {
   text-align: left;
@@ -1886,12 +1905,23 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 8px 10px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--ws-border);
+  background: color-mix(in srgb, var(--ws-bg) 60%, var(--ws-surface));
 }
-.content-table td { padding: 10px; border-bottom: 1px solid var(--ws-border); vertical-align: middle; }
-.content-table-title { display: flex; align-items: center; gap: 8px; color: var(--ws-text); font-weight: 500; }
-.content-table-icon { font-size: 1rem; }
+.content-table td { padding: 13px 16px; border-bottom: 1px solid var(--ws-border); vertical-align: middle; }
+.content-table tbody tr { transition: background 0.1s ease; }
+.content-table tbody tr:last-child td { border-bottom: none; }
+.content-table tbody tr:hover { background: var(--ws-bg); }
+.content-table-title { display: flex; align-items: center; gap: 10px; color: var(--ws-text); font-weight: 500; }
+.content-table-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; font-size: 0.95rem; flex-shrink: 0;
+}
+.content-type-pill {
+  display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600;
+}
 
 @media (max-width: 760px) {
   .content-page { flex-direction: column; }
@@ -1899,9 +1929,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 }
 
 /* Small module cards used on the org Home page (Content/Surveys/Dashboards
-   quick links) — reuses .panel but needs its own hover + link reset. */
-.module-card { text-decoration: none; display: block; transition: box-shadow 0.12s ease, border-color 0.12s ease; }
-.module-card:hover { border-color: var(--brand); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); }
+   quick links) — full rule set now lives with the rest of .module-card above. */
 
 /* Personal vs Organization plan picker (org creation, Dashboard.jsx) */
 .plan-choice-group { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }

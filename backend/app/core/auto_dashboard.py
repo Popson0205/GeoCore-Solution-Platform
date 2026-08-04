@@ -37,7 +37,7 @@ def _kpi_widget(field, x: int, y: int) -> dict:
         "widget_type": "kpi",
         "title": f"Total {field['label']}",
         "config": {"aggregation": "sum", "field_key": field["field_key"]},
-        "layout": {"x": x, "y": y, "w": 3, "h": 2},
+        "layout": {"x": x, "y": y, "w": 3, "h": 4},
     }
 
 
@@ -46,7 +46,7 @@ def _count_kpi_widget(x: int, y: int) -> dict:
         "widget_type": "kpi",
         "title": "Total records",
         "config": {"aggregation": "count", "field_key": None},
-        "layout": {"x": x, "y": y, "w": 3, "h": 2},
+        "layout": {"x": x, "y": y, "w": 3, "h": 4},
     }
 
 
@@ -101,16 +101,20 @@ def build_widget_plan(field_definitions: list[dict], geometry_type: str) -> list
     y = 0
 
     # Row 1: KPIs — always a record count, then up to MAX_NUMERIC_KPIS
-    # numeric-field totals, 4 per row (w=3 each) before wrapping.
+    # numeric-field totals, 4 per row (w=3 each) before wrapping. Each
+    # KPI tile is h=4 (not the more compact 2 rows it might look like it
+    # needs) -- verified against a real rendered screenshot that 2 rows
+    # (80px) clips the badge+value content, which needs more like 4
+    # rows (160px) to actually be visible instead of cut off.
     kpi_specs = [None] + numeric  # None = the plain count KPI
     x = 0
     for spec in kpi_specs:
         if x >= 12:
             x = 0
-            y += 2
+            y += 4
         widgets.append(_count_kpi_widget(x, y) if spec is None else _kpi_widget(spec, x, y))
         x += 3
-    y += 2
+    y += 4
 
     # Row 2: the map, full width, if this layer has geometry at all.
     if has_map:
