@@ -16,6 +16,10 @@ export default function PublicLayout() {
           GeoCore
         </Link>
         <nav className="public-nav-links">
+          <Link to="/" className="public-nav-link">Home</Link>
+          <Link to="/about" className="public-nav-link">About</Link>
+          <Link to="/solutions" className="public-nav-link">Solutions</Link>
+          <Link to="/license" className="public-nav-link">License</Link>
           {status === 'authed' ? (
             <>
               <Link to="/workspace" className="btn-ghost">Workspace</Link>
@@ -32,7 +36,7 @@ export default function PublicLayout() {
           ) : (
             <>
               <Link to="/login" className="btn-ghost">Sign in</Link>
-              <Link to="/register" className="btn-primary">Get started</Link>
+              <Link to="/license" className="btn-primary">Get started</Link>
             </>
           )}
         </nav>

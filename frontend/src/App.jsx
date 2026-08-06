@@ -4,6 +4,9 @@ import { AuthProvider } from './context/AuthContext'
 import PublicLayout from './layouts/PublicLayout'
 import WorkspaceLayout from './layouts/WorkspaceLayout'
 import Landing from './pages/Landing'
+import About from './pages/About'
+import Solutions from './pages/Solutions'
+import LicensePricing from './pages/LicensePricing'
 import PurchaseLicense from './pages/PurchaseLicense'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -42,6 +45,9 @@ export default function App() {
       <Routes>
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Landing />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/solutions" element={<Solutions />} />
+          <Route path="/license" element={<LicensePricing />} />
           <Route path="/purchase" element={<PurchaseLicense />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

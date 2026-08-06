@@ -110,7 +110,7 @@ export default function Landing() {
             own report — so your team spends less time compiling data and more time acting on it.
           </p>
           <div className="hero-actions">
-            <Link to="/purchase" className="btn-primary">Purchase a license</Link>
+            <Link to="/license" className="btn-primary">See license options</Link>
             <Link to="/register" className="btn-ghost">Already have a license? Create your login</Link>
             <Link to="/login" className="btn-ghost">Sign in</Link>
           </div>
