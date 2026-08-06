@@ -1,4 +1,3 @@
-import re
 import uuid
 from datetime import datetime
 
@@ -14,6 +13,7 @@ from backend.app.core.trash import purge_at, purge_expired_trash
 from backend.app.core.database import get_db
 from backend.app.core.rate_limit import get_client_ip
 from backend.app.core.roles import ADMINISTRATOR, OWNER
+from backend.app.core.slugify import unique_org_slug
 from backend.app.core.storage import resolve_upload, save_upload
 from backend.app.models.audit_log import AuditLog
 from backend.app.models.customer import Customer, License as LicenseRecord
@@ -37,10 +37,6 @@ from backend.app.schemas.organisation import (
 
 router = APIRouter()
 
-
-def _slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return slug or uuid.uuid4().hex[:8]
 
 
 def _to_out(org: Organisation, my_role: str | None) -> OrganisationOut:
@@ -66,15 +62,7 @@ def create_organisation(
     more. An org created here still can't create anything (see
     deps_project.require_active_license) until a license is applied.
     """
-    # Guarantee a unique, URL-friendly slug even if names collide.
-    base_slug = _slugify(payload.name)
-    slug = base_slug
-    counter = 1
-    while db.query(Organisation).filter(Organisation.slug == slug).first():
-        counter += 1
-        slug = f"{base_slug}-{counter}"
-
-    org = Organisation(name=payload.name, slug=slug, plan=payload.plan)
+    org = Organisation(name=payload.name, slug=unique_org_slug(db, payload.name), plan=payload.plan)
     db.add(org)
     db.flush()
 
@@ -118,16 +106,9 @@ def activate_license(
     if record and record.status == "revoked":
         raise HTTPException(status_code=422, detail="This license key has been revoked.")
 
-    base_slug = _slugify(payload.organisation_name)
-    slug = base_slug
-    counter = 1
-    while db.query(Organisation).filter(Organisation.slug == slug).first():
-        counter += 1
-        slug = f"{base_slug}-{counter}"
-
     org = Organisation(
         name=payload.organisation_name,
-        slug=slug,
+        slug=unique_org_slug(db, payload.organisation_name),
         plan=claims["plan"],
         license_key=payload.license_key,
         license_tier=claims.get("tier"),

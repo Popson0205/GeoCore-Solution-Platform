@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.core.database import get_db
 from backend.app.core.rate_limit import check_login_rate_limit, get_client_ip, record_login_attempt
+from backend.app.core.roles import OWNER
 from backend.app.core.security import create_access_token, hash_password, verify_password
+from backend.app.core.slugify import unique_org_slug
+from backend.app.models.organisation import Organisation, OrganisationMember
 from backend.app.models.user import User
 from backend.app.schemas.auth import Token, UserCreate, UserOut
 
@@ -14,6 +17,21 @@ router = APIRouter()
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
+    """Every account gets exactly one organisation immediately, not just
+    a bare login — account_type decides its shape:
+    - "organization": named from payload.organisation_name (required —
+      see UserCreate's validator), plan="organization".
+    - "personal": auto-named single-seat workspace, plan="personal".
+
+    Either way the new org starts unlicensed, same as one created
+    directly via POST /organisations already could — it just can't
+    create anything (see deps_project.require_active_license) until a
+    real license is applied from Organization Settings, or an
+    additional org is activated via a license key from the org picker.
+    This just means that first org — the one nearly every account
+    actually needs — no longer requires a second, separate step to
+    bring into existence.
+    """
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -24,6 +42,21 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(payload.password),
     )
     db.add(user)
+    db.flush()
+
+    if payload.account_type == "organization":
+        org_name = payload.organisation_name.strip()
+        plan = "organization"
+    else:
+        display_name = (payload.full_name or payload.email.split("@")[0]).split()[0]
+        org_name = f"{display_name}'s Workspace"
+        plan = "personal"
+
+    org = Organisation(name=org_name, slug=unique_org_slug(db, org_name), plan=plan)
+    db.add(org)
+    db.flush()
+    db.add(OrganisationMember(organisation_id=org.id, user_id=user.id, role=OWNER))
+
     db.commit()
     db.refresh(user)
     return user
