@@ -4,6 +4,20 @@
 -- $DATABASE_URL -f backend/scripts/reset_all_data.sql`). This does NOT
 -- touch schema/migrations — only data. Pick ONE of the two modes below by
 -- commenting/uncommenting; both are provided, only one should run.
+--
+-- Table list generated directly from Base.metadata.tables (every model
+-- registered in backend/app/models/) rather than hand-maintained, so it
+-- doesn't silently drift out of date as new tables get added — this one
+-- specifically had gone stale before (missing feature_layers, audit_logs,
+-- login_attempts from tables added after this script was first written).
+-- If you add a new model later, regenerate the list rather than editing
+-- it by hand:
+--   python3 -c "
+--   import sys; sys.path.insert(0, '.')
+--   import backend.app.models
+--   from backend.app.core.database import Base
+--   print(',\n  '.join(sorted(Base.metadata.tables.keys())))
+--   "
 
 -- =====================================================================
 -- MODE A — full reset, including your own login (true "new customer").
@@ -12,45 +26,52 @@
 -- dashboard" attempt, exactly like a first-time customer would.
 -- =====================================================================
 TRUNCATE TABLE
+  attachments,
+  audit_logs,
+  customers,
   dashboard_widgets,
   dashboards,
-  reports,
-  attachments,
-  records,
-  submission_assignees,
+  feature_layers,
   field_definitions,
   form_sections,
-  survey_assignments,
-  surveys,
-  projects,
   licenses,
-  customers,
+  login_attempts,
   organisation_members,
   organisations,
+  projects,
+  records,
+  reports,
+  submission_assignees,
+  survey_assignments,
+  surveys,
   users
 CASCADE;
 
 -- =====================================================================
 -- MODE B — keep your login, wipe everything else (organisations,
--- projects, surveys, records, dashboards, reports, customers, licenses).
--- Use this instead of Mode A if you want to log back in as yourself and
+-- projects, surveys, feature layers, records, dashboards, reports,
+-- customers, licenses, audit history, rate-limit history). Use this
+-- instead of Mode A if you want to log back in as yourself and
 -- immediately create a fresh organisation to test the license gate with.
 -- Comment out Mode A above and uncomment this instead.
 -- =====================================================================
 -- TRUNCATE TABLE
+--   attachments,
+--   audit_logs,
+--   customers,
 --   dashboard_widgets,
 --   dashboards,
---   reports,
---   attachments,
---   records,
---   submission_assignees,
+--   feature_layers,
 --   field_definitions,
 --   form_sections,
---   survey_assignments,
---   surveys,
---   projects,
 --   licenses,
---   customers,
+--   login_attempts,
 --   organisation_members,
---   organisations
+--   organisations,
+--   projects,
+--   records,
+--   reports,
+--   submission_assignees,
+--   survey_assignments,
+--   surveys
 -- CASCADE;
