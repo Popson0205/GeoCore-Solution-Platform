@@ -5,6 +5,7 @@ export function DynamicField({ field, value, onChange }) {
   const commonProps = {
     value: value ?? '',
     onChange: (e) => onChange(e.target.value),
+    placeholder: field.placeholder || undefined,
   }
 
   if (field.field_type === 'long_text') {
@@ -100,6 +101,7 @@ function FieldsRenderer({ fields, values, onFieldChange }) {
               value={values[field.field_key]}
               onChange={(val) => onFieldChange(field.field_key, val)}
             />
+            {field.help_text && <span className="form-help-text">{field.help_text}</span>}
           </label>
         )
       })}

@@ -698,6 +698,7 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .form-label select:focus,
 .form-label textarea:focus { outline: none; border-color: var(--brand); background: var(--ws-surface); }
 .form-label input[type="color"] { padding: 4px; height: 40px; }
+.form-help-text { font-size: 0.8rem; font-weight: 400; color: var(--ws-text-faint); margin-top: -2px; }
 
 .checkbox-label {
   display: inline-flex;
@@ -783,6 +784,15 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
 .field-key-tag { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ws-text-faint); background: var(--ws-bg); padding: 2px 6px; border-radius: 4px; }
 .field-card-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--ws-border); }
 .condition-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.field-card { cursor: pointer; }
+.field-card.is-selected { border-left-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.field-card.is-dragging, .section-card.is-dragging { opacity: 0.45; }
+.field-card.is-drop-target { border-top: 2px solid var(--brand); }
+.section-card.is-drop-target { border-top: 2px solid var(--brand); }
+
+.field-settings-panel { display: flex; flex-direction: column; gap: 20px; }
+.field-settings-panel .builder-subhead { margin-bottom: 8px; }
 .condition-row select,
 .condition-row input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--ws-border); background: var(--ws-bg); color: var(--ws-text); font-size: 0.82rem; }
 .builder-hint { font-size: 0.78rem; color: var(--ws-text-muted); margin: 2px 0 0; }
@@ -1260,6 +1270,13 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   color: var(--ws-text-muted);
   margin-bottom: 12px;
 }
+.designer-palette-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.designer-palette-heading-row .designer-palette-heading { margin-bottom: 0; }
 .palette-group { margin-bottom: 18px; }
 .palette-group-label { font-size: 0.78rem; color: var(--ws-text-muted); margin-bottom: 8px; font-weight: 600; }
 .palette-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }

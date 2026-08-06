@@ -186,6 +186,10 @@ class FieldDefinition(Base):
     # {"field_key", "operator", "message"}} — all optional. See
     # backend/app/core/form_engine.py.
     validation = Column(JSONB, nullable=True)
+    # Appearance-only, no effect on validation/behavior — shown to the
+    # data collector filling out the form (see RecordForm.jsx).
+    placeholder = Column(String, nullable=True)
+    help_text = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     survey = relationship("Survey", back_populates="field_definitions")

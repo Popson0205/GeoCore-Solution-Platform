@@ -123,6 +123,8 @@ def _add_field(
             validation=payload.validation.model_dump(exclude_none=True)
             if payload.validation
             else None,
+            placeholder=payload.placeholder,
+            help_text=payload.help_text,
         )
     )
 

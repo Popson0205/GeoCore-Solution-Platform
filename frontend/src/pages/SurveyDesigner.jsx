@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import FormBuilder, { emptyField, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
+import FormBuilder, { emptyField, FieldSettingsPanel, fieldOptionsFor, sectionsFromApi, sectionsToApi } from '../components/FormBuilder'
 
 const GEOMETRY_TYPES = ['point', 'line', 'polygon', 'none']
 
@@ -673,6 +673,30 @@ export default function SurveyDesigner() {
     setSections(next)
   }
 
+  const [selectedFieldUid, setSelectedFieldUid] = useState(null)
+  let selectedFieldInfo = null
+  for (const section of sections) {
+    const field = section.fields.find((f) => f._uid === selectedFieldUid)
+    if (field) {
+      const options = section.repeatable
+        ? fieldOptionsFor(sections, section._uid, true)
+        : fieldOptionsFor(sections, null, false)
+      selectedFieldInfo = { field, sectionUid: section._uid, options }
+      break
+    }
+  }
+
+  function updateSelectedField(nextField) {
+    if (!selectedFieldInfo) return
+    updateSections(
+      sections.map((s) =>
+        s._uid === selectedFieldInfo.sectionUid
+          ? { ...s, fields: s.fields.map((f) => (f._uid === nextField._uid ? nextField : f)) }
+          : s
+      )
+    )
+  }
+
   function undo() {
     if (!historyRef.current.length) return
     const prev = historyRef.current[historyRef.current.length - 1]
@@ -910,7 +934,12 @@ export default function SurveyDesigner() {
                     Press a question type on the left panel to add your first question.
                   </div>
                 ) : (
-                  <FormBuilder sections={sections} onChange={updateSections} />
+                  <FormBuilder
+                    sections={sections}
+                    onChange={updateSections}
+                    selectedFieldUid={selectedFieldUid}
+                    onSelectField={setSelectedFieldUid}
+                  />
                 )}
               </div>
               <div className="designer-canvas-submit">
@@ -922,37 +951,62 @@ export default function SurveyDesigner() {
           </div>
 
           <aside className="designer-settings-panel">
-            <p className="designer-palette-heading">Feature layer settings</p>
-            {featureLayer ? (
+            {selectedFieldInfo ? (
               <>
-                <label className="form-label">
-                  Geometry
-                  <select
-                    value={featureLayer.geometry_type}
-                    onChange={(e) => handleSaveLayerDetails({ geometry_type: e.target.value })}
-                  >
-                    {GEOMETRY_TYPES.map((g) => (
-                      <option key={g} value={g}>
-                        {g === 'none' ? 'none' : g}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="form-label">
-                  Color
-                  <input
-                    type="color"
-                    value={featureLayer.color}
-                    onChange={(e) => handleSaveLayerDetails({ color: e.target.value })}
-                  />
-                </label>
-                <p className="ws-muted" style={{ fontSize: '0.82rem', marginTop: 12 }}>
-                  This is the feature layer's own styling — the map and dashboards use it to color
-                  this survey's records. Manage sharing from Content &rarr; this layer's page.
+                <div className="designer-palette-heading-row">
+                  <p className="designer-palette-heading">Field settings</p>
+                  <button type="button" className="btn-ghost" onClick={() => setSelectedFieldUid(null)}>
+                    Done
+                  </button>
+                </div>
+                <p className="ws-muted" style={{ fontSize: '0.85rem', marginBottom: 16 }}>
+                  {selectedFieldInfo.field.label || 'Untitled question'}
                 </p>
+                <FieldSettingsPanel
+                  field={selectedFieldInfo.field}
+                  onChange={updateSelectedField}
+                  fieldOptions={selectedFieldInfo.options}
+                />
               </>
             ) : (
-              <p className="ws-muted">Loading feature layer…</p>
+              <>
+                <p className="designer-palette-heading">Feature layer settings</p>
+                {featureLayer ? (
+                  <>
+                    <label className="form-label">
+                      Geometry
+                      <select
+                        value={featureLayer.geometry_type}
+                        onChange={(e) => handleSaveLayerDetails({ geometry_type: e.target.value })}
+                      >
+                        {GEOMETRY_TYPES.map((g) => (
+                          <option key={g} value={g}>
+                            {g === 'none' ? 'none' : g}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="form-label">
+                      Color
+                      <input
+                        type="color"
+                        value={featureLayer.color}
+                        onChange={(e) => handleSaveLayerDetails({ color: e.target.value })}
+                      />
+                    </label>
+                    <p className="ws-muted" style={{ fontSize: '0.82rem', marginTop: 12 }}>
+                      This is the feature layer's own styling — the map and dashboards use it to color
+                      this survey's records. Manage sharing from Content &rarr; this layer's page.
+                    </p>
+                    <p className="ws-muted" style={{ fontSize: '0.82rem', marginTop: 16 }}>
+                      Select any question on the left to configure its appearance, conditions, and
+                      validation here instead.
+                    </p>
+                  </>
+                ) : (
+                  <p className="ws-muted">Loading feature layer…</p>
+                )}
+              </>
             )}
           </aside>
         </div>

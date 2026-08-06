@@ -61,6 +61,8 @@ export function emptyField(fieldType = 'text') {
     visibility: null,
     calculation: '',
     validation: {},
+    placeholder: '',
+    help_text: '',
   }
 }
 
@@ -94,6 +96,8 @@ export function sectionsFromApi(sections) {
       visibility: f.visibility || null,
       calculation: f.calculation || '',
       validation: f.validation || {},
+      placeholder: f.placeholder || '',
+      help_text: f.help_text || '',
     })),
   }))
 }
@@ -114,6 +118,8 @@ export function sectionsToApi(sections) {
       visibility: cleanVisibility(f.visibility),
       calculation: f.calculation ? f.calculation.trim() || null : null,
       validation: cleanValidation(f.validation),
+      placeholder: f.placeholder ? f.placeholder.trim() || null : null,
+      help_text: f.help_text ? f.help_text.trim() || null : null,
     })),
   }))
 }
@@ -133,7 +139,7 @@ function cleanValidation(rule) {
   return Object.keys(cleaned).length ? cleaned : null
 }
 
-function fieldOptionsFor(sections, currentSectionUid, isRepeatable) {
+export function fieldOptionsFor(sections, currentSectionUid, isRepeatable) {
   // Fields inside a repeatable section may only reference sibling fields in
   // the same repeat instance. Everything else (ungrouped / non-repeat
   // sections) shares one flat top-level scope.
@@ -222,34 +228,75 @@ function reorder(list, from, to) {
   return copy
 }
 
-function DragHandle(props) {
+/** Mouse-based drag-to-reorder for a vertical list of cards — used for
+ * both field reordering within a section and section reordering. Native
+ * HTML5 drag-and-drop (the previous implementation) was unreliable
+ * enough in practice to be worth replacing outright rather than
+ * debugging, and this is the same mouse-event pattern already proven
+ * for the Dashboard builder's widget repositioning.
+ *
+ * `container` is the DOM element whose direct children (matching
+ * `itemSelector`) are the draggable rows — queried fresh on every move
+ * rather than cached, so it stays correct even as the list re-renders
+ * mid-drag.
+ */
+function startDragReorder(e, { container, itemSelector, fromIndex, onHoverIndex, onDrop }) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (!container) return
+
+  function currentItems() {
+    return Array.from(container.querySelectorAll(itemSelector))
+  }
+
+  function indexForY(clientY) {
+    const items = currentItems()
+    for (let i = 0; i < items.length; i++) {
+      const rect = items[i].getBoundingClientRect()
+      if (clientY < rect.top + rect.height / 2) return i
+    }
+    return items.length - 1
+  }
+
+  function onMove(moveEvent) {
+    onHoverIndex(indexForY(moveEvent.clientY))
+  }
+  function onUp(upEvent) {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    const targetIndex = indexForY(upEvent.clientY)
+    onHoverIndex(null)
+    if (targetIndex !== fromIndex) onDrop(fromIndex, targetIndex)
+  }
+
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+function DragHandle({ onMouseDown }) {
   return (
-    <span className="drag-handle" title="Drag to reorder" {...props}>
+    <span className="drag-handle" title="Drag to reorder" onMouseDown={onMouseDown}>
       ⠿
     </span>
   )
 }
 
-function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) {
-  const [expanded, setExpanded] = React.useState(false)
+function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect }) {
   const key = slugifyKey(field.label)
   const isLocationField = key === 'latitude' || key === 'longitude'
   const hasOptions = ['single_select', 'multi_select'].includes(field.field_type)
-  const isNumberish = field.field_type === 'number'
-  const isTextish = ['text', 'long_text'].includes(field.field_type)
-  const otherFieldOptions = scopeFieldOptions.filter((o) => o.key !== key)
 
   function set(patch) {
     onChange({ ...field, ...patch })
   }
-  function setValidation(patch) {
-    onChange({ ...field, validation: { ...field.validation, ...patch } })
-  }
 
   return (
-    <div className={`field-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
+    <div
+      className={`field-card${dragProps?.isDragging ? ' is-dragging' : ''}${dragProps?.isDropTarget ? ' is-drop-target' : ''}${isSelected ? ' is-selected' : ''}`}
+      onClick={onSelect}
+    >
       <div className="field-card-head">
-        <DragHandle {...(dragProps?.handleProps || {})} />
+        <DragHandle onMouseDown={dragProps?.onMouseDown} />
         <span className="field-type-badge" style={{ background: FIELD_TYPE_COLORS[field.field_type] }}>
           {FIELD_TYPE_ICONS[field.field_type]}
         </span>
@@ -279,13 +326,24 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
         </label>
         <span className="field-key-tag">{key}</span>
         <span style={{ flex: 1 }} />
-        <button type="button" className="btn-ghost" onClick={() => setExpanded(!expanded)} title="Skip logic, calculation, validation">
-          {expanded ? '▲ Less' : '⚙ Rules'}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect()
+          }}
+          title="Appearance, skip logic, calculation, validation"
+        >
+          ⚙ Settings
         </button>
         <button
           type="button"
           className="btn-ghost"
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
           disabled={isLocationField}
           title={isLocationField ? "This survey collects location — Latitude/Longitude can't be removed" : undefined}
         >
@@ -298,109 +356,153 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
           style={{ marginTop: 8, width: '100%' }}
           value={(field.options || []).join(', ')}
           onChange={(e) => set({ options: e.target.value.split(',').map((o) => o.trim()).filter(Boolean) })}
+          onClick={(e) => e.stopPropagation()}
           placeholder="Choices, comma separated: Good, Fair, Poor"
         />
       )}
+    </div>
+  )
+}
 
-      {expanded && (
-        <div className="field-card-body">
-          <div>
-            <p className="builder-subhead">Show this field only if</p>
-            <ConditionEditor
-              rule={field.visibility}
-              onChange={(rule) => set({ visibility: rule })}
-              fieldOptions={otherFieldOptions}
-            />
-          </div>
+/** The field-settings side panel — everything that used to be an inline
+ * "⚙ Rules" expansion inside the field card now lives here instead,
+ * rendered in the Survey Designer's right-hand panel for whichever field
+ * is currently selected. Exported so SurveyDesigner.jsx can render it
+ * next to (in place of) the Feature Layer settings when a field is
+ * selected, matching the "click a field, its settings show on the
+ * right" pattern most form builders use — rather than pushing the rest
+ * of the form down every time you open a field's settings.
+ */
+export function FieldSettingsPanel({ field, onChange, fieldOptions }) {
+  const key = slugifyKey(field.label)
+  const isNumberish = field.field_type === 'number'
+  const isTextish = ['text', 'long_text'].includes(field.field_type)
+  const otherFieldOptions = fieldOptions.filter((o) => o.key !== key)
 
-          <div>
-            <p className="builder-subhead">Calculated value (optional)</p>
-            <input
-              value={field.calculation || ''}
-              onChange={(e) => set({ calculation: e.target.value })}
-              placeholder='e.g. {width} * {depth}'
-            />
-            <p className="builder-hint">
-              If set, this field is computed automatically and hidden from data collectors — reference
-              other fields with curly braces, e.g. {'{width} * {depth}'}.
-            </p>
-          </div>
+  function set(patch) {
+    onChange({ ...field, ...patch })
+  }
+  function setValidation(patch) {
+    onChange({ ...field, validation: { ...field.validation, ...patch } })
+  }
 
-          {(isNumberish || isTextish) && (
-            <div>
-              <p className="builder-subhead">Validation</p>
-              {isNumberish && (
-                <div className="condition-row">
-                  <span className="builder-hint">min</span>
-                  <input
-                    type="number"
-                    value={field.validation?.min ?? ''}
-                    onChange={(e) => setValidation({ min: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                  />
-                  <span className="builder-hint">max</span>
-                  <input
-                    type="number"
-                    value={field.validation?.max ?? ''}
-                    onChange={(e) => setValidation({ max: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                  />
-                </div>
-              )}
-              {isTextish && (
-                <div className="condition-row">
-                  <span className="builder-hint">min length</span>
-                  <input
-                    type="number"
-                    value={field.validation?.min_length ?? ''}
-                    onChange={(e) =>
-                      setValidation({ min_length: e.target.value === '' ? null : parseInt(e.target.value, 10) })
-                    }
-                  />
-                  <span className="builder-hint">max length</span>
-                  <input
-                    type="number"
-                    value={field.validation?.max_length ?? ''}
-                    onChange={(e) =>
-                      setValidation({ max_length: e.target.value === '' ? null : parseInt(e.target.value, 10) })
-                    }
-                  />
-                </div>
-              )}
-              {otherFieldOptions.length > 0 && (
-                <div className="condition-row">
-                  <span className="builder-hint">must be</span>
-                  <select
-                    value={field.validation?.compare?.operator || ''}
-                    onChange={(e) =>
-                      setValidation({
-                        compare: e.target.value
-                          ? { ...(field.validation?.compare || {}), operator: e.target.value }
-                          : null,
-                      })
-                    }
-                  >
-                    <option value="">(no comparison)</option>
-                    {COMPARE_OPERATORS.map((op) => (
-                      <option key={op.value} value={op.value}>
-                        {op.label}
-                      </option>
-                    ))}
-                  </select>
-                  {field.validation?.compare?.operator && (
-                    <select
-                      value={field.validation?.compare?.field_key || ''}
-                      onChange={(e) =>
-                        setValidation({ compare: { ...field.validation.compare, field_key: e.target.value } })
-                      }
-                    >
-                      <option value="">field…</option>
-                      {otherFieldOptions.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+  return (
+    <div className="field-settings-panel">
+      <div>
+        <p className="builder-subhead">Appearance</p>
+        <label className="form-label">
+          Placeholder text
+          <input
+            value={field.placeholder || ''}
+            onChange={(e) => set({ placeholder: e.target.value })}
+            placeholder="Shown faintly inside the empty field"
+          />
+        </label>
+        <label className="form-label" style={{ marginTop: 8 }}>
+          Help text
+          <input
+            value={field.help_text || ''}
+            onChange={(e) => set({ help_text: e.target.value })}
+            placeholder="A short hint shown under the question"
+          />
+        </label>
+      </div>
+
+      <div>
+        <p className="builder-subhead">Show this field only if</p>
+        <ConditionEditor
+          rule={field.visibility}
+          onChange={(rule) => set({ visibility: rule })}
+          fieldOptions={otherFieldOptions}
+        />
+      </div>
+
+      <div>
+        <p className="builder-subhead">Calculated value (optional)</p>
+        <input
+          value={field.calculation || ''}
+          onChange={(e) => set({ calculation: e.target.value })}
+          placeholder='e.g. {width} * {depth}'
+        />
+        <p className="builder-hint">
+          If set, this field is computed automatically and hidden from data collectors — reference
+          other fields with curly braces, e.g. {'{width} * {depth}'}.
+        </p>
+      </div>
+
+      {(isNumberish || isTextish) && (
+        <div>
+          <p className="builder-subhead">Validation</p>
+          {isNumberish && (
+            <div className="condition-row">
+              <span className="builder-hint">min</span>
+              <input
+                type="number"
+                value={field.validation?.min ?? ''}
+                onChange={(e) => setValidation({ min: e.target.value === '' ? null : parseFloat(e.target.value) })}
+              />
+              <span className="builder-hint">max</span>
+              <input
+                type="number"
+                value={field.validation?.max ?? ''}
+                onChange={(e) => setValidation({ max: e.target.value === '' ? null : parseFloat(e.target.value) })}
+              />
+            </div>
+          )}
+          {isTextish && (
+            <div className="condition-row">
+              <span className="builder-hint">min length</span>
+              <input
+                type="number"
+                value={field.validation?.min_length ?? ''}
+                onChange={(e) =>
+                  setValidation({ min_length: e.target.value === '' ? null : parseInt(e.target.value, 10) })
+                }
+              />
+              <span className="builder-hint">max length</span>
+              <input
+                type="number"
+                value={field.validation?.max_length ?? ''}
+                onChange={(e) =>
+                  setValidation({ max_length: e.target.value === '' ? null : parseInt(e.target.value, 10) })
+                }
+              />
+            </div>
+          )}
+          {otherFieldOptions.length > 0 && (
+            <div className="condition-row">
+              <span className="builder-hint">must be</span>
+              <select
+                value={field.validation?.compare?.operator || ''}
+                onChange={(e) =>
+                  setValidation({
+                    compare: e.target.value
+                      ? { ...(field.validation?.compare || {}), operator: e.target.value }
+                      : null,
+                  })
+                }
+              >
+                <option value="">(no comparison)</option>
+                {COMPARE_OPERATORS.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </select>
+              {field.validation?.compare?.operator && (
+                <select
+                  value={field.validation?.compare?.field_key || ''}
+                  onChange={(e) =>
+                    setValidation({ compare: { ...field.validation.compare, field_key: e.target.value } })
+                  }
+                >
+                  <option value="">field…</option>
+                  {otherFieldOptions.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
           )}
@@ -410,8 +512,10 @@ function FieldCard({ field, onChange, onRemove, scopeFieldOptions, dragProps }) 
   )
 }
 
-function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldOptions, sections, dragProps }) {
+function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldOptions, sections, dragProps, selectedFieldUid, onSelectField }) {
   const [dragFieldIndex, setDragFieldIndex] = React.useState(null)
+  const [dragOverFieldIndex, setDragOverFieldIndex] = React.useState(null)
+  const fieldsContainerRef = React.useRef(null)
 
   function set(patch) {
     onChange({ ...section, ...patch })
@@ -434,9 +538,9 @@ function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldO
     : topLevelFieldOptions
 
   return (
-    <div className={`section-card${dragProps?.isDragging ? ' is-dragging' : ''}`} {...(dragProps?.rootProps || {})}>
+    <div className={`section-card${dragProps?.isDragging ? ' is-dragging' : ''}${dragProps?.isDropTarget ? ' is-drop-target' : ''}`}>
       <div className="section-card-head">
-        <DragHandle {...(dragProps?.handleProps || {})} />
+        <DragHandle onMouseDown={dragProps?.onMouseDown} />
         <span className="section-page-badge">{sectionIndex + 1}</span>
         <input value={section.title} onChange={(e) => set({ title: e.target.value })} placeholder="Section title" />
         <label className="checkbox-label">
@@ -486,36 +590,35 @@ function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldO
         </p>
       )}
 
-      {section.fields.map((field, index) => (
-        <FieldCard
-          key={field._uid}
-          field={field}
-          onChange={(next) => updateField(index, next)}
-          onRemove={() => removeField(index)}
-          scopeFieldOptions={scopeFieldOptions}
-          dragProps={{
-            isDragging: dragFieldIndex === index,
-            handleProps: {
-              draggable: true,
-              onDragStart: (e) => {
-                e.dataTransfer.effectAllowed = 'move'
+      <div ref={fieldsContainerRef}>
+        {section.fields.map((field, index) => (
+          <FieldCard
+            key={field._uid}
+            field={field}
+            onChange={(next) => updateField(index, next)}
+            onRemove={() => removeField(index)}
+            isSelected={selectedFieldUid === field._uid}
+            onSelect={() => onSelectField(field._uid)}
+            dragProps={{
+              isDragging: dragFieldIndex === index,
+              isDropTarget: dragOverFieldIndex === index && dragFieldIndex !== index,
+              onMouseDown: (e) => {
                 setDragFieldIndex(index)
+                startDragReorder(e, {
+                  container: fieldsContainerRef.current,
+                  itemSelector: '.field-card',
+                  fromIndex: index,
+                  onHoverIndex: setDragOverFieldIndex,
+                  onDrop: (from, to) => {
+                    reorderFields(from, to)
+                    setDragFieldIndex(null)
+                  },
+                })
               },
-              onDragEnd: () => setDragFieldIndex(null),
-            },
-            rootProps: {
-              onDragOver: (e) => e.preventDefault(),
-              onDrop: (e) => {
-                e.preventDefault()
-                if (dragFieldIndex !== null && dragFieldIndex !== index) {
-                  reorderFields(dragFieldIndex, index)
-                }
-                setDragFieldIndex(null)
-              },
-            },
-          }}
-        />
-      ))}
+            }}
+          />
+        ))}
+      </div>
       <button type="button" className="btn-secondary" onClick={addField}>
         + Field
       </button>
@@ -523,8 +626,10 @@ function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldO
   )
 }
 
-export default function FormBuilder({ sections, onChange }) {
+export default function FormBuilder({ sections, onChange, selectedFieldUid, onSelectField }) {
   const [dragSectionIndex, setDragSectionIndex] = React.useState(null)
+  const [dragOverSectionIndex, setDragOverSectionIndex] = React.useState(null)
+  const sectionsContainerRef = React.useRef(null)
   const topLevelFieldOptions = fieldOptionsFor(sections, null, false)
 
   function addSection() {
@@ -541,7 +646,7 @@ export default function FormBuilder({ sections, onChange }) {
   }
 
   return (
-    <div>
+    <div ref={sectionsContainerRef}>
       {sections.map((section, index) => (
         <SectionCard
           key={section._uid}
@@ -553,25 +658,23 @@ export default function FormBuilder({ sections, onChange }) {
           )}
           onChange={(next) => updateSection(index, next)}
           onRemove={() => removeSection(index)}
+          selectedFieldUid={selectedFieldUid}
+          onSelectField={onSelectField}
           dragProps={{
             isDragging: dragSectionIndex === index,
-            handleProps: {
-              draggable: true,
-              onDragStart: (e) => {
-                e.dataTransfer.effectAllowed = 'move'
-                setDragSectionIndex(index)
-              },
-              onDragEnd: () => setDragSectionIndex(null),
-            },
-            rootProps: {
-              onDragOver: (e) => e.preventDefault(),
-              onDrop: (e) => {
-                e.preventDefault()
-                if (dragSectionIndex !== null && dragSectionIndex !== index) {
-                  reorderSections(dragSectionIndex, index)
-                }
-                setDragSectionIndex(null)
-              },
+            isDropTarget: dragOverSectionIndex === index && dragSectionIndex !== index,
+            onMouseDown: (e) => {
+              setDragSectionIndex(index)
+              startDragReorder(e, {
+                container: sectionsContainerRef.current,
+                itemSelector: '.section-card',
+                fromIndex: index,
+                onHoverIndex: setDragOverSectionIndex,
+                onDrop: (from, to) => {
+                  reorderSections(from, to)
+                  setDragSectionIndex(null)
+                },
+              })
             },
           }}
         />

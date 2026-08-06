@@ -120,6 +120,10 @@ class FieldDefinitionCreate(BaseModel):
     # When set, this field is server-computed; is_required is ignored for it.
     calculation: Optional[str] = None
     validation: Optional[FieldValidationRule] = None
+    # Appearance-only — no effect on validation or visibility, just what
+    # the data collector sees while filling out the form.
+    placeholder: Optional[str] = None
+    help_text: Optional[str] = None
     # Only set by the XLSForm importer (core/xlsform.py), which needs the
     # resulting field_key to match the XLSForm `name` column so converted
     # relevant/calculation/constraint expressions (which reference that
@@ -153,6 +157,8 @@ class FieldDefinitionOut(BaseModel):
     visibility: Optional[dict] = None
     calculation: Optional[str] = None
     validation: Optional[dict] = None
+    placeholder: Optional[str] = None
+    help_text: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
