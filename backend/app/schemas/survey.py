@@ -124,6 +124,10 @@ class FieldDefinitionCreate(BaseModel):
     # the data collector sees while filling out the form.
     placeholder: Optional[str] = None
     help_text: Optional[str] = None
+    # Rendering style for single_select/multi_select only — see
+    # models/survey.py's FieldDefinition.appearance docstring for the
+    # exact value set and what "" means for each field type.
+    appearance: Optional[str] = None
     # Only set by the XLSForm importer (core/xlsform.py), which needs the
     # resulting field_key to match the XLSForm `name` column so converted
     # relevant/calculation/constraint expressions (which reference that
@@ -159,6 +163,7 @@ class FieldDefinitionOut(BaseModel):
     validation: Optional[dict] = None
     placeholder: Optional[str] = None
     help_text: Optional[str] = None
+    appearance: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

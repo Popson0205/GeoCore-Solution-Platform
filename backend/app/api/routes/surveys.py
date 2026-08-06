@@ -125,6 +125,7 @@ def _add_field(
             else None,
             placeholder=payload.placeholder,
             help_text=payload.help_text,
+            appearance=payload.appearance,
         )
     )
 

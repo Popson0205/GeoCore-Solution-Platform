@@ -190,6 +190,16 @@ class FieldDefinition(Base):
     # data collector filling out the form (see RecordForm.jsx).
     placeholder = Column(String, nullable=True)
     help_text = Column(String, nullable=True)
+    # Rendering style for single_select/multi_select only — ignored for
+    # every other field type. NULL/"" preserves the original behavior
+    # (single_select: a <select> dropdown; multi_select: a vertical
+    # checkbox list) deliberately, so existing surveys don't visually
+    # change out from under them the moment this column exists.
+    # single_select: "" (dropdown, default) | "list" (radio, vertical) |
+    #   "horizontal" (radio, side by side)
+    # multi_select: "" (checkboxes, vertical, default) | "dropdown"
+    #   (native multi-select) | "grid" (checkboxes, grid layout)
+    appearance = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     survey = relationship("Survey", back_populates="field_definitions")

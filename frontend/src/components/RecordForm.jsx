@@ -30,6 +30,24 @@ export function DynamicField({ field, value, onChange }) {
     )
   }
   if (field.field_type === 'single_select') {
+    const appearance = field.appearance || ''
+    if (appearance === 'list' || appearance === 'horizontal') {
+      return (
+        <div className={appearance === 'horizontal' ? 'radio-group radio-group-horizontal' : 'radio-group'}>
+          {(field.options || []).map((opt) => (
+            <label key={opt} className="checkbox-label">
+              <input
+                type="radio"
+                name={`field-${field.id}`}
+                checked={value === opt}
+                onChange={() => onChange(opt)}
+              />
+              {opt}
+            </label>
+          ))}
+        </div>
+      )
+    }
     return (
       <select value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
@@ -42,9 +60,28 @@ export function DynamicField({ field, value, onChange }) {
     )
   }
   if (field.field_type === 'multi_select') {
+    const appearance = field.appearance || ''
     const selected = Array.isArray(value) ? value : []
+
+    if (appearance === 'dropdown') {
+      return (
+        <select
+          multiple
+          value={selected}
+          onChange={(e) => onChange(Array.from(e.target.selectedOptions, (o) => o.value))}
+          style={{ minHeight: `${Math.min((field.options || []).length, 6) * 28 + 12}px` }}
+        >
+          {(field.options || []).map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      )
+    }
+
     return (
-      <div className="checkbox-group">
+      <div className={appearance === 'grid' ? 'checkbox-group checkbox-group-grid' : 'checkbox-group'}>
         {(field.options || []).map((opt) => (
           <label key={opt} className="checkbox-label">
             <input

@@ -45,6 +45,21 @@ const FIELD_TYPE_COLORS = {
   signature: '#64748b',
 }
 
+// Rendering styles for single_select/multi_select during actual data
+// collection (see RecordForm.jsx's DynamicField) — "" always means
+// "whatever this field type already rendered as before this existed",
+// so a survey nobody's touched keeps looking exactly the same.
+const SINGLE_SELECT_APPEARANCES = [
+  { value: '', label: 'Dropdown (default)' },
+  { value: 'list', label: 'List — radio buttons, vertical' },
+  { value: 'horizontal', label: 'Horizontal — radio buttons, side by side' },
+]
+const MULTI_SELECT_APPEARANCES = [
+  { value: '', label: 'List — checkboxes, vertical (default)' },
+  { value: 'dropdown', label: 'Dropdown — pick multiple from a list' },
+  { value: 'grid', label: 'Grid — checkboxes in columns' },
+]
+
 let _uidCounter = 0
 function uid() {
   _uidCounter += 1
@@ -63,6 +78,7 @@ export function emptyField(fieldType = 'text') {
     validation: {},
     placeholder: '',
     help_text: '',
+    appearance: '',
   }
 }
 
@@ -98,6 +114,7 @@ export function sectionsFromApi(sections) {
       validation: f.validation || {},
       placeholder: f.placeholder || '',
       help_text: f.help_text || '',
+      appearance: f.appearance || '',
     })),
   }))
 }
@@ -120,6 +137,7 @@ export function sectionsToApi(sections) {
       validation: cleanValidation(f.validation),
       placeholder: f.placeholder ? f.placeholder.trim() || null : null,
       help_text: f.help_text ? f.help_text.trim() || null : null,
+      appearance: f.appearance || null,
     })),
   }))
 }
@@ -377,6 +395,8 @@ export function FieldSettingsPanel({ field, onChange, fieldOptions }) {
   const key = slugifyKey(field.label)
   const isNumberish = field.field_type === 'number'
   const isTextish = ['text', 'long_text'].includes(field.field_type)
+  const isSingleSelect = field.field_type === 'single_select'
+  const isMultiSelect = field.field_type === 'multi_select'
   const otherFieldOptions = fieldOptions.filter((o) => o.key !== key)
 
   function set(patch) {
@@ -406,6 +426,18 @@ export function FieldSettingsPanel({ field, onChange, fieldOptions }) {
             placeholder="A short hint shown under the question"
           />
         </label>
+        {(isSingleSelect || isMultiSelect) && (
+          <label className="form-label" style={{ marginTop: 8 }}>
+            Choice layout
+            <select value={field.appearance || ''} onChange={(e) => set({ appearance: e.target.value })}>
+              {(isSingleSelect ? SINGLE_SELECT_APPEARANCES : MULTI_SELECT_APPEARANCES).map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div>

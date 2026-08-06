@@ -723,6 +723,9 @@ button.entity-pick:hover { border-color: var(--ws-border); color: var(--ws-text)
   white-space: nowrap;
 }
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 10px; }
+.checkbox-group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 14px; }
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-group-horizontal { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px 18px; }
 
 .field-builder { border-top: 1px solid var(--ws-border); padding-top: 14px; margin-top: 4px; }
 .field-builder-row {
