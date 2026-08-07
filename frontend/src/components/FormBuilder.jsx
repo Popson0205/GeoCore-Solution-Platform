@@ -1,6 +1,19 @@
 import React from 'react'
 import { COMPARE_OPERATORS, VISIBILITY_OPERATORS, slugifyKey } from '../lib/formEngine'
 
+/** A field's real identity — its actual, backend-assigned field_key if
+ * it has one (preserved by sectionsFromApi), or a live preview derived
+ * from the label for a field that's brand new and never been saved.
+ * Used everywhere a field needs to be referenced by key (condition
+ * dropdowns, the key tag shown on its card, self-exclusion from its own
+ * condition options) instead of re-deriving from whatever the label
+ * currently says, which silently breaks any existing condition/
+ * calculation pointing at a field the moment its label changes.
+ */
+function fieldKeyOf(field) {
+  return field.field_key || slugifyKey(field.label)
+}
+
 const FIELD_TYPES = [
   { value: 'text', label: 'Short text' },
   { value: 'long_text', label: 'Long text' },
@@ -69,6 +82,7 @@ function uid() {
 export function emptyField(fieldType = 'text') {
   return {
     _uid: uid(),
+    field_key: null,
     label: '',
     field_type: fieldType,
     options: [],
@@ -105,6 +119,13 @@ export function sectionsFromApi(sections) {
     visibility: s.visibility || null,
     fields: (s.fields || []).map((f) => ({
       _uid: uid(),
+      // The field's real, backend-assigned identity — preserved so
+      // renaming a field's label later (which is just display text)
+      // never breaks a condition/calculation elsewhere that references
+      // it by key. See slugifyKey usage throughout this file: every
+      // site now prefers this stable value over re-deriving a key from
+      // whatever the label currently says.
+      field_key: f.field_key || null,
       label: f.label,
       field_type: f.field_type,
       options: f.options || [],
@@ -128,6 +149,14 @@ export function sectionsToApi(sections) {
     repeat_label: s.repeatable ? s.repeat_label || null : null,
     visibility: cleanVisibility(s.visibility),
     fields: s.fields.map((f) => ({
+      // Preserves the field's real identity across a label edit — sent
+      // as null for a genuinely new field, which the backend correctly
+      // treats as "derive one from the label" (see routes/surveys.py's
+      // _add_field). Without this, every autosave re-derived every
+      // field's key from its current label, silently breaking any
+      // condition/calculation that referenced a field the moment its
+      // label ever changed.
+      field_key: f.field_key || null,
       label: f.label,
       field_type: f.field_type,
       options: ['single_select', 'multi_select'].includes(f.field_type) ? f.options : null,
@@ -163,12 +192,12 @@ export function fieldOptionsFor(sections, currentSectionUid, isRepeatable) {
   // sections) shares one flat top-level scope.
   if (isRepeatable) {
     const section = sections.find((s) => s._uid === currentSectionUid)
-    return (section?.fields || []).map((f) => ({ key: slugifyKey(f.label), label: f.label }))
+    return (section?.fields || []).map((f) => ({ key: fieldKeyOf(f), label: f.label }))
   }
   const opts = []
   sections
     .filter((s) => !s.repeatable)
-    .forEach((s) => s.fields.forEach((f) => opts.push({ key: slugifyKey(f.label), label: f.label })))
+    .forEach((s) => s.fields.forEach((f) => opts.push({ key: fieldKeyOf(f), label: f.label })))
   return opts
 }
 
@@ -300,7 +329,7 @@ function DragHandle({ onMouseDown }) {
 }
 
 function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect }) {
-  const key = slugifyKey(field.label)
+  const key = fieldKeyOf(field)
   const isLocationField = key === 'latitude' || key === 'longitude'
   const hasOptions = ['single_select', 'multi_select'].includes(field.field_type)
 
@@ -392,7 +421,7 @@ function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect 
  * of the form down every time you open a field's settings.
  */
 export function FieldSettingsPanel({ field, onChange, fieldOptions }) {
-  const key = slugifyKey(field.label)
+  const key = fieldKeyOf(field)
   const isNumberish = field.field_type === 'number'
   const isTextish = ['text', 'long_text'].includes(field.field_type)
   const isSingleSelect = field.field_type === 'single_select'
@@ -609,7 +638,7 @@ function SectionCard({ section, sectionIndex, onChange, onRemove, topLevelFieldO
             rule={section.visibility}
             onChange={(rule) => set({ visibility: rule })}
             fieldOptions={topLevelFieldOptions.filter(
-              (o) => !section.fields.some((f) => slugifyKey(f.label) === o.key)
+              (o) => !section.fields.some((f) => fieldKeyOf(f) === o.key)
             )}
           />
         </div>
@@ -686,7 +715,7 @@ export default function FormBuilder({ sections, onChange, selectedFieldUid, onSe
           sectionIndex={index}
           sections={sections}
           topLevelFieldOptions={topLevelFieldOptions.filter(
-            (o) => !section.fields.some((f) => slugifyKey(f.label) === o.key)
+            (o) => !section.fields.some((f) => fieldKeyOf(f) === o.key)
           )}
           onChange={(next) => updateSection(index, next)}
           onRemove={() => removeSection(index)}
