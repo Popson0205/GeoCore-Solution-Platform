@@ -27,7 +27,7 @@ function DashboardStandaloneApp() {
     <AuthProvider>
       <Routes>
         <Route element={<PublicLayout />}>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<Login homePath="/" />} />
           <Route path="/register" element={<Register />} />
         </Route>
 

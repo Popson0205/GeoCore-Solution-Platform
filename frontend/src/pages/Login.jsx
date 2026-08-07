@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-export default function Login({ showRegisterLink = true }) {
+export default function Login({ showRegisterLink = true, homePath = '/workspace' }) {
   const { status, login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -11,7 +11,7 @@ export default function Login({ showRegisterLink = true }) {
   const [error, setError] = useState(location.state?.notice || '')
   const [busy, setBusy] = useState(false)
 
-  if (status === 'authed') return <Navigate to="/workspace" replace />
+  if (status === 'authed') return <Navigate to={homePath} replace />
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -28,7 +28,7 @@ export default function Login({ showRegisterLink = true }) {
       }
       const data = await res.json()
       login(data.access_token)
-      navigate('/workspace')
+      navigate(homePath)
     } catch (err) {
       setError(err.message)
     } finally {
