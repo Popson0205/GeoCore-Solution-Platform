@@ -23,6 +23,7 @@ const FIELD_TYPES = [
   { value: 'single_select', label: 'Single select' },
   { value: 'multi_select', label: 'Multiple select' },
   { value: 'boolean', label: 'Boolean' },
+  { value: 'location', label: 'Location (map)' },
   { value: 'photo', label: 'Photo (via Attachments)' },
   { value: 'video', label: 'Video (via Attachments)' },
   { value: 'file', label: 'File (via Attachments)' },
@@ -38,6 +39,7 @@ const FIELD_TYPE_ICONS = {
   single_select: '◉',
   multi_select: '☑',
   boolean: '⚑',
+  location: '📍',
   photo: '📷',
   video: '🎥',
   file: '📎',
@@ -52,6 +54,7 @@ const FIELD_TYPE_COLORS = {
   single_select: '#f59e0b',
   multi_select: '#f59e0b',
   boolean: '#16a34a',
+  location: '#058b8c',
   photo: '#db2777',
   video: '#db2777',
   file: '#64748b',
@@ -159,7 +162,9 @@ export function sectionsToApi(sections) {
       field_key: f.field_key || null,
       label: f.label,
       field_type: f.field_type,
-      options: ['single_select', 'multi_select'].includes(f.field_type) ? f.options : null,
+      options: ['single_select', 'multi_select'].includes(f.field_type)
+        ? (f.options || []).map((o) => o.trim()).filter(Boolean)
+        : null,
       is_required: f.is_required,
       visibility: cleanVisibility(f.visibility),
       calculation: f.calculation ? f.calculation.trim() || null : null,
@@ -330,7 +335,6 @@ function DragHandle({ onMouseDown }) {
 
 function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect }) {
   const key = fieldKeyOf(field)
-  const isLocationField = key === 'latitude' || key === 'longitude'
   const hasOptions = ['single_select', 'multi_select'].includes(field.field_type)
 
   function set(patch) {
@@ -359,7 +363,15 @@ function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect 
         <select
           className="field-type-select"
           value={field.field_type}
-          onChange={(e) => set({ field_type: e.target.value })}
+          onChange={(e) => {
+            const nextType = e.target.value
+            const needsOptions = ['single_select', 'multi_select'].includes(nextType)
+            const patch = { field_type: nextType }
+            if (needsOptions && (field.options || []).length === 0) {
+              patch.options = ['', '', '']
+            }
+            set(patch)
+          }}
         >
           {FIELD_TYPES.map((t) => (
             <option key={t.value} value={t.value}>
@@ -391,21 +403,42 @@ function FieldCard({ field, onChange, onRemove, dragProps, isSelected, onSelect 
             e.stopPropagation()
             onRemove()
           }}
-          disabled={isLocationField}
-          title={isLocationField ? "This survey collects location — Latitude/Longitude can't be removed" : undefined}
         >
           Remove
         </button>
       </div>
 
       {hasOptions && (
-        <input
-          style={{ marginTop: 8, width: '100%' }}
-          value={(field.options || []).join(', ')}
-          onChange={(e) => set({ options: e.target.value.split(',').map((o) => o.trim()).filter(Boolean) })}
-          onClick={(e) => e.stopPropagation()}
-          placeholder="Choices, comma separated: Good, Fair, Poor"
-        />
+        <div className="choice-list" onClick={(e) => e.stopPropagation()}>
+          {(field.options || []).map((opt, index) => (
+            <div key={index} className="choice-row">
+              <input
+                value={opt}
+                onChange={(e) => {
+                  const next = [...field.options]
+                  next[index] = e.target.value
+                  set({ options: next })
+                }}
+                placeholder={`Choice ${index + 1}`}
+              />
+              <button
+                type="button"
+                className="choice-remove"
+                title="Remove this choice"
+                onClick={() => set({ options: field.options.filter((_, i) => i !== index) })}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn-ghost choice-add"
+            onClick={() => set({ options: [...(field.options || []), ''] })}
+          >
+            + Add choice
+          </button>
+        </div>
       )}
     </div>
   )

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import FormSections from '../components/RecordForm'
+import FormSections, { hasLocationField } from '../components/RecordForm'
 import LocationPicker from '../components/LocationPicker'
 
 const RANK = {
@@ -278,7 +278,7 @@ export default function ProjectRecords() {
               </select>
             </label>
 
-            {selectedSurvey && (
+            {selectedSurvey && !hasLocationField(selectedSurvey.sections) && (
               <LocationPicker
                 geometryType={selectedSurvey.geometry_type}
                 initialGeometry={geometry}
@@ -292,6 +292,9 @@ export default function ProjectRecords() {
                 sections={selectedSurvey.sections}
                 fieldData={fieldData}
                 setFieldData={setFieldData}
+                geometryType={selectedSurvey.geometry_type}
+                geometry={geometry}
+                onGeometryChange={setGeometry}
               />
             )}
 

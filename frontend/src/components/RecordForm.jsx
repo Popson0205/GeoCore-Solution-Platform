@@ -1,5 +1,21 @@
 import React from 'react'
 import { evaluateExpression, isVisible } from '../lib/formEngine'
+import LocationPicker from './LocationPicker'
+
+/** Whether a survey's form has an explicit "Location (map)" field
+ * anywhere in its top-level sections — if so, the location capture
+ * renders inline at that field's position (FieldsRenderer below)
+ * instead of the caller needing to render its own separate, always-
+ * pinned-above-the-form LocationPicker. Repeat sections aren't scanned:
+ * a record has exactly one geometry, so a location field inside a
+ * repeatable section wouldn't have anywhere coherent to write to, and
+ * simply won't render as anything special if put there.
+ */
+export function hasLocationField(sections) {
+  return (sections || []).some(
+    (s) => !s.repeatable && (s.fields || []).some((f) => f.field_type === 'location')
+  )
+}
 
 export function DynamicField({ field, value, onChange }) {
   const commonProps = {
@@ -111,11 +127,32 @@ export function DynamicField({ field, value, onChange }) {
  * read-only preview. The server is authoritative for both — see
  * backend/app/core/form_engine.py — this is just live UX.
  */
-function FieldsRenderer({ fields, values, onFieldChange }) {
+function FieldsRenderer({ fields, values, onFieldChange, geometryType, geometry, onGeometryChange }) {
   return (
     <>
       {fields.map((field) => {
         if (!isVisible(field.visibility, values)) return null
+
+        if (field.field_type === 'location') {
+          // A pure layout marker (see core/form_engine.py's
+          // _process_scope) — no field_data key, no required/validation
+          // check. Renders the same map-based picker that used to be
+          // unconditionally pinned above the whole form, just at
+          // whatever position the designer actually placed it.
+          if (!onGeometryChange) return null
+          return (
+            <div key={field.id}>
+              {field.label && <p className="builder-subhead">{field.label}</p>}
+              {field.help_text && <p className="ws-muted" style={{ marginTop: -8, marginBottom: 10 }}>{field.help_text}</p>}
+              <LocationPicker
+                geometryType={geometryType}
+                initialGeometry={geometry}
+                onChange={onGeometryChange}
+                resetKey="form"
+              />
+            </div>
+          )
+        }
 
         if (field.calculation) {
           const computed = evaluateExpression(field.calculation, values)
@@ -153,7 +190,7 @@ function FieldsRenderer({ fields, values, onFieldChange }) {
  * the internal record form (ProjectRecords.jsx) and the public submission
  * page (PublicSubmit.jsx) so they can never drift apart.
  */
-export default function FormSections({ sections, fieldData, setFieldData }) {
+export default function FormSections({ sections, fieldData, setFieldData, geometryType, geometry, onGeometryChange }) {
   function updateTopLevel(key, val) {
     setFieldData((prev) => ({ ...prev, [key]: val }))
   }
@@ -221,7 +258,14 @@ export default function FormSections({ sections, fieldData, setFieldData }) {
           <div key={section.id}>
             <p className="builder-subhead">{section.title}</p>
             {section.description && <p className="ws-muted">{section.description}</p>}
-            <FieldsRenderer fields={section.fields} values={fieldData} onFieldChange={updateTopLevel} />
+            <FieldsRenderer
+              fields={section.fields}
+              values={fieldData}
+              onFieldChange={updateTopLevel}
+              geometryType={geometryType}
+              geometry={geometry}
+              onGeometryChange={onGeometryChange}
+            />
           </div>
         )
       })}

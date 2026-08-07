@@ -31,6 +31,12 @@ FIELD_TYPES = {
     "video",
     "file",
     "signature",
+    # A pure layout marker, not a real data field — see
+    # core/form_engine.py's _process_scope, which skips it entirely (no
+    # required check, no field_data key). Tells RecordForm.jsx where in
+    # the form to render the map-based location capture, instead of it
+    # always being pinned above the whole form regardless of structure.
+    "location",
 }
 
 COMPARE_OPERATORS = {

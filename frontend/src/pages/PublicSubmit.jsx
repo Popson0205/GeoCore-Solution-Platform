@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import FormSections from '../components/RecordForm'
+import FormSections, { hasLocationField } from '../components/RecordForm'
 import LocationPicker from '../components/LocationPicker'
 
 async function publicFetch(path, options) {
@@ -162,14 +162,23 @@ export default function PublicSubmit() {
             </label>
           )}
 
-          <LocationPicker
-            geometryType={survey.geometry_type}
-            initialGeometry={geometry}
-            onChange={setGeometry}
-            resetKey="form"
-          />
+          {!hasLocationField(survey.sections) && (
+            <LocationPicker
+              geometryType={survey.geometry_type}
+              initialGeometry={geometry}
+              onChange={setGeometry}
+              resetKey="form"
+            />
+          )}
 
-          <FormSections sections={survey.sections} fieldData={fieldData} setFieldData={setFieldData} />
+          <FormSections
+            sections={survey.sections}
+            fieldData={fieldData}
+            setFieldData={setFieldData}
+            geometryType={survey.geometry_type}
+            geometry={geometry}
+            onGeometryChange={setGeometry}
+          />
 
           <button type="submit" className="btn-primary" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit'}

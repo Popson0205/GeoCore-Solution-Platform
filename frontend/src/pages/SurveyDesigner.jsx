@@ -5,13 +5,16 @@ import FormBuilder, { emptyField, FieldSettingsPanel, fieldOptionsFor, sectionsF
 
 const GEOMETRY_TYPES = ['point', 'line', 'polygon', 'none']
 
-// One Survey *is* the form (flat Survey123/KoBo model) — there's no
-// per-question "Location" palette group the way Survey123 has a geopoint
-// question type, because geometry is a single property of the Survey
-// itself (every Record collects exactly one). The palette below only
-// offers field types the backend actually supports (see
-// backend/app/schemas/survey.py's FIELD_TYPES) grouped visually the way
-// Survey123's own "Add" panel groups them.
+// One Survey *is* the form (flat Survey123/KoBo model). Location now has
+// its own palette entry too, matching Survey123's geopoint question
+// type: adding it places the map-based location capture at that exact
+// position in the form instead of it always being pinned above
+// everything else — see RecordForm.jsx's handling of field_type
+// "location", and backend/app/core/form_engine.py, which treats it as a
+// pure layout marker (no field_data key, no required/validation check).
+// A survey with no location field anywhere still falls back to the
+// original always-on-top picker, so existing surveys built before this
+// existed don't lose their location capture.
 const PALETTE_GROUPS = [
   {
     label: 'Text, number, date, and time',
@@ -30,6 +33,10 @@ const PALETTE_GROUPS = [
       { type: 'multi_select', label: 'Multiple select', icon: '☑' },
       { type: 'boolean', label: 'Yes / No', icon: '⚑' },
     ],
+  },
+  {
+    label: 'Location',
+    items: [{ type: 'location', label: 'Location (map)', icon: '📍' }],
   },
   {
     label: 'Media and files',

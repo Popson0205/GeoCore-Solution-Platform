@@ -102,6 +102,8 @@ def _process_scope(
     """
     processed = dict(values)
     for field in fields:
+        if field.field_type == "location":
+            continue  # a layout marker, not a real data field — see FIELD_TYPES
         section = section_by_id.get(field.section_id) if section_by_id and field.section_id else None
         if section is not None and not is_visible(section.visibility, processed):
             continue  # the whole section (page) is hidden right now

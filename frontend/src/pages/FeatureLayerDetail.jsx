@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useAuth } from '../context/AuthContext'
-import FormSections from '../components/RecordForm'
+import FormSections, { hasLocationField } from '../components/RecordForm'
 import LocationPicker from '../components/LocationPicker'
 
 const RANK = {
@@ -812,13 +812,22 @@ export default function FeatureLayerDetail() {
               Cancel
             </button>
           </div>
-          <LocationPicker
+          {!hasLocationField(survey.sections) && (
+            <LocationPicker
+              geometryType={survey.geometry_type}
+              initialGeometry={geometry}
+              onChange={setGeometry}
+              resetKey={editingRecordId}
+            />
+          )}
+          <FormSections
+            sections={survey.sections}
+            fieldData={fieldData}
+            setFieldData={setFieldData}
             geometryType={survey.geometry_type}
-            initialGeometry={geometry}
-            onChange={setGeometry}
-            resetKey={editingRecordId}
+            geometry={geometry}
+            onGeometryChange={setGeometry}
           />
-          <FormSections sections={survey.sections} fieldData={fieldData} setFieldData={setFieldData} />
           <div className="form-row">
             <button type="submit" className="btn-primary" disabled={savingRecord}>
               {savingRecord ? 'Saving…' : 'Save changes'}
