@@ -58,3 +58,27 @@ class ParcelLineageOut(BaseModel):
     record: RecordOut
     ancestors: list[RecordOut]
     descendants: list[RecordOut]
+
+
+class ParcelIntegrityRequest(BaseModel):
+    # Optional reference boundary (e.g. a subdivision's outer edge) to
+    # check full coverage against — without it, only overlap detection
+    # runs, since gap detection needs something to compare against.
+    boundary: Optional[dict] = None
+
+
+class ParcelOverlapOut(BaseModel):
+    record_id_a: uuid.UUID
+    record_id_b: uuid.UUID
+    overlap_area_sq_degrees: float
+
+
+class ParcelGapOut(BaseModel):
+    geometry: dict
+    gap_area_sq_degrees: float
+
+
+class ParcelIntegrityResult(BaseModel):
+    parcels_checked: int
+    overlaps: list[ParcelOverlapOut]
+    gap: Optional[ParcelGapOut] = None

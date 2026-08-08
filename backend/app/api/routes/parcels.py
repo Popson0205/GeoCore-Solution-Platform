@@ -15,20 +15,27 @@ import uuid
 from collections import deque
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import require_org_role
 from backend.app.core.audit import log_action
+from backend.app.core.parcel_integrity import find_boundary_gap, find_overlapping_parcels
 from backend.app.core.roles import PROJECT_MANAGER, VIEWER
+from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.parcel_merge_source import ParcelMergeSource
 from backend.app.models.record import Record
 from backend.app.models.user import User
 from backend.app.core.database import get_db
 from backend.app.schemas.parcel import (
+    ParcelGapOut,
+    ParcelIntegrityRequest,
+    ParcelIntegrityResult,
     ParcelLineageOut,
     ParcelMergeRequest,
     ParcelMergeResult,
+    ParcelOverlapOut,
     ParcelSplitRequest,
     ParcelSplitResult,
 )
@@ -220,3 +227,50 @@ def get_parcel_lineage(
                 queue.append((child, depth + 1))
 
     return ParcelLineageOut(record=record, ancestors=ancestors, descendants=descendants)
+
+
+@router.post("/feature-layers/{layer_id}/parcels/integrity-check", response_model=ParcelIntegrityResult)
+def check_parcel_integrity(
+    layer_id: uuid.UUID,
+    payload: ParcelIntegrityRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Overlap and (optionally) gap detection for a parcel layer — see
+    core/parcel_integrity.py for why this uses shapely rather than
+    PostGIS SQL, and for the honest caveat about area units.
+    """
+    layer = db.query(FeatureLayer).filter(FeatureLayer.id == layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="Feature layer not found")
+    require_org_role(db, layer.organisation_id, current_user.id, VIEWER)
+
+    # Historic (retired) parcels aren't real current coverage — excluded
+    # from both checks. NULL status (an ordinary, non-parcel feature
+    # layer) is treated as active, so this endpoint also works as a
+    # general-purpose overlap check for any polygon layer, not only
+    # ones using the parcel-fabric-specific fields.
+    #
+    # NOTE: `Record.status != "historic"` alone would silently exclude
+    # every row where status IS NULL too — SQL's three-valued logic
+    # means `NULL != 'historic'` evaluates to NULL, not true, so it gets
+    # filtered out of the WHERE clause. Caught this by actually running
+    # the query against real seeded records (which don't set status at
+    # all) rather than trusting it from reading the code.
+    records = (
+        db.query(Record)
+        .filter(
+            Record.feature_layer_id == layer_id,
+            or_(Record.status != "historic", Record.status.is_(None)),
+        )
+        .all()
+    )
+
+    overlaps = find_overlapping_parcels(records)
+    gap = find_boundary_gap(records, payload.boundary) if payload.boundary else None
+
+    return ParcelIntegrityResult(
+        parcels_checked=len(records),
+        overlaps=[ParcelOverlapOut(**o) for o in overlaps],
+        gap=ParcelGapOut(**gap) if gap else None,
+    )
