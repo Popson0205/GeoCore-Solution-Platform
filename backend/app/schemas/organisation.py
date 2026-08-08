@@ -39,6 +39,7 @@ class OrganisationOut(BaseModel):
     open_data_url: Optional[str] = None
     banner_image_url: Optional[str] = None
     custom_domain: Optional[str] = None
+    estate_public_search_enabled: bool = False
     # The requesting user's role in this organisation. Populated per-request
     # in routes/organisations.py — not a DB column on Organisation itself.
     my_role: Optional[str] = None

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
@@ -114,3 +115,27 @@ class ParcelIntegrityResult(BaseModel):
     self_intersecting: list[ParcelSelfIntersectionOut] = []
     overlaps: list[ParcelOverlapOut]
     gap: Optional[ParcelGapOut] = None
+
+
+class PublicSearchResultOut(BaseModel):
+    """Deliberately thin — a search-results-list shape, not the full
+    parcel. No geometry (keeps the list light for a query that could
+    match many rows), no internal ids beyond what's needed to fetch the
+    detail page. See PublicParcelOut for the full record a specific
+    search result links to.
+    """
+
+    id: uuid.UUID
+    plan_number: Optional[str] = None
+    owners: list[str] = []
+    location_description: Optional[str] = None
+    lga: Optional[str] = None
+    state: Optional[str] = None
+    area_sqm: Optional[float] = None
+
+
+class PublicParcelOut(BaseModel):
+    id: uuid.UUID
+    geometry: dict
+    field_data: dict
+    updated_at: datetime

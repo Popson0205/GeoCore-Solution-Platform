@@ -408,3 +408,27 @@ def preview_cogo_traverse(payload: CogoTraverseRequest, current_user: User = Dep
         geometry=geometry,
         beacons=beacons,
     )
+
+
+@router.patch("/organisations/{organisation_id}/estate-settings")
+def update_estate_settings(
+    organisation_id: uuid.UUID,
+    enabled: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Owner/Administrator only, deliberately stricter than the
+    PROJECT_MANAGER bar the rest of this file uses -- this controls
+    whether an org's parcels become visible to the public internet at
+    all, not day-to-day parcel work.
+    """
+    from backend.app.core.roles import ADMINISTRATOR
+    from backend.app.models.organisation import Organisation
+
+    require_org_role(db, organisation_id, current_user.id, ADMINISTRATOR)
+    org = db.query(Organisation).filter(Organisation.id == organisation_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organisation not found")
+    org.estate_public_search_enabled = enabled
+    db.commit()
+    return {"estate_public_search_enabled": org.estate_public_search_enabled}

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -48,6 +48,14 @@ class Organisation(Base):
     # same local-disk storage attachments already use, not a public URL.
     # NULL falls back to the generated gradient in OrganisationOverview.jsx.
     banner_image_path = Column(String, nullable=True)
+    # Off by default, deliberately -- land ownership data is sensitive,
+    # so an org has to explicitly turn this on before any of its
+    # parcels are visible to an unauthenticated public search (see
+    # routes/public.py's /public/estate/* endpoints). Scoped to the
+    # whole org's GeoCore Estate parcels, not per-parcel -- a real land
+    # registry wants its processed properties discoverable as a batch,
+    # not toggled one at a time.
+    estate_public_search_enabled = Column(Boolean, default=False, nullable=False)
     # A customer-requested custom public domain (e.g. "gis.theirministry.gov.ng").
     # Storing this does NOT make the app actually reachable there — DNS and
     # reverse-proxy/SSL setup on the hosting side is a separate, manual ops

@@ -106,6 +106,7 @@ export default function ParcelRegister() {
           { to: '/', label: 'Parcels', end: true },
           { to: '/estate/map', label: 'Map' },
           { to: '/estate/land-records', label: 'Land Records' },
+          { to: '/estate/settings', label: 'Settings' },
         ]}
         homeTo="/"
       />
