@@ -70,15 +70,21 @@ class ParcelIntegrityRequest(BaseModel):
 class ParcelOverlapOut(BaseModel):
     record_id_a: uuid.UUID
     record_id_b: uuid.UUID
-    overlap_area_sq_degrees: float
+    overlap_area_sqm: float
 
 
 class ParcelGapOut(BaseModel):
     geometry: dict
-    gap_area_sq_degrees: float
+    gap_area_sqm: float
+
+
+class ParcelSelfIntersectionOut(BaseModel):
+    record_id: uuid.UUID
+    reason: str
 
 
 class ParcelIntegrityResult(BaseModel):
     parcels_checked: int
+    self_intersecting: list[ParcelSelfIntersectionOut] = []
     overlaps: list[ParcelOverlapOut]
     gap: Optional[ParcelGapOut] = None

@@ -21,15 +21,26 @@ from sqlalchemy.orm import Session
 from backend.app.api.deps import get_current_user
 from backend.app.api.deps_project import require_org_role
 from backend.app.core.audit import log_action
-from backend.app.core.parcel_integrity import find_boundary_gap, find_overlapping_parcels
+from backend.app.core.parcel_integrity import find_boundary_gap, find_overlapping_parcels, find_self_intersecting_parcels
 from backend.app.core.roles import PROJECT_MANAGER, VIEWER
 from backend.app.models.feature_layer import FeatureLayer
 from backend.app.models.parcel_merge_source import ParcelMergeSource
 from backend.app.models.record import Record
 from backend.app.models.user import User
 from backend.app.core.database import get_db
+from backend.app.core.cogo import (
+    Leg,
+    points_to_geojson_polygon,
+    polygon_self_intersection_error,
+    reproject_to_wgs84,
+    geodesic_area_sqm,
+    traverse_closure_error_m,
+    traverse_to_local_points,
+)
+from backend.app.schemas.cogo import CogoPreviewResult, CogoTraverseRequest
 from backend.app.schemas.parcel import (
     ParcelGapOut,
+    ParcelSelfIntersectionOut,
     ParcelIntegrityRequest,
     ParcelIntegrityResult,
     ParcelLineageOut,
@@ -266,11 +277,65 @@ def check_parcel_integrity(
         .all()
     )
 
+    self_intersecting = find_self_intersecting_parcels(records)
     overlaps = find_overlapping_parcels(records)
     gap = find_boundary_gap(records, payload.boundary) if payload.boundary else None
 
     return ParcelIntegrityResult(
         parcels_checked=len(records),
+        self_intersecting=[ParcelSelfIntersectionOut(**s) for s in self_intersecting],
         overlaps=[ParcelOverlapOut(**o) for o in overlaps],
         gap=ParcelGapOut(**gap) if gap else None,
+    )
+
+
+@router.post("/parcels/cogo-preview", response_model=CogoPreviewResult)
+def preview_cogo_traverse(payload: CogoTraverseRequest, current_user: User = Depends(get_current_user)):
+    """Walk a COGO (bearing/distance) traverse and validate it, WITHOUT
+    saving anything — matches how a surveyor actually works: check the
+    traverse closes and doesn't cross itself before it becomes a real
+    parcel boundary. The resulting geometry (once valid) is a plain
+    GeoJSON polygon, the same shape a hand-drawn one from LocationPicker
+    already produces — so it saves through the exact same paths (a new
+    record, a split's child, a merge's resulting boundary) with no
+    special-casing needed anywhere else.
+
+    No organisation/role check here deliberately — this is pure
+    coordinate math with no database read or write, same as
+    core/cogo.py's unit-level functions it calls. Any authenticated user
+    can test a traverse; only the endpoint that actually saves the
+    result (record creation, split, merge) enforces org membership/role.
+    """
+    legs = [Leg(l.bearing_deg, l.distance_m, l.beacon) for l in payload.legs]
+    beacons = [payload.start_beacon] + [l.beacon for l in payload.legs]
+
+    closure_error = traverse_closure_error_m(payload.start_easting, payload.start_northing, legs)
+    if closure_error > payload.closure_tolerance_m:
+        return CogoPreviewResult(
+            valid=False,
+            reason=f"Traverse does not close: {closure_error:.2f}m error (tolerance {payload.closure_tolerance_m}m)",
+            closure_error_m=closure_error,
+            beacons=beacons,
+        )
+
+    local_points = traverse_to_local_points(payload.start_easting, payload.start_northing, legs)
+    wgs84_points = reproject_to_wgs84(local_points, payload.source_epsg)
+    geometry = points_to_geojson_polygon(wgs84_points)
+
+    self_intersection = polygon_self_intersection_error(geometry)
+    if self_intersection:
+        return CogoPreviewResult(
+            valid=False,
+            reason=f"Boundary crosses itself: {self_intersection}",
+            closure_error_m=closure_error,
+            geometry=geometry,
+            beacons=beacons,
+        )
+
+    return CogoPreviewResult(
+        valid=True,
+        closure_error_m=closure_error,
+        area_sqm=round(geodesic_area_sqm(geometry), 2),
+        geometry=geometry,
+        beacons=beacons,
     )
