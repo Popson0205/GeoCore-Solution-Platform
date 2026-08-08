@@ -227,6 +227,55 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
     setLegs(legs.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
 
+  const [closingLeg, setClosingLeg] = useState(false)
+
+  async function autoCloseLeg() {
+    setError('')
+    const knownLegs = legs.filter((l) => (l.deg || l.min || l.sec) && l.distance)
+    if (knownLegs.length < 2) {
+      setError('Enter at least 2 known sides before auto-closing the last one.')
+      return
+    }
+    setClosingLeg(true)
+    try {
+      const data = await authedFetch('/api/parcels/cogo-close-leg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_easting: parseFloat(startEasting),
+          start_northing: parseFloat(startNorthing),
+          legs: knownLegs.map((l) => ({
+            bearing_deg: dmsToDecimal(l.deg, l.min, l.sec),
+            distance_m: parseFloat(l.distance),
+            beacon: l.beacon || null,
+          })),
+        }),
+      })
+      const deg = Math.floor(data.bearing_deg)
+      const minFloat = (data.bearing_deg - deg) * 60
+      const min = Math.floor(minFloat)
+      const sec = Math.round((minFloat - min) * 60)
+      // Appends a genuinely new leg rather than overwriting whatever's
+      // in the last row -- closing is additive to what's known, not a
+      // replacement for a value someone may have already typed in.
+      setLegs([
+        ...legs,
+        {
+          id: legIdCounter++,
+          deg: String(deg),
+          min: String(min),
+          sec: String(sec),
+          distance: data.distance_m.toFixed(2),
+          beacon: '',
+        },
+      ])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setClosingLeg(false)
+    }
+  }
+
   async function testClosure() {
     setError('')
     setResult(null)
@@ -432,6 +481,9 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
           <p className="builder-subhead">Step 2 — add the traverse legs</p>
           <p className="builder-hint" style={{ marginTop: 4 }}>
             Bearing: degrees / minutes / seconds clockwise from Grid North. Each leg walks TO the point it names.
+            If you have a certified plan, enter every side exactly as measured, including the last one — "Test
+            closure" then checks the surveyor's own numbers are consistent. If you're drawing a new boundary and
+            don't have the last side measured yet, enter the other sides and use "Auto-close" below instead.
           </p>
           <div className="choice-list" style={{ marginTop: 4, marginBottom: 12 }}>
             {legs.map((leg, i) => (
@@ -462,9 +514,14 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
                 </button>
               </div>
             ))}
-            <button type="button" className="btn-ghost choice-add" onClick={addLeg}>
-              + Add leg
-            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" className="btn-ghost choice-add" onClick={addLeg}>
+                + Add leg
+              </button>
+              <button type="button" className="btn-ghost choice-add" onClick={autoCloseLeg} disabled={closingLeg}>
+                {closingLeg ? 'Computing…' : '⏎ Auto-close (compute the last side)'}
+              </button>
+            </div>
           </div>
 
           <button type="button" className="btn-secondary" onClick={testClosure} disabled={testing}>

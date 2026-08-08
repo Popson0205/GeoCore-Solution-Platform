@@ -91,6 +91,33 @@ def traverse_closure_error_m(start_easting: float, start_northing: float, legs: 
     return math.hypot(last[0] - start_easting, last[1] - start_northing)
 
 
+def compute_closing_leg(start_easting: float, start_northing: float, legs: list[Leg]) -> tuple[float, float]:
+    """The AutoCAD-style "close" workflow, distinct from
+    traverse_closure_error_m above: given the legs walked SO FAR (not
+    including a final one), what bearing and distance would the next
+    leg need to be to land exactly back on the start point?
+
+    This is the right tool when drawing a NEW parcel from scratch and
+    only N-1 sides are actually known -- NOT a substitute for entering
+    a real closing leg when transcribing an already-measured, certified
+    plan (see traverse_closure_error_m's docstring): a real survey
+    measures every side independently, including the last one, and the
+    closure check is what catches a transcription or measurement error
+    on the way in. Auto-computing the closing leg there would make the
+    traverse "close" by definition every time, which defeats the whole
+    point of the check. This function is for the opposite situation --
+    no closing measurement exists yet because the shape is being
+    drawn, not transcribed.
+    """
+    points = traverse_to_local_points(start_easting, start_northing, legs)
+    last_easting, last_northing = points[-1]
+    dx = start_easting - last_easting
+    dy = start_northing - last_northing
+    distance = math.hypot(dx, dy)
+    bearing = math.degrees(math.atan2(dx, dy)) % 360
+    return bearing, distance
+
+
 def reproject_to_wgs84(points: list[tuple[float, float]], source_epsg: int) -> list[tuple[float, float]]:
     if not source_epsg or source_epsg == 4326:
         return points

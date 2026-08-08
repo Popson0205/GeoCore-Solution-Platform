@@ -31,6 +31,7 @@ from backend.app.core.database import get_db
 from backend.app.core.cogo import (
     Leg,
     calibrated_reproject_to_wgs84,
+    compute_closing_leg,
     points_to_geojson_polygon,
     polygon_self_intersection_error,
     reproject_to_wgs84,
@@ -40,6 +41,8 @@ from backend.app.core.cogo import (
 )
 from backend.app.models.estate_calibration import EstateGridCalibration
 from backend.app.schemas.cogo import (
+    CogoCloseLegRequest,
+    CogoCloseLegResult,
     CogoPointPreviewRequest,
     CogoPointPreviewResult,
     CogoPreviewResult,
@@ -440,6 +443,25 @@ def check_parcel_integrity(
         overlaps=[ParcelOverlapOut(**o) for o in overlaps],
         gap=ParcelGapOut(**gap) if gap else None,
     )
+
+
+@router.post("/parcels/cogo-close-leg", response_model=CogoCloseLegResult)
+def close_cogo_traverse(payload: CogoCloseLegRequest, current_user: User = Depends(get_current_user)):
+    """The AutoCAD-style "close" workflow: given the legs walked so far,
+    compute the bearing/distance the next leg needs to be to land
+    exactly back on the start point. See core/cogo.py's
+    compute_closing_leg for why this is a genuinely different tool from
+    the closure VALIDATION in /parcels/cogo-preview, not a shortcut
+    around it -- this is for drawing a new boundary where the last side
+    isn't independently measured yet, not for transcribing an
+    already-fully-measured certified plan.
+
+    Pure local-grid trigonometry, no reprojection -- no source_epsg
+    needed here at all.
+    """
+    legs = [Leg(l.bearing_deg, l.distance_m, l.beacon) for l in payload.legs]
+    bearing, distance = compute_closing_leg(payload.start_easting, payload.start_northing, legs)
+    return CogoCloseLegResult(bearing_deg=bearing, distance_m=distance)
 
 
 @router.post("/parcels/cogo-preview-point", response_model=CogoPointPreviewResult)

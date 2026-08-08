@@ -30,6 +30,17 @@ class EstateCalibrationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CogoCloseLegRequest(BaseModel):
+    start_easting: float
+    start_northing: float
+    legs: list[CogoLeg]
+
+
+class CogoCloseLegResult(BaseModel):
+    bearing_deg: float
+    distance_m: float
+
+
 class CogoPointPreviewRequest(BaseModel):
     easting: float
     northing: float
