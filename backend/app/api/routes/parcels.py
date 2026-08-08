@@ -38,7 +38,10 @@ from backend.app.core.cogo import (
     traverse_to_local_points,
 )
 from backend.app.schemas.cogo import CogoPreviewResult, CogoTraverseRequest
+from backend.app.core.parcel_provisioning import get_or_create_estate_layer
+from backend.app.schemas.record import RecordOut
 from backend.app.schemas.parcel import (
+    ParcelCreateRequest,
     ParcelGapOut,
     ParcelSelfIntersectionOut,
     ParcelIntegrityRequest,
@@ -52,6 +55,72 @@ from backend.app.schemas.parcel import (
 )
 
 router = APIRouter()
+
+
+@router.post("/organisations/{organisation_id}/parcels", response_model=RecordOut)
+def create_parcel(
+    organisation_id: uuid.UUID,
+    payload: ParcelCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The entry point Split/Merge don't cover: a genuinely new parcel
+    that doesn't come from dividing or combining an existing one — the
+    normal case when first digitizing a real survey plan. No Survey
+    Designer, no manually-created Feature Layer required first (see
+    core/parcel_provisioning.py) -- this is COGO/drawn geometry, a
+    different kind of data entry from the rest of the platform's
+    form-driven Records.
+    """
+    require_org_role(db, organisation_id, current_user.id, PROJECT_MANAGER)
+    layer = get_or_create_estate_layer(db, organisation_id, current_user.id)
+
+    field_data = dict(payload.extra_field_data)
+    if payload.plan_number:
+        field_data["plan_number"] = payload.plan_number
+    if payload.surveyor_name:
+        field_data["surveyor_name"] = payload.surveyor_name
+    if payload.surveyor_firm:
+        field_data["surveyor_firm"] = payload.surveyor_firm
+    if payload.owners:
+        field_data["owners"] = payload.owners
+    if payload.location_description:
+        field_data["location_description"] = payload.location_description
+    if payload.lga:
+        field_data["lga"] = payload.lga
+    if payload.state:
+        field_data["state"] = payload.state
+    if payload.scale:
+        field_data["scale"] = payload.scale
+    # Computed, not asked for — the real plans print this, but there's
+    # no reason to make a human do the arithmetic when the boundary
+    # itself already determines it (see core/cogo.py's geodesic_area_sqm).
+    field_data["area_sqm"] = round(geodesic_area_sqm(payload.geometry), 2)
+
+    record = Record(
+        organisation_id=organisation_id,
+        survey_id=layer.survey_id,
+        feature_layer_id=layer.id,
+        geometry=payload.geometry,
+        field_data=field_data,
+        status="active",
+        land_record_id=payload.land_record_id,
+        created_by=current_user.id,
+    )
+    db.add(record)
+    db.flush()
+    log_action(
+        db,
+        organisation_id=organisation_id,
+        user_id=current_user.id,
+        action="parcel.created",
+        target_type="record",
+        target_id=record.id,
+        details={"plan_number": payload.plan_number},
+    )
+    db.commit()
+    db.refresh(record)
+    return record
 
 MAX_LINEAGE_DEPTH = 20  # defensive cap, not expected to ever be hit by real data
 

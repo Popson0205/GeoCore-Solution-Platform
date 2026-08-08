@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
+import CreateParcelPanel from '../components/CreateParcelPanel'
 
 const ESTATE_ACCENT = '#b7791f'
 
@@ -23,6 +24,18 @@ export default function ParcelRegister() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [showHistoric, setShowHistoric] = useState(false)
+  const [showCreatePanel, setShowCreatePanel] = useState(false)
+  const [landRecords, setLandRecords] = useState([])
+
+  function refreshLayers(org, selectLayerId) {
+    return authedFetch(`/api/organisations/${org.id}/feature-layers`).then((data) => {
+      const polygonLayers = data.filter((l) => l.geometry_type === 'polygon')
+      setLayers(polygonLayers)
+      const target = selectLayerId || (polygonLayers.find((l) => l.id === activeLayerId) ? activeLayerId : polygonLayers[0]?.id)
+      if (target) setActiveLayerId(target)
+      return polygonLayers
+    })
+  }
 
   useEffect(() => {
     if (status !== 'authed') return
@@ -38,15 +51,10 @@ export default function ParcelRegister() {
 
   useEffect(() => {
     if (!activeOrg) return
-    authedFetch(`/api/organisations/${activeOrg.id}/feature-layers`)
-      .then((data) => {
-        const polygonLayers = data.filter((l) => l.geometry_type === 'polygon')
-        setLayers(polygonLayers)
-        if (polygonLayers.length && !polygonLayers.find((l) => l.id === activeLayerId)) {
-          setActiveLayerId(polygonLayers[0].id)
-        }
-      })
-      .catch((err) => setError(err.message))
+    refreshLayers(activeOrg).catch((err) => setError(err.message))
+    authedFetch(`/api/organisations/${activeOrg.id}/land-records`)
+      .then(setLandRecords)
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrg])
 
@@ -59,6 +67,15 @@ export default function ParcelRegister() {
       .finally(() => setRecordsLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayerId])
+
+  function handleParcelCreated(record) {
+    setShowCreatePanel(false)
+    refreshLayers(activeOrg, record.feature_layer_id).then(() => {
+      authedFetch(`/api/feature-layers/${record.feature_layer_id}/records`)
+        .then(setRecords)
+        .catch((err) => setError(err.message))
+    })
+  }
 
   const filtered = useMemo(() => {
     return records
@@ -97,12 +114,17 @@ export default function ParcelRegister() {
         <div className="ws-page" style={{ paddingTop: 40 }}>
           <p className="ws-muted">Loading…</p>
         </div>
-      ) : layers.length === 0 ? (
-        <div className="ws-page" style={{ paddingTop: 40 }}>
-          <div className="empty-state">
-            <p>No parcel (polygon) feature layers yet.</p>
-            <span>Create a polygon-geometry survey from GeoCore Portal to start managing parcels here.</span>
+      ) : layers.length === 0 && !showCreatePanel ? (
+        <div className="ws-page ws-page-wide" style={{ paddingTop: 40 }}>
+          <div className="empty-state" style={{ marginBottom: 20 }}>
+            <p>No parcels yet.</p>
+            <span>A parcel is drawn or COGO-plotted directly — nothing to set up first.</span>
           </div>
+          {activeOrg && (
+            <button type="button" className="btn-primary" style={{ background: ESTATE_ACCENT }} onClick={() => setShowCreatePanel(true)}>
+              + Create your first parcel
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -121,10 +143,28 @@ export default function ParcelRegister() {
                 ))}
               </select>
             )}
+            <div style={{ flex: 1 }} />
+            <button
+              type="button"
+              className="survey-toolbar-new-btn"
+              style={{ color: '#1f2937' }}
+              onClick={() => setShowCreatePanel(!showCreatePanel)}
+            >
+              {showCreatePanel ? 'Cancel' : '+ New parcel'}
+            </button>
           </div>
 
           <div className="ws-page ws-page-wide">
           {error && <p className="hint">{error}</p>}
+
+          {showCreatePanel && activeOrg && (
+            <CreateParcelPanel
+              organisationId={activeOrg.id}
+              landRecords={landRecords}
+              onCreated={handleParcelCreated}
+              onCancel={() => setShowCreatePanel(false)}
+            />
+          )}
 
           <div className="content-table-wrap" style={{ marginBottom: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--ws-border)' }}>

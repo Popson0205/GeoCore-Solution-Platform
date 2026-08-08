@@ -54,6 +54,32 @@ class ParcelMergeResult(BaseModel):
     child: RecordOut
 
 
+class ParcelCreateRequest(BaseModel):
+    """Fields modeled directly on a real Nigerian cadastral survey plan
+    (see the two reference plans this was built from) rather than
+    invented generically — plan_number matches the "PLAN NO" box,
+    owners supports the plan's actual joint-ownership case (a husband
+    and wife on the same title), location/lga/state matches the plan's
+    three-level location description, and scale matches its printed
+    map scale. Stored in the parcel Record's field_data under these
+    exact keys (see routes/parcels.py's create_parcel) rather than as
+    new dedicated columns -- consistent with the rest of the platform's
+    "one generic Record model, configured per use" approach.
+    """
+
+    geometry: dict
+    plan_number: Optional[str] = None
+    surveyor_name: Optional[str] = None
+    surveyor_firm: Optional[str] = None
+    owners: list[str] = []
+    location_description: Optional[str] = None
+    lga: Optional[str] = None
+    state: Optional[str] = None
+    scale: Optional[str] = None
+    land_record_id: Optional[uuid.UUID] = None
+    extra_field_data: dict = {}
+
+
 class ParcelLineageOut(BaseModel):
     record: RecordOut
     ancestors: list[RecordOut]
