@@ -41,6 +41,9 @@ class RecordOut(BaseModel):
     project_id: Optional[uuid.UUID] = None
     geometry: dict
     field_data: dict
+    parent_record_id: Optional[uuid.UUID] = None
+    status: Optional[str] = None
+    land_record_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
 

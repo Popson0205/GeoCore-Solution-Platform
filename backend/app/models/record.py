@@ -54,6 +54,26 @@ class Record(Base):
     # logged-in org member — there's no User row to point to for those.
     submitted_by_name = Column(String, nullable=True)
     submitted_by_email = Column(String, nullable=True)
+    # Parcel fabric lineage — nullable and unused by an ordinary survey's
+    # records (a facility inspection, say); only meaningful when this
+    # record represents a land parcel. See models/land_record.py's
+    # docstring for the reasoning: a parcel fabric is records-driven, and
+    # a split/merge retires the parent parcel rather than deleting it, so
+    # "how did this parcel become what it is" stays a real, answerable
+    # question rather than lost history.
+    #
+    # parent_record_id: the parcel this one was split or merged from.
+    # For a merge (two-plus parents into one child), this alone can't
+    # represent every parent — see the parcel_merge_sources API/table
+    # this needs once Phase 2 actually implements merging.
+    parent_record_id = Column(UUID(as_uuid=True), ForeignKey("records.id"), nullable=True, index=True)
+    # "active" | "historic" — a historic (retired) parcel is kept, not
+    # deleted, specifically so its lineage stays queryable. NULL for any
+    # non-parcel record, where the concept doesn't apply.
+    status = Column(String, nullable=True)
+    # Which deed/plat/subdivision plan/survey created (or retired) this
+    # parcel — see models/land_record.py.
+    land_record_id = Column(UUID(as_uuid=True), ForeignKey("land_records.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),
@@ -68,3 +88,9 @@ class Record(Base):
     attachments = relationship(
         "Attachment", back_populates="record", cascade="all, delete-orphan"
     )
+    # Self-referencing parcel lineage — see parent_record_id above.
+    # remote_side pins which end of the FK is "the parent" for
+    # SQLAlchemy's self-join; children is the reverse direction (every
+    # parcel this one was split/merged into).
+    parent_record = relationship("Record", remote_side="Record.id", backref="children")
+    land_record = relationship("LandRecord", back_populates="parcels")
