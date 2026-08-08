@@ -98,6 +98,45 @@ def reproject_to_wgs84(points: list[tuple[float, float]], source_epsg: int) -> l
     return [transformer.transform(x, y) for x, y in points]
 
 
+def calibrated_reproject_to_wgs84(
+    points: list[tuple[float, float]],
+    source_epsg: int,
+    known_lat: float | None = None,
+    known_lon: float | None = None,
+) -> list[tuple[float, float]]:
+    """Same as reproject_to_wgs84, plus an optional local correction.
+
+    Minna datum's transformation to WGS84 is documented as regionally
+    inconsistent across Nigeria -- a generic EPSG-defined shift (a
+    single fixed Helmert/Molodensky transform) can be meaningfully
+    wrong in one part of the country even when it's accurate in
+    another, sometimes by tens of kilometres, which is exactly why
+    real Nigerian survey plans include a "GNSS Observation" section at
+    all: it's the surveyor's own mechanism for tying local coordinates
+    to an independently, precisely known real-world position, rather
+    than trusting a formula.
+
+    If the caller knows the true WGS84 position of `points[0]` (a
+    handheld GPS reading taken standing at that exact beacon, or an
+    independently published coordinate for a reference station), this
+    computes the constant lon/lat shift needed to make the naive
+    reprojection match that known position, then applies the SAME
+    shift to every other point. This is a simple constant-offset
+    correction, not a full similarity/affine transform -- correct
+    enough for a single small parcel, where the true local error is
+    effectively constant across the whole property, but not a
+    substitute for a proper regional transformation grid if this ever
+    needs to work reliably across a much larger area.
+    """
+    reprojected = reproject_to_wgs84(points, source_epsg)
+    if known_lat is None or known_lon is None:
+        return reprojected
+    naive_lon, naive_lat = reprojected[0]
+    shift_lon = known_lon - naive_lon
+    shift_lat = known_lat - naive_lat
+    return [(lon + shift_lon, lat + shift_lat) for lon, lat in reprojected]
+
+
 def points_to_geojson_polygon(points: list[tuple[float, float]]) -> dict:
     """Close the ring if needed and return a plain GeoJSON Polygon dict --
     the same shape Record.geometry already stores everywhere else, so a

@@ -58,6 +58,9 @@ export default function CogoTraverseInput({ onChange }) {
   const [customEpsg, setCustomEpsg] = useState('')
   const [startBeacon, setStartBeacon] = useState('')
   const [closureTolerance, setClosureTolerance] = useState('0.5')
+  const [useCalibration, setUseCalibration] = useState(false)
+  const [knownLat, setKnownLat] = useState('')
+  const [knownLon, setKnownLon] = useState('')
 
   const [pointPreview, setPointPreview] = useState(null) // { lon, lat } once previewed
   const [pointPreviewError, setPointPreviewError] = useState('')
@@ -117,7 +120,13 @@ export default function CogoTraverseInput({ onChange }) {
       const data = await authedFetch('/api/parcels/cogo-preview-point', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ easting: parseFloat(startEasting), northing: parseFloat(startNorthing), source_epsg: epsgVal }),
+        body: JSON.stringify({
+          easting: parseFloat(startEasting),
+          northing: parseFloat(startNorthing),
+          source_epsg: epsgVal,
+          known_lat: useCalibration && knownLat ? parseFloat(knownLat) : null,
+          known_lon: useCalibration && knownLon ? parseFloat(knownLon) : null,
+        }),
       })
       setPointPreview(data)
 
@@ -197,6 +206,8 @@ export default function CogoTraverseInput({ onChange }) {
           source_epsg: effectiveEpsg(),
           start_beacon: startBeacon || null,
           closure_tolerance_m: parseFloat(closureTolerance) || 0.5,
+          known_lat: useCalibration && knownLat ? parseFloat(knownLat) : null,
+          known_lon: useCalibration && knownLon ? parseFloat(knownLon) : null,
           legs: legs.map((l) => ({
             bearing_deg: dmsToDecimal(l.deg, l.min, l.sec),
             distance_m: parseFloat(l.distance),
@@ -285,6 +296,45 @@ export default function CogoTraverseInput({ onChange }) {
           <input value={closureTolerance} onChange={(e) => setClosureTolerance(e.target.value)} />
         </label>
       </div>
+
+      <label className="checkbox-label" style={{ marginBottom: 10 }}>
+        <input
+          type="checkbox"
+          checked={useCalibration}
+          onChange={(e) => {
+            setUseCalibration(e.target.checked)
+            resetStartConfirmation()
+          }}
+        />
+        I know this exact point's real GPS coordinates (recommended — corrects for a known, documented regional
+        inaccuracy in Nigeria's Minna datum)
+      </label>
+      {useCalibration && (
+        <div className="form-row" style={{ marginBottom: 10 }}>
+          <label className="form-label" style={{ flex: 1 }}>
+            Known latitude (from a phone/handheld GPS reading taken standing at this point)
+            <input
+              value={knownLat}
+              onChange={(e) => {
+                setKnownLat(e.target.value)
+                resetStartConfirmation()
+              }}
+              placeholder="e.g. 7.7349"
+            />
+          </label>
+          <label className="form-label" style={{ flex: 1 }}>
+            Known longitude
+            <input
+              value={knownLon}
+              onChange={(e) => {
+                setKnownLon(e.target.value)
+                resetStartConfirmation()
+              }}
+              placeholder="e.g. 4.4439"
+            />
+          </label>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
         <button type="button" className="btn-secondary" onClick={previewStartPoint} disabled={previewingPoint}>

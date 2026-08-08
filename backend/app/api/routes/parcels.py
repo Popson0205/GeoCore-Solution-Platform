@@ -30,6 +30,7 @@ from backend.app.models.user import User
 from backend.app.core.database import get_db
 from backend.app.core.cogo import (
     Leg,
+    calibrated_reproject_to_wgs84,
     points_to_geojson_polygon,
     polygon_self_intersection_error,
     reproject_to_wgs84,
@@ -373,10 +374,13 @@ def preview_cogo_start_point(payload: CogoPointPreviewRequest, current_user: Use
     being discoverable after a full traverse "closes" -- closure and
     area are properties of the *shape*, not of where it sits on the
     globe, so they can both look perfectly correct while the whole
-    thing is plotted in the wrong location. See core/cogo.py's
-    reproject_to_wgs84.
+    thing is plotted in the wrong location. See
+    core/cogo.py's calibrated_reproject_to_wgs84 for what known_lat/
+    known_lon do here.
     """
-    lon, lat = reproject_to_wgs84([(payload.easting, payload.northing)], payload.source_epsg)[0]
+    lon, lat = calibrated_reproject_to_wgs84(
+        [(payload.easting, payload.northing)], payload.source_epsg, payload.known_lat, payload.known_lon
+    )[0]
     return CogoPointPreviewResult(lon=lon, lat=lat)
 
 
@@ -410,7 +414,7 @@ def preview_cogo_traverse(payload: CogoTraverseRequest, current_user: User = Dep
         )
 
     local_points = traverse_to_local_points(payload.start_easting, payload.start_northing, legs)
-    wgs84_points = reproject_to_wgs84(local_points, payload.source_epsg)
+    wgs84_points = calibrated_reproject_to_wgs84(local_points, payload.source_epsg, payload.known_lat, payload.known_lon)
     geometry = points_to_geojson_polygon(wgs84_points)
 
     self_intersection = polygon_self_intersection_error(geometry)

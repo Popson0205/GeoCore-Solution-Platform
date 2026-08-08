@@ -13,6 +13,15 @@ class CogoPointPreviewRequest(BaseModel):
     easting: float
     northing: float
     source_epsg: int
+    # If the caller knows this exact point's real-world GPS position (a
+    # phone/handheld GPS reading taken standing at this beacon, or a
+    # reference station's independently published coordinate), this
+    # locally corrects for Minna datum's regionally inconsistent
+    # transformation to WGS84 -- a documented, known limitation, not
+    # something specific to this codebase. See core/cogo.py's
+    # calibrated_reproject_to_wgs84.
+    known_lat: Optional[float] = None
+    known_lon: Optional[float] = None
 
 
 class CogoPointPreviewResult(BaseModel):
@@ -27,6 +36,8 @@ class CogoTraverseRequest(BaseModel):
     start_beacon: Optional[str] = None
     legs: list[CogoLeg]
     closure_tolerance_m: float = 0.5
+    known_lat: Optional[float] = None
+    known_lon: Optional[float] = None
 
 
 class CogoPreviewResult(BaseModel):
