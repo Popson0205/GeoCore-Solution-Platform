@@ -76,13 +76,15 @@ export default function CogoTraverseInput({ onChange }) {
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const layerRef = useRef(null)
-  const pointMarkerRef = useRef(null)
+  const pointsLayerRef = useRef(null)
+  const [previewHistory, setPreviewHistory] = useState([]) // every point previewed this session, with its inputs
 
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
     mapRef.current = L.map(mapEl.current, { attributionControl: false }).setView(DEFAULT_CENTER, 7)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapRef.current)
     layerRef.current = L.layerGroup().addTo(mapRef.current)
+    pointsLayerRef.current = L.layerGroup().addTo(mapRef.current)
     return () => {
       mapRef.current?.remove()
       mapRef.current = null
@@ -118,16 +120,40 @@ export default function CogoTraverseInput({ onChange }) {
         body: JSON.stringify({ easting: parseFloat(startEasting), northing: parseFloat(startNorthing), source_epsg: epsgVal }),
       })
       setPointPreview(data)
-      if (mapRef.current) {
-        if (pointMarkerRef.current) mapRef.current.removeLayer(pointMarkerRef.current)
-        pointMarkerRef.current = L.circleMarker([data.lat, data.lon], {
-          radius: 9,
-          color: '#dc2626',
-          fillColor: '#dc2626',
-          fillOpacity: 0.7,
-          weight: 2,
-        }).addTo(mapRef.current)
-        mapRef.current.setView([data.lat, data.lon], 15)
+
+      const entry = { lat: data.lat, lon: data.lon, label: `${startEasting}E / ${startNorthing}N` }
+      const nextHistory = [...previewHistory, entry]
+      setPreviewHistory(nextHistory)
+
+      if (mapRef.current && pointsLayerRef.current) {
+        pointsLayerRef.current.clearLayers()
+        const latest = nextHistory[nextHistory.length - 1]
+        nextHistory.forEach((pt, i) => {
+          const isLatest = pt === latest
+          L.circleMarker([pt.lat, pt.lon], {
+            radius: isLatest ? 9 : 6,
+            color: isLatest ? '#dc2626' : '#9ca3af',
+            fillColor: isLatest ? '#dc2626' : '#9ca3af',
+            fillOpacity: isLatest ? 0.8 : 0.5,
+            weight: 2,
+          })
+            .bindTooltip(`${i === 0 ? 'First' : `Attempt ${i + 1}`}`, { permanent: true, direction: 'top', offset: [0, -8] })
+            .addTo(pointsLayerRef.current)
+        })
+
+        // A wide, stable reference frame is the whole point here — a
+        // single point re-centered tight makes every attempt look
+        // identical regardless of where it actually landed, which is
+        // exactly the bug this fixes. fitBounds across every point
+        // tried this session, plus a wide minimum padding, so a 20-30km
+        // difference between attempts is actually visible on screen
+        // instead of hidden by always snapping to dead-center.
+        if (nextHistory.length === 1) {
+          mapRef.current.setView([data.lat, data.lon], 10)
+        } else {
+          const bounds = L.latLngBounds(nextHistory.map((pt) => [pt.lat, pt.lon]))
+          mapRef.current.fitBounds(bounds.pad(0.6), { maxZoom: 12 })
+        }
       }
     } catch (err) {
       setPointPreviewError(err.message)
@@ -274,13 +300,14 @@ export default function CogoTraverseInput({ onChange }) {
       {pointPreviewError && <p className="hint">{pointPreviewError}</p>}
       {pointPreview && (
         <p className="builder-hint" style={{ marginBottom: 10 }}>
-          Reprojects to {pointPreview.lat.toFixed(5)}°, {pointPreview.lon.toFixed(5)}° — check the red marker below lands
-          where the property actually is before continuing. If it doesn't, the local grid selected above is probably
-          wrong for this coordinate.
+          Reprojects to {pointPreview.lat.toFixed(5)}°, {pointPreview.lon.toFixed(5)}° — the red marker is this attempt;
+          any earlier attempts stay visible in grey so you can see whether they're actually in different places or the
+          same one. If the marker doesn't land where the property actually is, the local grid selected above is
+          probably wrong for this coordinate.
         </p>
       )}
 
-      <div ref={mapEl} style={{ height: 260, borderRadius: 6, marginBottom: 16, background: '#e5e7eb' }} />
+      <div ref={mapEl} style={{ height: 340, borderRadius: 6, marginBottom: 16, background: '#e5e7eb' }} />
 
       {startConfirmed && (
         <>
