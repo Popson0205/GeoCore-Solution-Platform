@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -9,19 +10,41 @@ class CogoLeg(BaseModel):
     beacon: Optional[str] = Field(None, description="Beacon/pillar number marking the point this leg walks TO")
 
 
+class EstateCalibrationUpsert(BaseModel):
+    source_epsg: int
+    reference_easting: float
+    reference_northing: float
+    known_lat: float
+    known_lon: float
+    label: Optional[str] = None
+
+
+class EstateCalibrationOut(BaseModel):
+    source_epsg: int
+    reference_easting: float
+    reference_northing: float
+    known_lat: float
+    known_lon: float
+    label: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class CogoPointPreviewRequest(BaseModel):
     easting: float
     northing: float
     source_epsg: int
-    # If the caller knows this exact point's real-world GPS position (a
-    # phone/handheld GPS reading taken standing at this beacon, or a
-    # reference station's independently published coordinate), this
-    # locally corrects for Minna datum's regionally inconsistent
-    # transformation to WGS84 -- a documented, known limitation, not
-    # something specific to this codebase. See core/cogo.py's
-    # calibrated_reproject_to_wgs84.
+    # Explicit calibration for THIS point, if the caller has a fresh GPS
+    # reading for it specifically -- takes priority over any saved
+    # organisation-wide calibration below.
     known_lat: Optional[float] = None
     known_lon: Optional[float] = None
+    # If no explicit known_lat/known_lon above, and this is set, the
+    # endpoint looks up a previously saved calibration for this
+    # organisation + source_epsg (see EstateGridCalibration) and applies
+    # it automatically -- the whole point of saving one once instead of
+    # asking for a fresh GPS reading on every single property.
+    organisation_id: Optional[uuid.UUID] = None
 
 
 class CogoPointPreviewResult(BaseModel):
@@ -38,6 +61,7 @@ class CogoTraverseRequest(BaseModel):
     closure_tolerance_m: float = 0.5
     known_lat: Optional[float] = None
     known_lon: Optional[float] = None
+    organisation_id: Optional[uuid.UUID] = None
 
 
 class CogoPreviewResult(BaseModel):

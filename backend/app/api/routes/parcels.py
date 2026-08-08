@@ -38,11 +38,14 @@ from backend.app.core.cogo import (
     traverse_closure_error_m,
     traverse_to_local_points,
 )
+from backend.app.models.estate_calibration import EstateGridCalibration
 from backend.app.schemas.cogo import (
     CogoPointPreviewRequest,
     CogoPointPreviewResult,
     CogoPreviewResult,
     CogoTraverseRequest,
+    EstateCalibrationOut,
+    EstateCalibrationUpsert,
 )
 from backend.app.core.parcel_provisioning import get_or_create_estate_layer
 from backend.app.schemas.record import RecordOut
@@ -61,6 +64,81 @@ from backend.app.schemas.parcel import (
 )
 
 router = APIRouter()
+
+
+@router.put("/organisations/{organisation_id}/estate-calibration", response_model=EstateCalibrationOut)
+def save_estate_calibration(
+    organisation_id: uuid.UUID,
+    payload: EstateCalibrationUpsert,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Save (or replace) this organisation's calibration for one local
+    grid -- captured once against a known real-world GPS position (a
+    control station, or any beacon someone has independently verified),
+    then applied automatically to every future COGO plot on that same
+    grid. See models/estate_calibration.py.
+    """
+    require_org_role(db, organisation_id, current_user.id, PROJECT_MANAGER)
+    existing = (
+        db.query(EstateGridCalibration)
+        .filter(EstateGridCalibration.organisation_id == organisation_id, EstateGridCalibration.source_epsg == payload.source_epsg)
+        .first()
+    )
+    if existing:
+        existing.reference_easting = payload.reference_easting
+        existing.reference_northing = payload.reference_northing
+        existing.known_lat = payload.known_lat
+        existing.known_lon = payload.known_lon
+        existing.label = payload.label
+        existing.created_by = current_user.id
+        calibration = existing
+    else:
+        calibration = EstateGridCalibration(
+            organisation_id=organisation_id,
+            source_epsg=payload.source_epsg,
+            reference_easting=payload.reference_easting,
+            reference_northing=payload.reference_northing,
+            known_lat=payload.known_lat,
+            known_lon=payload.known_lon,
+            label=payload.label,
+            created_by=current_user.id,
+        )
+        db.add(calibration)
+    db.commit()
+    db.refresh(calibration)
+    return calibration
+
+
+@router.get("/organisations/{organisation_id}/estate-calibration", response_model=list[EstateCalibrationOut])
+def list_estate_calibrations(
+    organisation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_org_role(db, organisation_id, current_user.id, VIEWER)
+    return db.query(EstateGridCalibration).filter(EstateGridCalibration.organisation_id == organisation_id).all()
+
+
+def _resolve_calibration(db: Session, organisation_id, source_epsg: int, known_lat, known_lon):
+    """Explicit known_lat/known_lon on the request always wins. Failing
+    that, look up a saved calibration for this org + grid and use it as
+    the reference point -- the auto-apply behaviour that makes this a
+    one-time-per-organisation setup instead of a per-property chore.
+    Returns (known_lat, known_lon, reference_point_or_None).
+    """
+    if known_lat is not None and known_lon is not None:
+        return known_lat, known_lon, None
+    if organisation_id is None:
+        return None, None, None
+    saved = (
+        db.query(EstateGridCalibration)
+        .filter(EstateGridCalibration.organisation_id == organisation_id, EstateGridCalibration.source_epsg == source_epsg)
+        .first()
+    )
+    if not saved:
+        return None, None, None
+    return saved.known_lat, saved.known_lon, (saved.reference_easting, saved.reference_northing)
 
 
 @router.post("/organisations/{organisation_id}/parcels", response_model=RecordOut)
@@ -365,7 +443,9 @@ def check_parcel_integrity(
 
 
 @router.post("/parcels/cogo-preview-point", response_model=CogoPointPreviewResult)
-def preview_cogo_start_point(payload: CogoPointPreviewRequest, current_user: User = Depends(get_current_user)):
+def preview_cogo_start_point(
+    payload: CogoPointPreviewRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
     """Reprojects just the start point, with no legs at all — the check
     a surveyor needs to make FIRST: does this easting/northing actually
     land where the property is, before spending time entering the whole
@@ -375,17 +455,22 @@ def preview_cogo_start_point(payload: CogoPointPreviewRequest, current_user: Use
     area are properties of the *shape*, not of where it sits on the
     globe, so they can both look perfectly correct while the whole
     thing is plotted in the wrong location. See
-    core/cogo.py's calibrated_reproject_to_wgs84 for what known_lat/
-    known_lon do here.
+    core/cogo.py's calibrated_reproject_to_wgs84 and _resolve_calibration
+    above for what known_lat/known_lon/organisation_id do here.
     """
+    known_lat, known_lon, reference_point = _resolve_calibration(
+        db, payload.organisation_id, payload.source_epsg, payload.known_lat, payload.known_lon
+    )
     lon, lat = calibrated_reproject_to_wgs84(
-        [(payload.easting, payload.northing)], payload.source_epsg, payload.known_lat, payload.known_lon
+        [(payload.easting, payload.northing)], payload.source_epsg, known_lat, known_lon, reference_point
     )[0]
     return CogoPointPreviewResult(lon=lon, lat=lat)
 
 
 @router.post("/parcels/cogo-preview", response_model=CogoPreviewResult)
-def preview_cogo_traverse(payload: CogoTraverseRequest, current_user: User = Depends(get_current_user)):
+def preview_cogo_traverse(
+    payload: CogoTraverseRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
     """Walk a COGO (bearing/distance) traverse and validate it, WITHOUT
     saving anything — matches how a surveyor actually works: check the
     traverse closes and doesn't cross itself before it becomes a real
@@ -414,7 +499,10 @@ def preview_cogo_traverse(payload: CogoTraverseRequest, current_user: User = Dep
         )
 
     local_points = traverse_to_local_points(payload.start_easting, payload.start_northing, legs)
-    wgs84_points = calibrated_reproject_to_wgs84(local_points, payload.source_epsg, payload.known_lat, payload.known_lon)
+    known_lat, known_lon, reference_point = _resolve_calibration(
+        db, payload.organisation_id, payload.source_epsg, payload.known_lat, payload.known_lon
+    )
+    wgs84_points = calibrated_reproject_to_wgs84(local_points, payload.source_epsg, known_lat, known_lon, reference_point)
     geometry = points_to_geojson_polygon(wgs84_points)
 
     self_intersection = polygon_self_intersection_error(geometry)

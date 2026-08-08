@@ -103,6 +103,7 @@ def calibrated_reproject_to_wgs84(
     source_epsg: int,
     known_lat: float | None = None,
     known_lon: float | None = None,
+    reference_point: tuple[float, float] | None = None,
 ) -> list[tuple[float, float]]:
     """Same as reproject_to_wgs84, plus an optional local correction.
 
@@ -116,22 +117,34 @@ def calibrated_reproject_to_wgs84(
     to an independently, precisely known real-world position, rather
     than trusting a formula.
 
-    If the caller knows the true WGS84 position of `points[0]` (a
-    handheld GPS reading taken standing at that exact beacon, or an
-    independently published coordinate for a reference station), this
-    computes the constant lon/lat shift needed to make the naive
-    reprojection match that known position, then applies the SAME
-    shift to every other point. This is a simple constant-offset
-    correction, not a full similarity/affine transform -- correct
-    enough for a single small parcel, where the true local error is
-    effectively constant across the whole property, but not a
-    substitute for a proper regional transformation grid if this ever
-    needs to work reliably across a much larger area.
+    If the caller knows the true WGS84 position of some reference point
+    on the same local grid (a handheld GPS reading taken standing at a
+    beacon, or an independently published coordinate for a control
+    station), this computes the constant lon/lat shift needed to make
+    the naive reprojection of THAT reference point match its known
+    position, then applies the SAME shift to every point being
+    reprojected here.
+
+    `reference_point` defaults to `points[0]` (calibrating a traverse
+    against its own known start point, the original use case) but can
+    be a DIFFERENT easting/northing entirely -- the key case this
+    supports: a calibration captured once against a shared regional
+    control station (see models/estate_calibration.py) reused
+    automatically for every other property surveyed off the same
+    network, without asking for a fresh GPS reading each time. This is
+    a simple constant-offset correction, not a full similarity/affine
+    transform -- correct enough for properties reasonably close to the
+    reference point (the same LGA/region), not a substitute for a
+    proper transformation grid across a much larger area, where the
+    true regional error stops being close to constant.
     """
     reprojected = reproject_to_wgs84(points, source_epsg)
     if known_lat is None or known_lon is None:
         return reprojected
-    naive_lon, naive_lat = reprojected[0]
+    if reference_point is not None:
+        naive_lon, naive_lat = reproject_to_wgs84([reference_point], source_epsg)[0]
+    else:
+        naive_lon, naive_lat = reprojected[0]
     shift_lon = known_lon - naive_lon
     shift_lat = known_lat - naive_lat
     return [(lon + shift_lon, lat + shift_lat) for lon, lat in reprojected]

@@ -50,7 +50,7 @@ function dmsToDecimal(deg, min, sec) {
  * Split/Merge panels) can offer both as interchangeable ways to produce
  * the same GeoJSON polygon.
  */
-export default function CogoTraverseInput({ onChange }) {
+export default function CogoTraverseInput({ onChange, organisationId }) {
   const { authedFetch } = useAuth()
   const [startEasting, setStartEasting] = useState('')
   const [startNorthing, setStartNorthing] = useState('')
@@ -61,6 +61,9 @@ export default function CogoTraverseInput({ onChange }) {
   const [useCalibration, setUseCalibration] = useState(false)
   const [knownLat, setKnownLat] = useState('')
   const [knownLon, setKnownLon] = useState('')
+  const [savedCalibration, setSavedCalibration] = useState(null) // this org's saved calibration for the current EPSG, if any
+  const [saveAsDefault, setSaveAsDefault] = useState(true)
+  const [savingCalibration, setSavingCalibration] = useState(false)
 
   const [pointPreview, setPointPreview] = useState(null) // { lon, lat } once previewed
   const [pointPreviewError, setPointPreviewError] = useState('')
@@ -94,6 +97,16 @@ export default function CogoTraverseInput({ onChange }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!organisationId) return
+    const epsgVal = epsg === '' ? parseInt(customEpsg, 10) : Number(epsg)
+    if (!epsgVal) return
+    authedFetch(`/api/organisations/${organisationId}/estate-calibration`)
+      .then((list) => setSavedCalibration(list.find((c) => c.source_epsg === epsgVal) || null))
+      .catch(() => setSavedCalibration(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organisationId, epsg, customEpsg])
+
   function effectiveEpsg() {
     return epsg === '' ? parseInt(customEpsg, 10) : Number(epsg)
   }
@@ -126,6 +139,7 @@ export default function CogoTraverseInput({ onChange }) {
           source_epsg: epsgVal,
           known_lat: useCalibration && knownLat ? parseFloat(knownLat) : null,
           known_lon: useCalibration && knownLon ? parseFloat(knownLon) : null,
+          organisation_id: organisationId || null,
         }),
       })
       setPointPreview(data)
@@ -173,6 +187,33 @@ export default function CogoTraverseInput({ onChange }) {
 
   function confirmStartPoint() {
     setStartConfirmed(true)
+    if (useCalibration && saveAsDefault && knownLat && knownLon && organisationId && !savedCalibration) {
+      saveCalibrationAsDefault()
+    }
+  }
+
+  async function saveCalibrationAsDefault() {
+    if (!organisationId || !knownLat || !knownLon) return
+    setSavingCalibration(true)
+    try {
+      const saved = await authedFetch(`/api/organisations/${organisationId}/estate-calibration`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_epsg: effectiveEpsg(),
+          reference_easting: parseFloat(startEasting),
+          reference_northing: parseFloat(startNorthing),
+          known_lat: parseFloat(knownLat),
+          known_lon: parseFloat(knownLon),
+          label: startBeacon || null,
+        }),
+      })
+      setSavedCalibration(saved)
+    } catch (err) {
+      setPointPreviewError(err.message)
+    } finally {
+      setSavingCalibration(false)
+    }
   }
 
   function addLeg() {
@@ -208,6 +249,7 @@ export default function CogoTraverseInput({ onChange }) {
           closure_tolerance_m: parseFloat(closureTolerance) || 0.5,
           known_lat: useCalibration && knownLat ? parseFloat(knownLat) : null,
           known_lon: useCalibration && knownLon ? parseFloat(knownLon) : null,
+          organisation_id: organisationId || null,
           legs: legs.map((l) => ({
             bearing_deg: dmsToDecimal(l.deg, l.min, l.sec),
             distance_m: parseFloat(l.distance),
@@ -304,43 +346,61 @@ export default function CogoTraverseInput({ onChange }) {
         </label>
       </div>
 
-      <label className="checkbox-label" style={{ marginBottom: 10 }}>
-        <input
-          type="checkbox"
-          checked={useCalibration}
-          onChange={(e) => {
-            setUseCalibration(e.target.checked)
-            resetStartConfirmation()
-          }}
-        />
-        I know this beacon's real GPS coordinates (recommended — corrects for a known, documented regional
-        inaccuracy in Nigeria's Minna datum). This is for the SAME first beacon entered above, not a control station.
-      </label>
-      {useCalibration && (
-        <div className="form-row" style={{ marginBottom: 10 }}>
-          <label className="form-label" style={{ flex: 1 }}>
-            Known latitude (from a phone/handheld GPS reading taken standing at this point)
+      {savedCalibration ? (
+        <p className="hint hint-ok" style={{ marginBottom: 10 }}>
+          ✓ Using this organisation's saved calibration for this grid
+          {savedCalibration.label ? ` (${savedCalibration.label})` : ''} — every plot on this grid is corrected
+          automatically. No need to enter a GPS reading again.
+        </p>
+      ) : (
+        <>
+          <label className="checkbox-label" style={{ marginBottom: 10 }}>
             <input
-              value={knownLat}
+              type="checkbox"
+              checked={useCalibration}
               onChange={(e) => {
-                setKnownLat(e.target.value)
+                setUseCalibration(e.target.checked)
                 resetStartConfirmation()
               }}
-              placeholder="e.g. 7.7349"
             />
+            I know this beacon's real GPS coordinates (recommended — corrects for a known, documented regional
+            inaccuracy in Nigeria's Minna datum). This is for the SAME first beacon entered above, not a control
+            station.
           </label>
-          <label className="form-label" style={{ flex: 1 }}>
-            Known longitude
-            <input
-              value={knownLon}
-              onChange={(e) => {
-                setKnownLon(e.target.value)
-                resetStartConfirmation()
-              }}
-              placeholder="e.g. 4.4439"
-            />
-          </label>
-        </div>
+          {useCalibration && (
+            <div className="form-row" style={{ marginBottom: 4 }}>
+              <label className="form-label" style={{ flex: 1 }}>
+                Known latitude (from a phone/handheld GPS reading taken standing at this point)
+                <input
+                  value={knownLat}
+                  onChange={(e) => {
+                    setKnownLat(e.target.value)
+                    resetStartConfirmation()
+                  }}
+                  placeholder="e.g. 7.7349"
+                />
+              </label>
+              <label className="form-label" style={{ flex: 1 }}>
+                Known longitude
+                <input
+                  value={knownLon}
+                  onChange={(e) => {
+                    setKnownLon(e.target.value)
+                    resetStartConfirmation()
+                  }}
+                  placeholder="e.g. 4.4439"
+                />
+              </label>
+            </div>
+          )}
+          {useCalibration && organisationId && (
+            <label className="checkbox-label" style={{ marginBottom: 10, fontSize: '0.85rem' }}>
+              <input type="checkbox" checked={saveAsDefault} onChange={(e) => setSaveAsDefault(e.target.checked)} />
+              Save this as this organisation's default for this grid, so future plots don't need a GPS reading
+              entered again
+            </label>
+          )}
+        </>
       )}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>

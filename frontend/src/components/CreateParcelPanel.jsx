@@ -162,7 +162,7 @@ export default function CreateParcelPanel({ organisationId, landRecords, onCreat
       {captureMode === 'map' ? (
         <LocationPicker geometryType="polygon" initialGeometry={geometry} resetKey="create-parcel" onChange={setGeometry} />
       ) : (
-        <CogoTraverseInput onChange={setGeometry} />
+        <CogoTraverseInput onChange={setGeometry} organisationId={organisationId} />
       )}
 
       {error && <p className="hint">{error}</p>}

@@ -294,6 +294,7 @@ export default function ParcelDetail() {
                   />
                 ) : (
                   <CogoTraverseInput
+                    organisationId={record.organisation_id}
                     onChange={(geom) => {
                       const next = [...splitChildren]
                       next[i] = { ...next[i], geometry: geom }
@@ -370,7 +371,7 @@ export default function ParcelDetail() {
             {mergeCaptureMode === 'map' ? (
               <LocationPicker geometryType="polygon" initialGeometry={mergeGeometry} resetKey="merge" onChange={setMergeGeometry} />
             ) : (
-              <CogoTraverseInput onChange={setMergeGeometry} />
+              <CogoTraverseInput onChange={setMergeGeometry} organisationId={record.organisation_id} />
             )}
             <button type="submit" className="btn-primary" style={{ marginTop: 16 }}>Merge parcels</button>
           </form>
