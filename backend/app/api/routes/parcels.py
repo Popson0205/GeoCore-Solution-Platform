@@ -37,7 +37,12 @@ from backend.app.core.cogo import (
     traverse_closure_error_m,
     traverse_to_local_points,
 )
-from backend.app.schemas.cogo import CogoPreviewResult, CogoTraverseRequest
+from backend.app.schemas.cogo import (
+    CogoPointPreviewRequest,
+    CogoPointPreviewResult,
+    CogoPreviewResult,
+    CogoTraverseRequest,
+)
 from backend.app.core.parcel_provisioning import get_or_create_estate_layer
 from backend.app.schemas.record import RecordOut
 from backend.app.schemas.parcel import (
@@ -356,6 +361,23 @@ def check_parcel_integrity(
         overlaps=[ParcelOverlapOut(**o) for o in overlaps],
         gap=ParcelGapOut(**gap) if gap else None,
     )
+
+
+@router.post("/parcels/cogo-preview-point", response_model=CogoPointPreviewResult)
+def preview_cogo_start_point(payload: CogoPointPreviewRequest, current_user: User = Depends(get_current_user)):
+    """Reprojects just the start point, with no legs at all — the check
+    a surveyor needs to make FIRST: does this easting/northing actually
+    land where the property is, before spending time entering the whole
+    traverse. A wrong local-grid choice (or a mis-typed coordinate)
+    shows up immediately as a marker in the wrong place, instead of only
+    being discoverable after a full traverse "closes" -- closure and
+    area are properties of the *shape*, not of where it sits on the
+    globe, so they can both look perfectly correct while the whole
+    thing is plotted in the wrong location. See core/cogo.py's
+    reproject_to_wgs84.
+    """
+    lon, lat = reproject_to_wgs84([(payload.easting, payload.northing)], payload.source_epsg)[0]
+    return CogoPointPreviewResult(lon=lon, lat=lat)
 
 
 @router.post("/parcels/cogo-preview", response_model=CogoPreviewResult)

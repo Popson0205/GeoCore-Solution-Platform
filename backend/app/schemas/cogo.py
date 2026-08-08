@@ -9,6 +9,17 @@ class CogoLeg(BaseModel):
     beacon: Optional[str] = Field(None, description="Beacon/pillar number marking the point this leg walks TO")
 
 
+class CogoPointPreviewRequest(BaseModel):
+    easting: float
+    northing: float
+    source_epsg: int
+
+
+class CogoPointPreviewResult(BaseModel):
+    lon: float
+    lat: float
+
+
 class CogoTraverseRequest(BaseModel):
     start_easting: float = Field(..., description="Easting (m) on the local grid, not longitude")
     start_northing: float = Field(..., description="Northing (m) on the local grid, not latitude")
