@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { createBasemapLayers, addBasemapSwitcher } from '../lib/basemaps'
 import { useAuth } from '../context/AuthContext'
 
 const DEFAULT_CENTER = [9.0765, 7.3986] // Abuja
@@ -88,7 +89,7 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
     mapRef.current = L.map(mapEl.current, { attributionControl: false }).setView(DEFAULT_CENTER, 7)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapRef.current)
+    addBasemapSwitcher(mapRef.current, createBasemapLayers())
     layerRef.current = L.layerGroup().addTo(mapRef.current)
     pointsLayerRef.current = L.layerGroup().addTo(mapRef.current)
     return () => {

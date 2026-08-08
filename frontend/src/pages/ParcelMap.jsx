@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { createBasemapLayers, addBasemapSwitcher } from '../lib/basemaps'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 
@@ -54,10 +55,7 @@ export default function ParcelMap() {
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
     mapRef.current = L.map(mapEl.current).setView([9.0765, 7.3986], 6)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(mapRef.current)
+    addBasemapSwitcher(mapRef.current, createBasemapLayers())
     layerRef.current = L.layerGroup().addTo(mapRef.current)
     return () => {
       mapRef.current?.remove()

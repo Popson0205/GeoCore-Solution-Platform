@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { createBasemapLayers, addBasemapSwitcher } from '../lib/basemaps'
 
 const DEFAULT_CENTER = [9.0765, 7.3986] // Abuja, as a sane default centre (matches ProjectMap.jsx)
 
@@ -73,10 +74,7 @@ export default function LocationPicker({ geometryType, initialGeometry, onChange
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
     const map = L.map(mapEl.current).setView(DEFAULT_CENTER, 6)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map)
+    addBasemapSwitcher(map, createBasemapLayers())
     layerRef.current = L.layerGroup().addTo(map)
     mapRef.current = map
 

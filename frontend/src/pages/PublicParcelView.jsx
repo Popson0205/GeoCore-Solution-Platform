@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { createBasemapLayers, addBasemapSwitcher } from '../lib/basemaps'
 
 const ESTATE_ACCENT = '#b7791f'
 
@@ -38,10 +39,7 @@ export default function PublicParcelView() {
   useEffect(() => {
     if (!parcel || !mapEl.current || mapRef.current) return
     mapRef.current = L.map(mapEl.current).setView([9.0765, 7.3986], 15)
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(mapRef.current)
+    addBasemapSwitcher(mapRef.current, createBasemapLayers())
     const layer = L.geoJSON(parcel.geometry, { style: { color: ESTATE_ACCENT, fillColor: ESTATE_ACCENT, fillOpacity: 0.35, weight: 2 } }).addTo(
       mapRef.current
     )
