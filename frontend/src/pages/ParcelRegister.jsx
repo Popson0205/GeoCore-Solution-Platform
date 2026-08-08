@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import CreateParcelPanel from '../components/CreateParcelPanel'
@@ -13,6 +13,7 @@ const ESTATE_ACCENT = '#b7791f'
  */
 export default function ParcelRegister() {
   const { status, authedFetch } = useAuth()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [orgs, setOrgs] = useState([])
   const [activeOrg, setActiveOrg] = useState(null)
@@ -70,11 +71,7 @@ export default function ParcelRegister() {
 
   function handleParcelCreated(record) {
     setShowCreatePanel(false)
-    refreshLayers(activeOrg, record.feature_layer_id).then(() => {
-      authedFetch(`/api/feature-layers/${record.feature_layer_id}/records`)
-        .then(setRecords)
-        .catch((err) => setError(err.message))
-    })
+    navigate(`/estate/map?zoomTo=${record.id}`)
   }
 
   const filtered = useMemo(() => {

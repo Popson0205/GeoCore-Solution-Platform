@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useAuth } from '../context/AuthContext'
@@ -24,6 +24,8 @@ function popupHtml(record) {
 export default function ParcelMap() {
   const { status, authedFetch } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const zoomToId = searchParams.get('zoomTo')
   const mapEl = useRef(null)
   const mapRef = useRef(null)
   const layerRef = useRef(null)
@@ -68,6 +70,7 @@ export default function ParcelMap() {
     layerRef.current.clearLayers()
 
     const bounds = []
+    let zoomToLayer = null
     records.forEach((record) => {
       const latLngs = geometryToLatLngs(record.geometry)
       if (!latLngs) return
@@ -83,12 +86,20 @@ export default function ParcelMap() {
       mapLayer.bindPopup(popupHtml(record))
       mapLayer.on('click', () => navigate(`/estate/parcels/${record.id}`))
       mapLayer.addTo(layerRef.current)
+      if (zoomToId && record.id === zoomToId) zoomToLayer = mapLayer
     })
 
-    if (bounds.length) {
+    // A freshly created parcel (arriving here via handleParcelCreated's
+    // redirect) gets its own tight zoom + an opened popup instead of
+    // being fit alongside every other parcel in the layer, where a
+    // small new one could easily be lost in a wide, zoomed-out view.
+    if (zoomToLayer) {
+      mapRef.current.fitBounds(zoomToLayer.getBounds(), { padding: [80, 80], maxZoom: 18 })
+      zoomToLayer.openPopup()
+    } else if (bounds.length) {
       mapRef.current.fitBounds(bounds, { padding: [32, 32], maxZoom: 16 })
     }
-  }, [records, navigate])
+  }, [records, navigate, zoomToId])
 
   if (status === 'checking') {
     return (
@@ -120,6 +131,7 @@ export default function ParcelMap() {
             <span className="panel-count">{records.length} parcels</span>
           </div>
           {error && <p className="hint">{error}</p>}
+          {zoomToId && !loading && <p className="hint hint-ok">✓ Parcel created — plotted below.</p>}
           {!loading && records.length === 0 && (
             <div className="empty-state" style={{ marginBottom: 12 }}>
               <p>No parcels to show yet.</p>

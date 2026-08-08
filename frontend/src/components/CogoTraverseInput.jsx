@@ -233,6 +233,13 @@ export default function CogoTraverseInput({ onChange }) {
   return (
     <div>
       <p className="builder-subhead">Step 1 — confirm the start point</p>
+      <p className="builder-hint" style={{ marginTop: -2, marginBottom: 10 }}>
+        Use the coordinate of THIS parcel's own first corner beacon (e.g. BB8215JP on a real plan) — not a shared
+        control/reference station like "OS-APPSN 01S". A control station is a regional benchmark other surveys tie
+        into too; it isn't a corner of this property, so plotting from it puts the whole traverse in the wrong place.
+        If your plan only shows a GNSS baseline from a control station to the first beacon, walk that baseline first
+        to get the beacon's own coordinate, then use that here.
+      </p>
       <div className="form-row">
         <label className="form-label" style={{ flex: 1 }}>
           Start easting (m)
@@ -306,8 +313,8 @@ export default function CogoTraverseInput({ onChange }) {
             resetStartConfirmation()
           }}
         />
-        I know this exact point's real GPS coordinates (recommended — corrects for a known, documented regional
-        inaccuracy in Nigeria's Minna datum)
+        I know this beacon's real GPS coordinates (recommended — corrects for a known, documented regional
+        inaccuracy in Nigeria's Minna datum). This is for the SAME first beacon entered above, not a control station.
       </label>
       {useCalibration && (
         <div className="form-row" style={{ marginBottom: 10 }}>
