@@ -9,6 +9,7 @@ from backend.app.api.routes import (
     health,
     land_records,
     organisations,
+    parcel_ownership,
     parcels,
     projects,
     public,
@@ -34,6 +35,7 @@ router.include_router(dashboards.router, tags=["dashboards"])
 router.include_router(reports.router, tags=["reports"])
 router.include_router(land_records.router, tags=["land-records"])
 router.include_router(parcels.router, tags=["parcels"])
+router.include_router(parcel_ownership.router, tags=["parcel-ownership"])
 # The Admin Portal is a genuinely separate deployment AND a genuinely
 # separate repository now (github.com/Popson0205/GeoCore-Admin-Portal)
 # -- this backend process registers nothing under /admin at all, and

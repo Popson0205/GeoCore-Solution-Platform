@@ -20,3 +20,4 @@ from backend.app.models.login_attempt import LoginAttempt  # noqa: F401
 from backend.app.models.audit_log import AuditLog  # noqa: F401
 from backend.app.models.land_record import LandRecord  # noqa: F401
 from backend.app.models.parcel_merge_source import ParcelMergeSource  # noqa: F401
+from backend.app.models.parcel_ownership import ParcelOwnership  # noqa: F401
