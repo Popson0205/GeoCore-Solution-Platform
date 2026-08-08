@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AppHeader from '../components/AppHeader'
 import LocationPicker from '../components/LocationPicker'
+import CogoTraverseInput from '../components/CogoTraverseInput'
 
 const ESTATE_ACCENT = '#b7791f'
 const TRANSFER_TYPES = ['purchase', 'inheritance', 'gift', 'court_order', 'original_grant', 'other']
@@ -53,12 +54,14 @@ export default function ParcelDetail() {
     { geometry: null, label: '' },
   ])
   const [splitLandRecordId, setSplitLandRecordId] = useState('')
+  const [splitCaptureMode, setSplitCaptureMode] = useState({}) // { [childIndex]: 'map' | 'cogo' }
 
   // Merge state
   const [mergePartners, setMergePartners] = useState([])
   const [mergeGeometry, setMergeGeometry] = useState(null)
   const [mergeLabel, setMergeLabel] = useState('')
   const [mergeLandRecordId, setMergeLandRecordId] = useState('')
+  const [mergeCaptureMode, setMergeCaptureMode] = useState('map')
 
   // Transfer state
   const [transferOwner, setTransferOwner] = useState('')
@@ -259,16 +262,44 @@ export default function ParcelDetail() {
                   }}
                   style={{ marginBottom: 10, width: '100%' }}
                 />
-                <LocationPicker
-                  geometryType="polygon"
-                  initialGeometry={child.geometry}
-                  resetKey={`split-${i}`}
-                  onChange={(geom) => {
-                    const next = [...splitChildren]
-                    next[i] = { ...next[i], geometry: geom }
-                    setSplitChildren(next)
-                  }}
-                />
+                <div className="plan-choice-group" style={{ flexDirection: 'row', marginBottom: 10 }}>
+                  <label className={`plan-choice${(splitCaptureMode[i] || 'map') === 'map' ? ' is-selected' : ''}`} style={{ flex: 1 }}>
+                    <input
+                      type="radio"
+                      checked={(splitCaptureMode[i] || 'map') === 'map'}
+                      onChange={() => setSplitCaptureMode({ ...splitCaptureMode, [i]: 'map' })}
+                    />
+                    <span className="plan-choice-label">Draw on map</span>
+                  </label>
+                  <label className={`plan-choice${splitCaptureMode[i] === 'cogo' ? ' is-selected' : ''}`} style={{ flex: 1 }}>
+                    <input
+                      type="radio"
+                      checked={splitCaptureMode[i] === 'cogo'}
+                      onChange={() => setSplitCaptureMode({ ...splitCaptureMode, [i]: 'cogo' })}
+                    />
+                    <span className="plan-choice-label">COGO traverse</span>
+                  </label>
+                </div>
+                {(splitCaptureMode[i] || 'map') === 'map' ? (
+                  <LocationPicker
+                    geometryType="polygon"
+                    initialGeometry={child.geometry}
+                    resetKey={`split-${i}`}
+                    onChange={(geom) => {
+                      const next = [...splitChildren]
+                      next[i] = { ...next[i], geometry: geom }
+                      setSplitChildren(next)
+                    }}
+                  />
+                ) : (
+                  <CogoTraverseInput
+                    onChange={(geom) => {
+                      const next = [...splitChildren]
+                      next[i] = { ...next[i], geometry: geom }
+                      setSplitChildren(next)
+                    }}
+                  />
+                )}
               </div>
             ))}
             <button
@@ -325,7 +356,21 @@ export default function ParcelDetail() {
               style={{ marginBottom: 10, width: '100%' }}
             />
             <p className="builder-subhead">Draw the merged parcel's boundary</p>
-            <LocationPicker geometryType="polygon" initialGeometry={mergeGeometry} resetKey="merge" onChange={setMergeGeometry} />
+            <div className="plan-choice-group" style={{ flexDirection: 'row', marginBottom: 10 }}>
+              <label className={`plan-choice${mergeCaptureMode === 'map' ? ' is-selected' : ''}`} style={{ flex: 1 }}>
+                <input type="radio" checked={mergeCaptureMode === 'map'} onChange={() => setMergeCaptureMode('map')} />
+                <span className="plan-choice-label">Draw on map</span>
+              </label>
+              <label className={`plan-choice${mergeCaptureMode === 'cogo' ? ' is-selected' : ''}`} style={{ flex: 1 }}>
+                <input type="radio" checked={mergeCaptureMode === 'cogo'} onChange={() => setMergeCaptureMode('cogo')} />
+                <span className="plan-choice-label">COGO traverse</span>
+              </label>
+            </div>
+            {mergeCaptureMode === 'map' ? (
+              <LocationPicker geometryType="polygon" initialGeometry={mergeGeometry} resetKey="merge" onChange={setMergeGeometry} />
+            ) : (
+              <CogoTraverseInput onChange={setMergeGeometry} />
+            )}
             <button type="submit" className="btn-primary" style={{ marginTop: 16 }}>Merge parcels</button>
           </form>
         )}
