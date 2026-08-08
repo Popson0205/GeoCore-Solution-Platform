@@ -112,6 +112,23 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
     return epsg === '' ? parseInt(customEpsg, 10) : Number(epsg)
   }
 
+  function totalLegDistance() {
+    return legs.reduce((sum, l) => sum + (parseFloat(l.distance) || 0), 0)
+  }
+
+  // Real surveying practice ties precision to a RATIO of total distance
+  // walked, not a fixed number regardless of parcel size — a fixed
+  // 0.5m, for instance, is unnecessarily loose for a small urban plot
+  // and can be unrealistically tight for a long rural boundary, where
+  // rounding in each individually-measured leg naturally accumulates
+  // over more distance. 1:2000 is a reasonable, achievable precision
+  // for typical cadastral work with modern equipment. Floored at 0.1m
+  // so a very short traverse doesn't get an unreasonably microscopic
+  // suggestion.
+  function suggestedTolerance() {
+    return Math.max(0.1, totalLegDistance() / 2000)
+  }
+
   // Any change to the start point/grid after confirming invalidates the
   // confirmation — forces a fresh preview + confirm rather than silently
   // trusting a stale one.
@@ -390,10 +407,6 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
             />
           </label>
         )}
-        <label className="form-label" style={{ flex: 1 }}>
-          Closure tolerance (m)
-          <input value={closureTolerance} onChange={(e) => setClosureTolerance(e.target.value)} />
-        </label>
       </div>
 
       {savedCalibration ? (
@@ -524,17 +537,59 @@ export default function CogoTraverseInput({ onChange, organisationId }) {
             </div>
           </div>
 
+          <details style={{ marginBottom: 10 }}>
+            <summary className="builder-hint" style={{ cursor: 'pointer' }}>
+              What does "closure tolerance" mean? (click to expand)
+            </summary>
+            <p className="builder-hint" style={{ marginTop: 6, marginLeft: 4 }}>
+              Every measurement — each bearing and distance above — is rounded to some precision, even on a
+              certified plan. Walk real, independently-measured legs around a boundary and they almost never land
+              back on the exact start point to the millimetre; a tiny gap is normal and expected, not a mistake.
+              Tolerance is simply the largest gap you're willing to accept before treating it as a real problem
+              (a typo, a transposed digit, a genuinely bad measurement) instead of ordinary rounding. It isn't
+              something to remove — without it, a real typo (like a wrong minute value) would silently produce a
+              badly wrong shape instead of being caught here.
+            </p>
+          </details>
+
+          <div className="form-row" style={{ marginBottom: 10, alignItems: 'flex-end' }}>
+            <label className="form-label" style={{ flex: 1 }}>
+              Closure tolerance (m)
+              <input value={closureTolerance} onChange={(e) => setClosureTolerance(e.target.value)} />
+            </label>
+            {totalLegDistance() > 0 && (
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setClosureTolerance(suggestedTolerance().toFixed(2))}
+              >
+                Use suggested: {suggestedTolerance().toFixed(2)}m (1:2000 precision for this {totalLegDistance().toFixed(0)}m perimeter)
+              </button>
+            )}
+          </div>
+
           <button type="button" className="btn-secondary" onClick={testClosure} disabled={testing}>
             {testing ? 'Testing…' : 'Test closure'}
           </button>
 
           {error && <p className="hint">{error}</p>}
           {result && (
-            <p className={result.valid ? 'hint hint-ok' : 'hint'} style={{ marginTop: 8 }}>
-              {result.valid
-                ? `✓ Valid — closure error ${result.closure_error_m?.toFixed(3)}m, area ${result.area_sqm?.toLocaleString()} m²`
-                : `✗ ${result.reason}`}
-            </p>
+            <>
+              <p className={result.valid ? 'hint hint-ok' : 'hint'} style={{ marginTop: 8, marginBottom: result.valid ? undefined : 4 }}>
+                {result.valid
+                  ? `✓ Valid — closure error ${result.closure_error_m?.toFixed(3)}m, area ${result.area_sqm?.toLocaleString()} m²`
+                  : `✗ ${result.reason}`}
+              </p>
+              {!result.valid && result.reason?.startsWith('Traverse does not close') && (
+                <p className="builder-hint">
+                  First, double-check each bearing and distance above against the plan — a single transposed digit
+                  (e.g. 222° instead of 212°) is the most common cause of a real mismatch. If you've checked and
+                  they're correct, the gap may just be ordinary rounding in the original measurements — try "Use
+                  suggested" above for a more realistic tolerance instead of a fixed 0.5m.
+                </p>
+              )}
+            </>
           )}
         </>
       )}
