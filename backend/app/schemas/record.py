@@ -38,6 +38,7 @@ class RecordOut(BaseModel):
     # folder tag (Portal redesign Phase 1).
     organisation_id: uuid.UUID
     survey_id: uuid.UUID
+    feature_layer_id: uuid.UUID
     project_id: Optional[uuid.UUID] = None
     geometry: dict
     field_data: dict

@@ -74,11 +74,28 @@ if static_dir.exists():
     # (favicon, manifest) or falls back to index.html so React Router can
     # take over. Without this, only "/" would work and every other page
     # would 404 on a direct visit or hard refresh.
+    #
+    # A flat fallback-to-index.html isn't quite enough once more than one
+    # bundle exists, though: a route that's only meaningful inside a
+    # *different* bundle (e.g. GeoCore Estate's /estate/parcels/{id}) would
+    # 404 on refresh, because index.html loads the Portal's own router,
+    # which has never heard of that path. Routes namespaced under a
+    # bundle's own prefix (currently just /estate/...) are routed to that
+    # bundle's HTML entry point instead. survey.html/dashboard.html don't
+    # need this: their own deep-link routes (/design/surveys/{id}, /design/
+    # dashboards/{id}) are intentionally also registered directly in the
+    # Portal's own App.jsx, since they're genuinely used from inside a
+    # Portal session too, not just inside those standalone bundles.
+    BUNDLE_PREFIXES = {"estate/": "estate.html"}
+
     @app.get("/{full_path:path}")
     async def spa(full_path: str):
         candidate = static_dir / full_path
         if full_path and candidate.is_file():
             return FileResponse(candidate)
+        for prefix, bundle_file in BUNDLE_PREFIXES.items():
+            if full_path.startswith(prefix):
+                return FileResponse(static_dir / bundle_file)
         return FileResponse(static_dir / "index.html")
 
 else:
